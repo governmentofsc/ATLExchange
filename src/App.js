@@ -42,7 +42,6 @@ const ATLStockExchange = () => {
   const [adminSharesStock, setAdminSharesStock] = useState('');
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
-  const [stockFilter, setStockFilter] = useState('');
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -500,13 +499,6 @@ const ATLStockExchange = () => {
         s.ticker.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
-    if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
-    if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
-    if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
-    if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
-    if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
-    if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
 
     if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
 
