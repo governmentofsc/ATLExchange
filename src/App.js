@@ -594,7 +594,7 @@ const ATLStockExchange = () => {
               
               <div className="mb-4 flex gap-2">
                 {['1d', '1w', '1m', '1y'].map(period => (
-                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-900'}`}>{period.toUpperCase()}</button>
+                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period.toUpperCase()}</button>
                 ))}
               </div>
 
@@ -809,8 +809,8 @@ const ATLStockExchange = () => {
 
         {user && (
           <div className="mb-6 flex gap-2">
-            <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>My Portfolio</button>
-            <button onClick={() => setAdminTab('leaderboard')} className={`px-4 py-2 rounded font-bold ${adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Leaderboard</button>
+            <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>My Portfolio</button>
+            <button onClick={() => setAdminTab('leaderboard')} className={`px-4 py-2 rounded font-bold ${adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Leaderboard</button>
           </div>
         )}
 
@@ -910,13 +910,13 @@ const ATLStockExchange = () => {
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-4 flex gap-2 flex-wrap">
-          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>All</button>
-          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Under $100</button>
-          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>$100-$500</button>
-          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Over $500</button>
-          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Large Cap</button>
-          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Mid Cap</button>
-          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Small Cap</button>
+          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
+          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
+          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
+          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
+          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
+          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
+          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
         
