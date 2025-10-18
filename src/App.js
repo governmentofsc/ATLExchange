@@ -504,9 +504,12 @@ const ATLStockExchange = () => {
             <ArrowLeft className="w-5 h-5" />
             <span className="font-bold">Back</span>
           </button>
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-4">
+            {user && users[user] && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
+            <button onClick={() => setDarkMode(!darkMode)} className="p-2">
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         <div className="max-w-7xl mx-auto p-4">
@@ -651,6 +654,7 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('create')} className={`px-4 py-2 rounded ${adminTab === 'create' ? 'bg-white text-blue-600' : ''}`}>Create Stock</button>
           <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
           <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
+          <button onClick={() => setAdminTab('shares')} className={`px-4 py-2 rounded ${adminTab === 'shares' ? 'bg-white text-blue-600' : ''}`}>Buy/Sell Shares</button>
         </div>
       )}
 
