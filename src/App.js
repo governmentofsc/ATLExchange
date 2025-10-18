@@ -93,7 +93,9 @@ const ATLStockExchange = () => {
       
       const updatedStocks = stocks.map(stock => {
         const change = (Math.random() - 0.5) * 0.3;
-        const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
+        // Allow price to move more freely from current price, not just bounded by opening price
+        // This prevents purchase-induced price changes from being immediately reverted
+        const newPrice = Math.max(stock.price * 0.995, Math.min(stock.price * 1.005, stock.price + change));
         const newPrice2 = parseFloat(newPrice.toFixed(2));
         
         const newHigh = Math.max(stock.high, newPrice2);
