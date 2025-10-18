@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Menu, X, Moon, Sun, LogOut, LogIn } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Menu, X, Moon, Sun, LogOut } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const ATLStockExchange = () => {
