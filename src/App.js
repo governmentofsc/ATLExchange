@@ -529,33 +529,29 @@ const ATLStockExchange = () => {
                 <div className="flex justify-between"><span>52-wk Low:</span><span className="font-bold">${stockData.low52w.toFixed(2)}</span></div>
                 <div className="flex justify-between"><span>Dividend:</span><span className="font-bold">{stockData.dividend.toFixed(2)}%</span></div>
                 <div className="flex justify-between"><span>Quarterly Div:</span><span className="font-bold">${stockData.qtrlyDiv.toFixed(2)}</span></div>
-                {user && (
-                  <>
-                    <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
-                    <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
-                  </>
-                )}
+                {user && <>
+                  <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
+                  <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
+                </>}
               </div>
             </div>
           </div>
 
-          {user && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
-                <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
-              </div>
-
-              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
-                <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
-              </div>
+          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
+              <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
+              <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
             </div>
-          )}
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
+              <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
+              <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
+            </div>
+          </div>}
         </div>
       </div>
     );
