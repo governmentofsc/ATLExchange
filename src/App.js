@@ -38,12 +38,11 @@ const ATLStockExchange = () => {
   const [targetUser, setTargetUser] = useState('');
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [baseTime, setBaseTime] = useState(new Date());
-  const [dayStartTime, setDayStartTime] = useState(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  });
-  const [sessionStartTime] = useState(new Date());
+  const [dayStartTime] = useState(() => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+});
 
   useEffect(() => {
     const interval = setInterval(() => {
