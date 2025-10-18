@@ -109,8 +109,6 @@ const ATLStockExchange = () => {
         
         const newHistory = [...stock.history];
         const elapsedMs = now - dayStartTime;
-        const elapsedMinutes = Math.floor(elapsedMs / 60000);
-        const expectedPoints = elapsedMinutes + 1;
         
         // Add new data point more frequently (every 30 seconds instead of every minute)
         const elapsed30Sec = Math.floor(elapsedMs / 30000);
