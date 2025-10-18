@@ -92,14 +92,14 @@ const ATLStockExchange = () => {
       dayStartTime.setHours(0, 0, 0, 0);
       
       const updatedStocks = stocks.map(stock => {
-        const change = (Math.random() - 0.5) * 0.3;
+        const change = (Math.random() - 0.5) * 0.15;
         const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
         const newPrice2 = parseFloat(newPrice.toFixed(2));
         
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
         
-        const newHistory = [...stock.history];
+        const newHistory = stock.history ? [...stock.history] : [];
         const elapsedMs = now - dayStartTime;
         const elapsedMinutes = Math.floor(elapsedMs / 60000);
         const expectedPoints = elapsedMinutes + 1;
@@ -183,8 +183,7 @@ const ATLStockExchange = () => {
     
     for (let day = 0; day < 7; day++) {
       for (let period = 0; period < 6; period++) {
-        // Realistic random walk with volatility
-        const randomChange = (Math.random() - 0.5) * 0.06; // 6% volatility
+        const randomChange = (Math.random() - 0.5) * 0.06;
         price = price * (1 + randomChange);
         
         const date = new Date();
@@ -204,11 +203,9 @@ const ATLStockExchange = () => {
     
     for (let day = 0; day < 60; day++) {
       for (let period = 0; period < 4; period++) {
-        // Realistic random walk - no artificial trends, pure volatility
-        const randomChange = (Math.random() - 0.5) * 0.08; // 8% volatility per period
+        const randomChange = (Math.random() - 0.5) * 0.08;
         price = price * (1 + randomChange);
         
-        // Keep within reasonable bounds
         price = Math.max(basePrice * 0.50, Math.min(basePrice * 1.80, price));
         
         const date = new Date();
@@ -285,21 +282,19 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
-      // Calculate price impact based on market cap (real-world model)
-      // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
       const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
       const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
-      // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+          const newHistory = s.history ? [...s.history] : [];
+          return { ...s, price: newPrice, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
         }
         return s;
       });
@@ -323,7 +318,6 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
-      // Log trade if over $500M
       if (proceeds > 500000000) {
         const tradeRecord = {
           timestamp: new Date().toISOString(),
@@ -338,7 +332,6 @@ const ATLStockExchange = () => {
         set(historyRef, tradeRecord);
       }
       
-      // Calculate price impact based on market cap
       const saleValue = proceeds;
       const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
       const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
@@ -350,7 +343,8 @@ const ATLStockExchange = () => {
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+          const newHistory = s.history ? [...s.history] : [];
+          return { ...s, price: newPrice, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
         }
         return s;
       });
@@ -492,7 +486,6 @@ const ATLStockExchange = () => {
   const getFilteredStocks = () => {
     let filtered = stocks;
     
-    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter(s => 
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -500,7 +493,6 @@ const ATLStockExchange = () => {
       );
     }
     
-    // Filter by stock filter (price range, market cap, etc)
     if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
     if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
     if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
@@ -508,7 +500,6 @@ const ATLStockExchange = () => {
     if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
     if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
     
-    // Sort by market cap if no search
     if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
     
     return filtered.slice(0, 10);
@@ -545,7 +536,6 @@ const ATLStockExchange = () => {
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
     
-    // Show loading screen if data isn't ready yet
     if (!stockData || stocks.length === 0) {
       return (
         <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
@@ -568,7 +558,7 @@ const ATLStockExchange = () => {
       );
     }
     
-    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
+    const userHolding = user ? (users[user]?.portfolio[stockData.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
