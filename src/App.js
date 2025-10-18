@@ -43,6 +43,7 @@ const ATLStockExchange = () => {
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
+  const [chartKey, setChartKey] = useState(0); // Force chart re-renders
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -83,6 +84,11 @@ const ATLStockExchange = () => {
     setInitialized(true);
   }, [initialized]);
 
+  // Force chart updates when stocks change
+  useEffect(() => {
+    setChartKey(prev => prev + 1);
+  }, [stocks]);
+
   useEffect(() => {
     if (stocks.length === 0) return;
     
@@ -106,7 +112,11 @@ const ATLStockExchange = () => {
         const elapsedMinutes = Math.floor(elapsedMs / 60000);
         const expectedPoints = elapsedMinutes + 1;
         
-        if (newHistory.length < expectedPoints) {
+        // Add new data point more frequently (every 30 seconds instead of every minute)
+        const elapsed30Sec = Math.floor(elapsedMs / 30000);
+        const expectedPoints30Sec = elapsed30Sec + 1;
+        
+        if (newHistory.length < expectedPoints30Sec) {
           const hour = now.getHours();
           const min = now.getMinutes().toString().padStart(2,'0');
           let displayHour = hour;
@@ -137,7 +147,7 @@ const ATLStockExchange = () => {
       
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-    }, 2000);
+    }, 1000); // Update every second instead of every 2 seconds
     
     return () => clearInterval(interval);
   }, [stocks]);
@@ -614,7 +624,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400}>
+                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
@@ -954,7 +964,7 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
                 
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
                   <LineChart data={stock.history}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
