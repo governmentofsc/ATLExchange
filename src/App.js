@@ -461,99 +461,119 @@ const ATLStockExchange = () => {
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
     
-    if (!stockData) {
+    // Show loading screen if data isn't ready yet
+    if (!stockData || stocks.length === 0) {
       return (
-        <div className={`min-h-screen ${bgClass} flex flex-col`}>
-          <div className="bg-blue-600 text-white p-4">
-            <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back</span>
-            </button>
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-lg">Stock data not found. Returning to home...</p>
+        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+          <div className="text-center">
+            <p className="text-lg">Loading...</p>
+            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
           </div>
         </div>
       );
     }
     
-    const userHolding = user && users[user] ? (users[user].portfolio[selectedStock.ticker] || 0) : 0;
+    if (user && (!users || !users[user])) {
+      return (
+        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+          <div className="text-center">
+            <p className="text-lg">Loading user data...</p>
+            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+          </div>
+        </div>
+      );
+    }
+    
+    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
-    const percentChange = priceChange === 0 ? '0.00' : ((priceChange / stockData.open) * 100).toFixed(2);
+    const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
-    let chartData = [];
-    if (chartPeriod === '1y' && stockData.yearHistory) chartData = stockData.yearHistory;
-    else if (chartPeriod === '1w' && stockData.extendedHistory) chartData = stockData.extendedHistory;
-    else if (chartPeriod === '1m' && stockData.extendedHistory) chartData = stockData.extendedHistory;
-    else if (stockData.history) chartData = stockData.history;
+    let chartData = stockData.history || [];
+    if (chartPeriod === '1w') chartData = stockData.extendedHistory || [];
+    if (chartPeriod === '1m') chartData = stockData.extendedHistory || [];
+    if (chartPeriod === '1y') chartData = stockData.yearHistory || [];
     
     const chartDomain = getChartDomain(chartData);
 
     return (
       <div className={`min-h-screen ${bgClass}`}>
-        <div className="bg-blue-600 text-white p-4 flex justify-between">
-          <button onClick={() => setSelectedStock(null)}>
+        <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
+          <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
+            <span className="font-bold">Back</span>
           </button>
-          <button onClick={() => setDarkMode(!darkMode)}>
+          <button onClick={() => setDarkMode(!darkMode)} className="p-2">
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
         </div>
 
-        <div className="max-w-7xl mx-auto p-4 w-full">
-          <h2 className="text-2xl font-bold mb-2">{stockData.name}</h2>
-          <p className="text-blue-600 font-bold mb-4">{stockData.ticker} - ${stockData.price.toFixed(2)}</p>
-          
-          <div className="mb-4 flex gap-2">
-            <button onClick={() => setChartPeriod('1d')} className={`px-3 py-1 rounded ${chartPeriod === '1d' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>1D</button>
-            <button onClick={() => setChartPeriod('1w')} className={`px-3 py-1 rounded ${chartPeriod === '1w' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>1W</button>
-            <button onClick={() => setChartPeriod('1m')} className={`px-3 py-1 rounded ${chartPeriod === '1m' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>1M</button>
-            <button onClick={() => setChartPeriod('1y')} className={`px-3 py-1 rounded ${chartPeriod === '1y' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>1Y</button>
-          </div>
-
-          <div className={`p-4 rounded-lg border-2 mb-4 ${cardClass}`}>
-            {chartData && chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                  <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} />
-                  <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p>No chart data</p>
-            )}
-          </div>
-
-          <div className={`p-4 rounded-lg border-2 mb-4 ${cardClass}`}>
-            <p>Open: ${stockData.open.toFixed(2)}</p>
-            <p>High: ${stockData.high.toFixed(2)}</p>
-            <p>Low: ${stockData.low.toFixed(2)}</p>
-            <p>Market Cap: ${(stockData.marketCap / 1000000000).toFixed(2)}B</p>
-          </div>
-
-          {user && (
-            <div className={`p-4 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-2">Your Holdings: {userHolding} shares</h3>
-              <p className="mb-4">Portfolio Value: ${portfolioValue.toFixed(2)}</p>
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className={`lg:col-span-2 p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-2xl font-bold mb-2">{stockData.name} ({stockData.ticker})</h2>
+              <div className="flex items-baseline gap-3 mb-4">
+                <p className="text-3xl font-bold text-blue-600">${stockData.price.toFixed(2)}</p>
+                <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
+              </div>
               
-              <div className="mb-4">
-                <input type="number" placeholder="Quantity to buy" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-2">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded">Buy</button>
+              <div className="mb-4 flex gap-2">
+                {['1d', '1w', '1m', '1y'].map(period => (
+                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-900'}`}>{period.toUpperCase()}</button>
+                ))}
               </div>
 
-              <div>
-                <input type="number" placeholder="Quantity to sell" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-2">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded">Sell</button>
+              {chartData && chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
+                    <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
+                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-96 flex items-center justify-center text-gray-500">No chart data available</div>
+              )}
+            </div>
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4 text-lg">Stock Information</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between"><span>Open:</span><span className="font-bold">${stockData.open.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>High:</span><span className="font-bold">${stockData.high.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Low:</span><span className="font-bold">${stockData.low.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Market Cap:</span><span className="font-bold">${(stockData.marketCap / 1000000000).toFixed(2)}B</span></div>
+                <div className="flex justify-between"><span>P/E Ratio:</span><span className="font-bold">{stockData.pe.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>52-wk High:</span><span className="font-bold">${stockData.high52w.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>52-wk Low:</span><span className="font-bold">${stockData.low52w.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Dividend:</span><span className="font-bold">{stockData.dividend.toFixed(2)}%</span></div>
+                <div className="flex justify-between"><span>Quarterly Div:</span><span className="font-bold">${stockData.qtrlyDiv.toFixed(2)}</span></div>
+                {user && <>
+                  <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
+                  <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
+                </>}
               </div>
             </div>
-          )}
+          </div>
+
+          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
+              <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
+              <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
+            </div>
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
+              <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
+              <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
+            </div>
+          </div>}
         </div>
       </div>
     );
