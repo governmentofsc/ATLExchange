@@ -38,6 +38,9 @@ const ATLStockExchange = () => {
   const [selectedStockForAdmin, setSelectedStockForAdmin] = useState('');
   const [adjustMoney, setAdjustMoney] = useState('');
   const [targetUser, setTargetUser] = useState('');
+  const [adminSharesUser, setAdminSharesUser] = useState('');
+  const [adminSharesStock, setAdminSharesStock] = useState('');
+  const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -425,6 +428,40 @@ const ATLStockExchange = () => {
     setTargetUser('');
   };
 
+  const adminGiveShares = () => {
+    if (!adminSharesUser || !adminSharesStock || !adminSharesQuantity) return;
+    
+    const quantity = parseInt(adminSharesQuantity);
+    const userRef = ref(database, `users/${adminSharesUser}`);
+    const newPortfolio = { 
+      ...users[adminSharesUser].portfolio, 
+      [adminSharesStock]: (users[adminSharesUser].portfolio[adminSharesStock] || 0) + quantity 
+    };
+    update(userRef, { portfolio: newPortfolio });
+    
+    setAdminSharesUser('');
+    setAdminSharesStock('');
+    setAdminSharesQuantity('');
+  };
+
+  const adminRemoveShares = () => {
+    if (!adminSharesUser || !adminSharesStock || !adminSharesQuantity) return;
+    
+    const quantity = parseInt(adminSharesQuantity);
+    if ((users[adminSharesUser].portfolio[adminSharesStock] || 0) < quantity) return;
+    
+    const userRef = ref(database, `users/${adminSharesUser}`);
+    const newPortfolio = { 
+      ...users[adminSharesUser].portfolio, 
+      [adminSharesStock]: users[adminSharesUser].portfolio[adminSharesStock] - quantity 
+    };
+    update(userRef, { portfolio: newPortfolio });
+    
+    setAdminSharesUser('');
+    setAdminSharesStock('');
+    setAdminSharesQuantity('');
+  };
+
   const getFilteredStocks = () => {
     if (!searchQuery) return stocks.slice(0, 5).sort((a, b) => b.marketCap - a.marketCap);
     return stocks.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.ticker.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -702,6 +739,27 @@ const ATLStockExchange = () => {
             </select>
             <input type="number" placeholder="Amount to Add/Remove" value={adjustMoney} onChange={(e) => setAdjustMoney(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
             <button onClick={adjustMoneySetter} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust Money</button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'shares' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Buy/Sell Shares for User</h2>
+            <select value={adminSharesUser} onChange={(e) => setAdminSharesUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+              <option value="">Select User</option>
+              {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <select value={adminSharesStock} onChange={(e) => setAdminSharesStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+              <option value="">Select Stock</option>
+              {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+            </select>
+            <input type="number" placeholder="Quantity" value={adminSharesQuantity} onChange={(e) => setAdminSharesQuantity(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={adminGiveShares} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Give Shares</button>
+              <button onClick={adminRemoveShares} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Remove Shares</button>
+            </div>
           </div>
         </div>
       )}
