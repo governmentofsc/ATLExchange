@@ -40,10 +40,12 @@ const ATLStockExchange = () => {
   const [targetUser, setTargetUser] = useState('');
   const [initialized, setInitialized] = useState(false);
 
+  // Initialize Firebase data on first load
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
 
+    // Listen to stocks
     onValue(stocksRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -63,6 +65,7 @@ const ATLStockExchange = () => {
       }
     });
 
+    // Listen to users
     onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -79,6 +82,7 @@ const ATLStockExchange = () => {
     setInitialized(true);
   }, [initialized]);
 
+  // Update stock prices - ONLY admin updates this at 1x speed
   useEffect(() => {
     if (stocks.length === 0 || !isAdmin) return;
     
@@ -142,12 +146,14 @@ const ATLStockExchange = () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const now = new Date();
+    
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
     for (let i = 0; i <= minutesFromMidnight; i++) {
       const change = (Math.random() - 0.5) * 0.4;
       price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
+      
       const pointTime = new Date(startOfDay.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
       const min = pointTime.getMinutes().toString().padStart(2,'0');
@@ -171,6 +177,348 @@ const ATLStockExchange = () => {
       data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
     }
     return data;
+  }
+
+  function generateExtendedHistory(basePrice) {
+    const data = [];
+    let price = basePrice * 0.92;
+    
+    for (let day = 0; day < 7; day++) {
+      const growth = (day / 7) * 0.08;
+      const dayPrice = price * (1 + growth);
+      price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
+      
+      const date = new Date();
+      date.setDate(date.getDate() - (7 - day));
+      date.setHours(0, 0, 0, 0);
+      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
+      
+      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  function generateYearHistory(basePrice) {
+    const data = [];
+    let price = basePrice * 0.85;
+    
+    for (let day = 0; day < 60; day++) {
+      const growth = (day / 60) * 0.15;
+      const dayPrice = (basePrice * 0.85) * (1 + growth);
+      price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
+      
+      const date = new Date();
+      date.setDate(date.getDate() - (60 - day));
+      date.setHours(0, 0, 0, 0);
+      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
+      
+      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  const handleLogin = () => {
+    if (loginUsername === 'admin' && loginPassword === 'admin') {
+      setUser('admin');
+      setIsAdmin(true);
+      setShowLoginModal(false);
+      setLoginUsername('');
+      setLoginPassword('');
+    } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
+      setUser(loginUsername);
+      setIsAdmin(false);
+      setShowLoginModal(false);
+      setLoginUsername('');
+      setLoginPassword('');
+    }
+  };
+
+  const handleSignup = () => {
+    setSignupError('');
+    if (!signupUsername || !signupPassword || !signupConfirmPassword) {
+      setSignupError('All fields are required');
+      return;
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      setSignupError('Passwords do not match');
+      return;
+    }
+    if (users[signupUsername] || signupUsername === 'admin') {
+      setSignupError('Username already exists');
+      return;
+    }
+    
+    const usersRef = ref(database, `users/${signupUsername}`);
+    set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
+    
+    setUser(signupUsername);
+    setIsAdmin(false);
+    setShowSignupModal(false);
+    setSignupUsername('');
+    setSignupPassword('');
+    setSignupConfirmPassword('');
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setIsAdmin(false);
+    setLoginUsername('');
+    setLoginPassword('');
+    setSelectedStock(null);
+  };
+
+  const buyStock = () => {
+    if (!selectedStock || !buyQuantity) return;
+    const cost = selectedStock.price * parseInt(buyQuantity);
+    if (users[user].balance >= cost) {
+      const userRef = ref(database, `users/${user}`);
+      const newBalance = users[user].balance - cost;
+      const newPortfolio = { 
+        ...users[user].portfolio, 
+        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + parseInt(buyQuantity) 
+      };
+      update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      setBuyQuantity('');
+    }
+  };
+
+  const sellStock = () => {
+    if (!selectedStock || !sellQuantity) return;
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= parseInt(sellQuantity)) {
+      const proceeds = selectedStock.price * parseInt(sellQuantity);
+      const userRef = ref(database, `users/${user}`);
+      const newBalance = users[user].balance + proceeds;
+      const newPortfolio = { 
+        ...users[user].portfolio, 
+        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - parseInt(sellQuantity) 
+      };
+      update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      setSellQuantity('');
+    }
+  };
+
+  const createStock = () => {
+    if (!newStockName || !newStockTicker || !newStockPrice) return;
+    
+    const marketCap = parseFloat(newStockMarketCap) || 500000000000;
+    const pe = parseFloat(newStockPE) || 25.0;
+    const dividend = parseFloat(newStockDividend) || 0.5;
+    const high52w = parseFloat(newStockHigh52w) || parseFloat(newStockPrice) * 1.2;
+    const low52w = parseFloat(newStockLow52w) || parseFloat(newStockPrice) * 0.8;
+    
+    const newStock = {
+      ticker: newStockTicker.toUpperCase(),
+      name: newStockName,
+      price: parseFloat(newStockPrice),
+      open: parseFloat(newStockPrice),
+      high: parseFloat(newStockPrice),
+      low: parseFloat(newStockPrice),
+      marketCap: marketCap,
+      pe: pe,
+      high52w: high52w,
+      low52w: low52w,
+      dividend: dividend,
+      qtrlyDiv: dividend / 4,
+      history: generatePriceHistory(parseFloat(newStockPrice)),
+      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
+      yearHistory: generateYearHistory(parseFloat(newStockPrice))
+    };
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, [...stocks, newStock]);
+    
+    setNewStockName('');
+    setNewStockTicker('');
+    setNewStockPrice('');
+    setNewStockMarketCap('');
+    setNewStockPE('');
+    setNewStockDividend('');
+    setNewStockHigh52w('');
+    setNewStockLow52w('');
+  };
+
+  const adjustPriceByAmount = () => {
+    if (!selectedStockForAdmin || !priceAdjustment) return;
+    
+    const updatedStocks = stocks.map(s => {
+      if (s.ticker === selectedStockForAdmin) {
+        const newPrice = parseFloat((parseFloat(s.price) + parseFloat(priceAdjustment)).toFixed(2));
+        const newHigh = Math.max(s.high, newPrice);
+        const newLow = Math.min(s.low, newPrice);
+        const sharesOutstanding = s.marketCap / s.price;
+        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+        return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+      }
+      return s;
+    });
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, updatedStocks);
+    setPriceAdjustment('');
+  };
+
+  const adjustPriceByPercentage = () => {
+    if (!selectedStockForAdmin || !pricePercentage) return;
+    
+    const updatedStocks = stocks.map(s => {
+      if (s.ticker === selectedStockForAdmin) {
+        const percentChange = parseFloat(pricePercentage) / 100;
+        const newPrice = parseFloat((s.price * (1 + percentChange)).toFixed(2));
+        const newHigh = Math.max(s.high, newPrice);
+        const newLow = Math.min(s.low, newPrice);
+        const sharesOutstanding = s.marketCap / s.price;
+        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+        return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+      }
+      return s;
+    });
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, updatedStocks);
+    setPricePercentage('');
+  };
+
+  const adjustMoneySetter = () => {
+    if (!targetUser || !adjustMoney) return;
+    
+    const userRef = ref(database, `users/${targetUser}`);
+    const newBalance = users[targetUser].balance + parseFloat(adjustMoney);
+    update(userRef, { balance: newBalance });
+    
+    setAdjustMoney('');
+    setTargetUser('');
+  };
+
+  const getFilteredStocks = () => {
+    if (!searchQuery) return stocks.slice(0, 5).sort((a, b) => b.marketCap - a.marketCap);
+    return stocks.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.ticker.toLowerCase().includes(searchQuery.toLowerCase()));
+  };
+
+  const filteredStocks = getFilteredStocks();
+
+  const getChartDomain = (data) => {
+    if (!data || data.length === 0) return [0, 100];
+    const prices = data.map(d => d.price);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const padding = (max - min) * 0.15;
+    const paddedMin = min - padding;
+    const paddedMax = max + padding;
+    return [parseFloat(paddedMin.toFixed(2)), parseFloat(paddedMax.toFixed(2))];
+  };
+
+  const getYAxisTicks = (domain) => {
+    const [min, max] = domain;
+    const step = (max - min) / 3;
+    return [
+      parseFloat(min.toFixed(2)),
+      parseFloat((min + step).toFixed(2)),
+      parseFloat((min + step * 2).toFixed(2)),
+      parseFloat(max.toFixed(2))
+    ];
+  };
+
+  const bgClass = darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900';
+  const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-blue-50 border-blue-200';
+  const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300';
+
+  if (selectedStock) {
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+    if (!stockData) return null;
+    
+    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
+    const portfolioValue = userHolding * stockData.price;
+    const priceChange = stockData.price - stockData.open;
+    const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
+    const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
+    
+    let chartData;
+    if (chartPeriod === '1d') {
+      chartData = stockData.history;
+    } else if (chartPeriod === '1w') {
+      chartData = stockData.extendedHistory;
+    } else if (chartPeriod === '1m') {
+      chartData = stockData.extendedHistory;
+    } else if (chartPeriod === '1y') {
+      chartData = stockData.yearHistory;
+    } else {
+      chartData = stockData.history;
+    }
+    const chartDomain = getChartDomain(chartData);
+
+    return (
+      <div className={`min-h-screen ${bgClass}`}>
+        <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+          <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="font-bold">Atlanta Stock Exchange</span>
+          </button>
+          <button onClick={() => setDarkMode(!darkMode)} className="p-2">
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+        </div>
+
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className={`lg:col-span-2 p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-2xl font-bold mb-2">{stockData.name} ({stockData.ticker})</h2>
+              <div className="flex items-baseline gap-3 mb-4">
+                <p className="text-3xl font-bold text-blue-600">${stockData.price.toFixed(2)}</p>
+                <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
+              </div>
+              
+              <div className="mb-4 flex gap-2">
+                {['1d', '1w', '1m', '1y'].map(period => (
+                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-900'}`}>{period.toUpperCase()}</button>
+                ))}
+              </div>
+
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                  <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
+                  <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
+                  <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
+                  <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4 text-lg">Stock Information</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between"><span>Open:</span><span className="font-bold">${stockData.open.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>High:</span><span className="font-bold">${stockData.high.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Low:</span><span className="font-bold">${stockData.low.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Market Cap:</span><span className="font-bold">${(stockData.marketCap / 1000000000).toFixed(2)}B</span></div>
+                <div className="flex justify-between"><span>P/E Ratio:</span><span className="font-bold">{stockData.pe.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>52-wk High:</span><span className="font-bold">${stockData.high52w.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>52-wk Low:</span><span className="font-bold">${stockData.low52w.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Dividend:</span><span className="font-bold">{stockData.dividend.toFixed(2)}%</span></div>
+                <div className="flex justify-between"><span>Quarterly Div:</span><span className="font-bold">${stockData.qtrlyDiv.toFixed(2)}</span></div>
+                {user && (
+                  <>
+                    <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
+                    <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {user && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
+                <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+                <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
+                <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -255,7 +603,7 @@ const ATLStockExchange = () => {
             <input type="text" placeholder="Stock Name" value={newStockName} onChange={(e) => setNewStockName(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="text" placeholder="Ticker" value={newStockTicker} onChange={(e) => setNewStockTicker(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="Price" value={newStockPrice} onChange={(e) => setNewStockPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Market Cap (optional)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="Market Cap (optional, e.g. 500000000000)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
@@ -275,6 +623,7 @@ const ATLStockExchange = () => {
             </select>
             <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
+            
             <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
           </div>
@@ -348,326 +697,4 @@ const ATLStockExchange = () => {
   );
 };
 
-export default ATLStockExchange;function generateExtendedHistory(basePrice) {
-    const data = [];
-    let price = basePrice * 0.92;
-    for (let day = 0; day < 7; day++) {
-      const growth = (day / 7) * 0.08;
-      const dayPrice = price * (1 + growth);
-      price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      const date = new Date();
-      date.setDate(date.getDate() - (7 - day));
-      date.setHours(0, 0, 0, 0);
-      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-    }
-    return data;
-  }
-
-  function generateYearHistory(basePrice) {
-    const data = [];
-    let price = basePrice * 0.85;
-    for (let day = 0; day < 60; day++) {
-      const growth = (day / 60) * 0.15;
-      const dayPrice = (basePrice * 0.85) * (1 + growth);
-      price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      const date = new Date();
-      date.setDate(date.getDate() - (60 - day));
-      date.setHours(0, 0, 0, 0);
-      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-    }
-    return data;
-  }
-
-  const handleLogin = () => {
-    if (loginUsername === 'admin' && loginPassword === 'admin') {
-      setUser('admin');
-      setIsAdmin(true);
-      setShowLoginModal(false);
-      setLoginUsername('');
-      setLoginPassword('');
-    } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
-      setUser(loginUsername);
-      setIsAdmin(false);
-      setShowLoginModal(false);
-      setLoginUsername('');
-      setLoginPassword('');
-    }
-  };
-
-  const handleSignup = () => {
-    setSignupError('');
-    if (!signupUsername || !signupPassword || !signupConfirmPassword) {
-      setSignupError('All fields are required');
-      return;
-    }
-    if (signupPassword !== signupConfirmPassword) {
-      setSignupError('Passwords do not match');
-      return;
-    }
-    if (users[signupUsername] || signupUsername === 'admin') {
-      setSignupError('Username already exists');
-      return;
-    }
-    const usersRef = ref(database, `users/${signupUsername}`);
-    set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
-    setUser(signupUsername);
-    setIsAdmin(false);
-    setShowSignupModal(false);
-    setSignupUsername('');
-    setSignupPassword('');
-    setSignupConfirmPassword('');
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    setIsAdmin(false);
-    setLoginUsername('');
-    setLoginPassword('');
-    setSelectedStock(null);
-  };
-
-  const buyStock = () => {
-    if (!selectedStock || !buyQuantity) return;
-    const cost = selectedStock.price * parseInt(buyQuantity);
-    if (users[user].balance >= cost) {
-      const userRef = ref(database, `users/${user}`);
-      const newBalance = users[user].balance - cost;
-      const newPortfolio = { 
-        ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + parseInt(buyQuantity) 
-      };
-      update(userRef, { balance: newBalance, portfolio: newPortfolio });
-      setBuyQuantity('');
-    }
-  };
-
-  const sellStock = () => {
-    if (!selectedStock || !sellQuantity) return;
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= parseInt(sellQuantity)) {
-      const proceeds = selectedStock.price * parseInt(sellQuantity);
-      const userRef = ref(database, `users/${user}`);
-      const newBalance = users[user].balance + proceeds;
-      const newPortfolio = { 
-        ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - parseInt(sellQuantity) 
-      };
-      update(userRef, { balance: newBalance, portfolio: newPortfolio });
-      setSellQuantity('');
-    }
-  };
-
-  const createStock = () => {
-    if (!newStockName || !newStockTicker || !newStockPrice) return;
-    const marketCap = parseFloat(newStockMarketCap) || 500000000000;
-    const pe = parseFloat(newStockPE) || 25.0;
-    const dividend = parseFloat(newStockDividend) || 0.5;
-    const high52w = parseFloat(newStockHigh52w) || parseFloat(newStockPrice) * 1.2;
-    const low52w = parseFloat(newStockLow52w) || parseFloat(newStockPrice) * 0.8;
-    const newStock = {
-      ticker: newStockTicker.toUpperCase(),
-      name: newStockName,
-      price: parseFloat(newStockPrice),
-      open: parseFloat(newStockPrice),
-      high: parseFloat(newStockPrice),
-      low: parseFloat(newStockPrice),
-      marketCap: marketCap,
-      pe: pe,
-      high52w: high52w,
-      low52w: low52w,
-      dividend: dividend,
-      qtrlyDiv: dividend / 4,
-      history: generatePriceHistory(parseFloat(newStockPrice)),
-      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
-      yearHistory: generateYearHistory(parseFloat(newStockPrice))
-    };
-    const stocksRef = ref(database, 'stocks');
-    set(stocksRef, [...stocks, newStock]);
-    setNewStockName('');
-    setNewStockTicker('');
-    setNewStockPrice('');
-    setNewStockMarketCap('');
-    setNewStockPE('');
-    setNewStockDividend('');
-    setNewStockHigh52w('');
-    setNewStockLow52w('');
-  };
-
-  const adjustPriceByAmount = () => {
-    if (!selectedStockForAdmin || !priceAdjustment) return;
-    const updatedStocks = stocks.map(s => {
-      if (s.ticker === selectedStockForAdmin) {
-        const newPrice = parseFloat((parseFloat(s.price) + parseFloat(priceAdjustment)).toFixed(2));
-        const newHigh = Math.max(s.high, newPrice);
-        const newLow = Math.min(s.low, newPrice);
-        const sharesOutstanding = s.marketCap / s.price;
-        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
-        return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
-      }
-      return s;
-    });
-    const stocksRef = ref(database, 'stocks');
-    set(stocksRef, updatedStocks);
-    setPriceAdjustment('');
-  };
-
-  const adjustPriceByPercentage = () => {
-    if (!selectedStockForAdmin || !pricePercentage) return;
-    const updatedStocks = stocks.map(s => {
-      if (s.ticker === selectedStockForAdmin) {
-        const percentChange = parseFloat(pricePercentage) / 100;
-        const newPrice = parseFloat((s.price * (1 + percentChange)).toFixed(2));
-        const newHigh = Math.max(s.high, newPrice);
-        const newLow = Math.min(s.low, newPrice);
-        const sharesOutstanding = s.marketCap / s.price;
-        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
-        return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
-      }
-      return s;
-    });
-    const stocksRef = ref(database, 'stocks');
-    set(stocksRef, updatedStocks);
-    setPricePercentage('');
-  };
-
-  const adjustMoneySetter = () => {
-    if (!targetUser || !adjustMoney) return;
-    const userRef = ref(database, `users/${targetUser}`);
-    const newBalance = users[targetUser].balance + parseFloat(adjustMoney);
-    update(userRef, { balance: newBalance });
-    setAdjustMoney('');
-    setTargetUser('');
-  };
-
-  const getFilteredStocks = () => {
-    if (!searchQuery) return stocks.slice(0, 5).sort((a, b) => b.marketCap - a.marketCap);
-    return stocks.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.ticker.toLowerCase().includes(searchQuery.toLowerCase()));
-  };
-
-  const filteredStocks = getFilteredStocks();
-
-  const getChartDomain = (data) => {
-    if (!data || data.length === 0) return [0, 100];
-    const prices = data.map(d => d.price);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const padding = (max - min) * 0.15;
-    const paddedMin = min - padding;
-    const paddedMax = max + padding;
-    return [parseFloat(paddedMin.toFixed(2)), parseFloat(paddedMax.toFixed(2))];
-  };
-
-  const getYAxisTicks = (domain) => {
-    const [min, max] = domain;
-    const step = (max - min) / 3;
-    return [
-      parseFloat(min.toFixed(2)),
-      parseFloat((min + step).toFixed(2)),
-      parseFloat((min + step * 2).toFixed(2)),
-      parseFloat(max.toFixed(2))
-    ];
-  };
-
-  const bgClass = darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900';
-  const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-blue-50 border-blue-200';
-  const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300';
-
-  if (selectedStock) {
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    if (!stockData) return null;
-    
-    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
-    const portfolioValue = userHolding * stockData.price;
-    const priceChange = stockData.price - stockData.open;
-    const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
-    const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
-    
-    let chartData = stockData.history;
-    if (chartPeriod === '1w') chartData = stockData.extendedHistory;
-    else if (chartPeriod === '1m') chartData = stockData.extendedHistory;
-    else if (chartPeriod === '1y') chartData = stockData.yearHistory;
-    
-    const chartDomain = getChartDomain(chartData);
-
-    return (
-      <div className={`min-h-screen ${bgClass}`}>
-        <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
-          <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-bold">Atlanta Stock Exchange</span>
-          </button>
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-        </div>
-
-        <div className="max-w-7xl mx-auto p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <div className={`lg:col-span-2 p-6 rounded-lg border-2 ${cardClass}`}>
-              <h2 className="text-2xl font-bold mb-2">{stockData.name} ({stockData.ticker})</h2>
-              <div className="flex items-baseline gap-3 mb-4">
-                <p className="text-3xl font-bold text-blue-600">${stockData.price.toFixed(2)}</p>
-                <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
-              </div>
-              
-              <div className="mb-4 flex gap-2">
-                {['1d', '1w', '1m', '1y'].map(period => (
-                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-900'}`}>{period.toUpperCase()}</button>
-                ))}
-              </div>
-
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData}>
-                  <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                  <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
-                  <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
-                  <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
-                  <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4 text-lg">Stock Information</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span>Open:</span><span className="font-bold">${stockData.open.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>High:</span><span className="font-bold">${stockData.high.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Low:</span><span className="font-bold">${stockData.low.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Market Cap:</span><span className="font-bold">${(stockData.marketCap / 1000000000).toFixed(2)}B</span></div>
-                <div className="flex justify-between"><span>P/E Ratio:</span><span className="font-bold">{stockData.pe.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>52-wk High:</span><span className="font-bold">${stockData.high52w.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>52-wk Low:</span><span className="font-bold">${stockData.low52w.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Dividend:</span><span className="font-bold">{stockData.dividend.toFixed(2)}%</span></div>
-                <div className="flex justify-between"><span>Quarterly Div:</span><span className="font-bold">${stockData.qtrlyDiv.toFixed(2)}</span></div>
-                {user && (
-                  <>
-                    <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
-                    <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {user && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
-                <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
-              </div>
-
-              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
-                <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-                <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
-                <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+export default ATLStockExchange;
