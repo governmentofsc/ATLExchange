@@ -113,19 +113,21 @@ const ATLStockExchange = () => {
     setInitialized(true);
   }, [initialized]);
 
-  // Update base time based on speed multiplier
+  // Update base time based on speed multiplier - only one instance should do this
   useEffect(() => {
+    // Only update if we're admin or if there's no active updater
+    const shouldUpdate = isAdmin;
+    
+    if (!shouldUpdate) return;
+    
     const interval = setInterval(() => {
-      const newTime = new Date(baseTime.getTime() + 2000 * speedMultiplier);
-      setBaseTime(newTime);
-      
-      // Update Firebase with new time (only if we're not in the middle of receiving an update)
       const baseTimeRef = ref(database, 'baseTime');
+      const newTime = new Date(Date.now() + 2000 * speedMultiplier);
       set(baseTimeRef, newTime.toISOString());
     }, 2000);
     
     return () => clearInterval(interval);
-  }, [speedMultiplier, baseTime]);
+  }, [speedMultiplier, isAdmin]);
 
   // Update stock prices at regular intervals
   useEffect(() => {
