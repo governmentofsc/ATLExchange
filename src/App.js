@@ -84,7 +84,7 @@ const ATLStockExchange = () => {
   }, [initialized]);
 
   useEffect(() => {
-    if (stocks.length === 0 || !isAdmin) return;
+    if (stocks.length === 0) return;
     
     const interval = setInterval(() => {
       const now = new Date();
@@ -138,7 +138,7 @@ const ATLStockExchange = () => {
     }, 2000);
     
     return () => clearInterval(interval);
-  }, [stocks, isAdmin]);
+  }, [stocks]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
