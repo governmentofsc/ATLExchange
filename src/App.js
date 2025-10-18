@@ -179,27 +179,20 @@ const ATLStockExchange = () => {
 
   function generateExtendedHistory(basePrice) {
     const data = [];
-    let price = basePrice * (0.95 + Math.random() * 0.10); // Start 5-15% off base
+    let price = basePrice * (0.90 + Math.random() * 0.20);
     
     for (let day = 0; day < 7; day++) {
-      // Smooth trend with some volatility
-      const trendDirection = Math.random() > 0.5 ? 1 : -1;
-      const trend = trendDirection * (Math.random() * 0.02); // 0-2% daily change
-      const volatility = (Math.random() - 0.5) * 0.03; // 3% volatility
-      price = price * (1 + trend + volatility);
-      
-      // Random intraday swings
-      for (let hour = 0; hour < 4; hour++) {
-        const swing = (Math.random() - 0.5) * 0.02;
-        const dayPrice = price * (1 + swing);
+      for (let period = 0; period < 6; period++) {
+        // Realistic random walk with volatility
+        const randomChange = (Math.random() - 0.5) * 0.06; // 6% volatility
+        price = price * (1 + randomChange);
         
         const date = new Date();
         date.setDate(date.getDate() - (7 - day));
-        date.setHours(date.getHours() + hour * 6);
-        date.setHours(0, 0, 0, 0);
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(hour * 6).toString().padStart(2,'0')}:00`;
+        date.setHours(date.getHours() + period * 4);
+        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(period * 4).toString().padStart(2,'0')}:00`;
         
-        data.push({ time: dateStr, price: parseFloat(dayPrice.toFixed(2)) });
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
     return data;
@@ -207,29 +200,23 @@ const ATLStockExchange = () => {
 
   function generateYearHistory(basePrice) {
     const data = [];
-    let price = basePrice * (0.80 + Math.random() * 0.20); // Start 20% lower to 20% higher
+    let price = basePrice * (0.80 + Math.random() * 0.40);
     
     for (let day = 0; day < 60; day++) {
-      // Longer term trend - can have significant moves
-      const trendDirection = Math.random() > 0.4 ? 1 : -1;
-      const trend = trendDirection * (Math.random() * 0.015); // 0-1.5% daily
-      const volatility = (Math.random() - 0.5) * 0.04; // 4% volatility
-      price = price * (1 + trend + volatility);
-      
-      // Keep some bounds
-      price = Math.max(basePrice * 0.60, Math.min(basePrice * 1.50, price));
-      
-      // Multiple points per day for smoother chart
-      for (let period = 0; period < 3; period++) {
-        const periodPrice = price * (1 + (Math.random() - 0.5) * 0.01);
+      for (let period = 0; period < 4; period++) {
+        // Realistic random walk - no artificial trends, pure volatility
+        const randomChange = (Math.random() - 0.5) * 0.08; // 8% volatility per period
+        price = price * (1 + randomChange);
+        
+        // Keep within reasonable bounds
+        price = Math.max(basePrice * 0.50, Math.min(basePrice * 1.80, price));
         
         const date = new Date();
         date.setDate(date.getDate() - (60 - day));
-        date.setHours(date.getHours() + period * 8);
-        date.setHours(0, 0, 0, 0);
+        date.setHours(date.getHours() + period * 6);
         const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
         
-        data.push({ time: dateStr, price: parseFloat(periodPrice.toFixed(2)) });
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
     return data;
