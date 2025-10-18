@@ -343,6 +343,7 @@ const ATLStockExchange = () => {
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPriceAdjustment('');
+    setSelectedStockForAdmin('');
   };
 
   const adjustPriceByPercentage = () => {
@@ -364,6 +365,7 @@ const ATLStockExchange = () => {
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPricePercentage('');
+    setSelectedStockForAdmin('');
   };
 
   const adjustMoneySetter = () => {
