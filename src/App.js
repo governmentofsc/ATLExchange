@@ -38,22 +38,17 @@ const ATLStockExchange = () => {
   const [selectedStockForAdmin, setSelectedStockForAdmin] = useState('');
   const [adjustMoney, setAdjustMoney] = useState('');
   const [targetUser, setTargetUser] = useState('');
-  const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [initialized, setInitialized] = useState(false);
 
-  // Initialize Firebase data on first load
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
-    const speedRef = ref(database, 'speedMultiplier');
 
-    // Listen to stocks
     onValue(stocksRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         setStocks(data);
       } else if (!initialized) {
-        // Initialize with default stocks on first run
         const initialStocks = [
           { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
           { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
@@ -68,13 +63,11 @@ const ATLStockExchange = () => {
       }
     });
 
-    // Listen to users
     onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         setUsers(data);
       } else if (!initialized) {
-        // Initialize with default users
         const initialUsers = {
           'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
           'admin': { password: 'admin', balance: 1000000, portfolio: {} }
@@ -83,20 +76,9 @@ const ATLStockExchange = () => {
       }
     });
 
-    // Listen to speed multiplier
-    onValue(speedRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data !== null) {
-        setSpeedMultiplier(data);
-      } else if (!initialized) {
-        set(speedRef, 1);
-      }
-    });
-
     setInitialized(true);
   }, [initialized]);
 
-  // ONLY update stock prices if you're admin - this prevents conflicts
   useEffect(() => {
     if (stocks.length === 0 || !isAdmin) return;
     
@@ -147,13 +129,12 @@ const ATLStockExchange = () => {
         return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
       });
       
-      // Update Firebase
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-    }, 2000 / speedMultiplier);
+    }, 2000);
     
     return () => clearInterval(interval);
-  }, [stocks, speedMultiplier, isAdmin]);
+  }, [stocks, isAdmin]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
@@ -161,14 +142,12 @@ const ATLStockExchange = () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const now = new Date();
-    
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
     for (let i = 0; i <= minutesFromMidnight; i++) {
       const change = (Math.random() - 0.5) * 0.4;
       price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
-      
       const pointTime = new Date(startOfDay.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
       const min = pointTime.getMinutes().toString().padStart(2,'0');
@@ -194,20 +173,192 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  function generateExtendedHistory(basePrice) {
+  return (
+    <div className={`min-h-screen ${bgClass}`}>
+      <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+        <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
+        <div className="flex items-center gap-2 md:gap-4">
+          <input type="text" placeholder="Search stocks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-3 py-1 rounded text-gray-900 text-sm" />
+          {user && users[user] && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
+          <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+          {isAdmin && <span className="bg-red-600 px-2 py-1 rounded text-xs hidden md:inline">ADMIN</span>}
+          {user ? (
+            <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
+          ) : (
+            <button onClick={() => setShowLoginModal(true)} className="px-3 py-1 bg-white text-blue-600 rounded font-bold hover:bg-gray-200 text-sm">Login</button>
+          )}
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white">
+            {mobileMenuOpen ? <X /> : <Menu />}
+          </button>
+        </div>
+      </div>
+
+      {mobileMenuOpen && (
+        <div className={`md:hidden p-4 ${cardClass} border-b`}>
+          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
+          <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
+          {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
+          {user ? (
+            <button onClick={handleLogout} className="text-red-600">Logout</button>
+          ) : (
+            <button onClick={() => setShowLoginModal(true)} className="text-blue-600 font-bold">Login</button>
+          )}
+        </div>
+      )}
+
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
+            <h1 className="text-3xl font-bold mb-2 text-blue-600">Atlanta Stock Exchange</h1>
+            <p className="text-sm mb-6 opacity-75">Login</p>
+            <input type="text" placeholder="Username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Login</button>
+            <button onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
+            <button onClick={() => setShowLoginModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
+            <p className="text-xs mt-4 opacity-50">Demo: demo/demo | Admin: admin/admin</p>
+          </div>
+        </div>
+      )}
+
+      {showSignupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
+            <h1 className="text-3xl font-bold mb-2 text-blue-600">Create Account</h1>
+            <p className="text-sm mb-6 opacity-75">Sign Up</p>
+            {signupError && <p className="text-red-600 text-sm mb-4">{signupError}</p>}
+            <input type="text" placeholder="Username" value={signupUsername} onChange={(e) => setSignupUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
+            <input type="password" placeholder="Password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
+            <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={(e) => setSignupConfirmPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <button onClick={handleSignup} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
+            <button onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Back to Login</button>
+            <button onClick={() => setShowSignupModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
+            <p className="text-xs mt-4 opacity-50">Starting balance: $50,000</p>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className={`bg-blue-700 text-white p-4 flex gap-4 overflow-x-auto`}>
+          <button onClick={() => setAdminTab('create')} className={`px-4 py-2 rounded ${adminTab === 'create' ? 'bg-white text-blue-600' : ''}`}>Create Stock</button>
+          <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
+          <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'create' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Create New Stock</h2>
+            <input type="text" placeholder="Stock Name" value={newStockName} onChange={(e) => setNewStockName(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="text" placeholder="Ticker" value={newStockTicker} onChange={(e) => setNewStockTicker(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="Price" value={newStockPrice} onChange={(e) => setNewStockPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="Market Cap (optional)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <button onClick={createStock} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Create Stock</button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'adjust' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Adjust Stock Price</h2>
+            <select value={selectedStockForAdmin} onChange={(e) => setSelectedStockForAdmin(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+              <option value="">Select Stock</option>
+              {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+            </select>
+            <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
+            <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'money' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Adjust User Balance</h2>
+            <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+              <option value="">Select User</option>
+              {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <input type="number" placeholder="Amount to Add/Remove" value={adjustMoney} onChange={(e) => setAdjustMoney(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <button onClick={adjustMoneySetter} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust Money</button>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto p-4">
+        <div className="mb-6 bg-blue-600 text-white p-4 rounded-lg">
+          <h3 className="font-bold mb-2">How to Buy/Sell</h3>
+          <p className="text-sm">1. Click "Login" button in top right and sign in (demo/demo or admin/admin)</p>
+          <p className="text-sm">2. Click on any stock to view details</p>
+          <p className="text-sm">3. Enter quantity and click Buy or Sell</p>
+          <p className="text-sm">4. Use the moon/sun icon to toggle dark mode</p>
+        </div>
+        <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {filteredStocks.map(stock => {
+            const priceChange = stock.price - stock.open;
+            const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
+            const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
+            
+            return (
+              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold">{stock.name}</h3>
+                    <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
+                    <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
+                  </div>
+                </div>
+                
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={stock.history}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
+                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="opacity-75">High:</span> <span className="font-bold">${stock.high.toFixed(2)}</span></div>
+                  <div><span className="opacity-75">Low:</span> <span className="font-bold">${stock.low.toFixed(2)}</span></div>
+                  <div><span className="opacity-75">Market Cap:</span> <span className="font-bold">${(stock.marketCap / 1000000000).toFixed(2)}B</span></div>
+                  <div><span className="opacity-75">P/E:</span> <span className="font-bold">{stock.pe.toFixed(2)}</span></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ATLStockExchange;function generateExtendedHistory(basePrice) {
     const data = [];
     let price = basePrice * 0.92;
-    
     for (let day = 0; day < 7; day++) {
       const growth = (day / 7) * 0.08;
       const dayPrice = price * (1 + growth);
       price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      
       const date = new Date();
       date.setDate(date.getDate() - (7 - day));
       date.setHours(0, 0, 0, 0);
       const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      
       data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
     }
     return data;
@@ -216,17 +367,14 @@ const ATLStockExchange = () => {
   function generateYearHistory(basePrice) {
     const data = [];
     let price = basePrice * 0.85;
-    
     for (let day = 0; day < 60; day++) {
       const growth = (day / 60) * 0.15;
       const dayPrice = (basePrice * 0.85) * (1 + growth);
       price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      
       const date = new Date();
       date.setDate(date.getDate() - (60 - day));
       date.setHours(0, 0, 0, 0);
       const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      
       data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
     }
     return data;
@@ -262,10 +410,8 @@ const ATLStockExchange = () => {
       setSignupError('Username already exists');
       return;
     }
-    
     const usersRef = ref(database, `users/${signupUsername}`);
     set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
-    
     setUser(signupUsername);
     setIsAdmin(false);
     setShowSignupModal(false);
@@ -314,13 +460,11 @@ const ATLStockExchange = () => {
 
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
-    
     const marketCap = parseFloat(newStockMarketCap) || 500000000000;
     const pe = parseFloat(newStockPE) || 25.0;
     const dividend = parseFloat(newStockDividend) || 0.5;
     const high52w = parseFloat(newStockHigh52w) || parseFloat(newStockPrice) * 1.2;
     const low52w = parseFloat(newStockLow52w) || parseFloat(newStockPrice) * 0.8;
-    
     const newStock = {
       ticker: newStockTicker.toUpperCase(),
       name: newStockName,
@@ -338,10 +482,8 @@ const ATLStockExchange = () => {
       extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
       yearHistory: generateYearHistory(parseFloat(newStockPrice))
     };
-    
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, [...stocks, newStock]);
-    
     setNewStockName('');
     setNewStockTicker('');
     setNewStockPrice('');
@@ -354,7 +496,6 @@ const ATLStockExchange = () => {
 
   const adjustPriceByAmount = () => {
     if (!selectedStockForAdmin || !priceAdjustment) return;
-    
     const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const newPrice = parseFloat((parseFloat(s.price) + parseFloat(priceAdjustment)).toFixed(2));
@@ -366,7 +507,6 @@ const ATLStockExchange = () => {
       }
       return s;
     });
-    
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPriceAdjustment('');
@@ -374,7 +514,6 @@ const ATLStockExchange = () => {
 
   const adjustPriceByPercentage = () => {
     if (!selectedStockForAdmin || !pricePercentage) return;
-    
     const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const percentChange = parseFloat(pricePercentage) / 100;
@@ -387,7 +526,6 @@ const ATLStockExchange = () => {
       }
       return s;
     });
-    
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPricePercentage('');
@@ -395,18 +533,11 @@ const ATLStockExchange = () => {
 
   const adjustMoneySetter = () => {
     if (!targetUser || !adjustMoney) return;
-    
     const userRef = ref(database, `users/${targetUser}`);
     const newBalance = users[targetUser].balance + parseFloat(adjustMoney);
     update(userRef, { balance: newBalance });
-    
     setAdjustMoney('');
     setTargetUser('');
-  };
-
-  const updateSpeedMultiplier = (newSpeed) => {
-    const speedRef = ref(database, 'speedMultiplier');
-    set(speedRef, newSpeed);
   };
 
   const getFilteredStocks = () => {
@@ -452,18 +583,11 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
-    let chartData;
-    if (chartPeriod === '1d') {
-      chartData = stockData.history;
-    } else if (chartPeriod === '1w') {
-      chartData = stockData.extendedHistory;
-    } else if (chartPeriod === '1m') {
-      chartData = stockData.extendedHistory;
-    } else if (chartPeriod === '1y') {
-      chartData = stockData.yearHistory;
-    } else {
-      chartData = stockData.history;
-    }
+    let chartData = stockData.history;
+    if (chartPeriod === '1w') chartData = stockData.extendedHistory;
+    else if (chartPeriod === '1m') chartData = stockData.extendedHistory;
+    else if (chartPeriod === '1y') chartData = stockData.yearHistory;
+    
     const chartDomain = getChartDomain(chartData);
 
     return (
@@ -547,201 +671,3 @@ const ATLStockExchange = () => {
       </div>
     );
   }
-
-  return (
-    <div className={`min-h-screen ${bgClass}`}>
-      <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
-        <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
-        <div className="flex items-center gap-2 md:gap-4">
-          <input type="text" placeholder="Search stocks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-3 py-1 rounded text-gray-900 text-sm" />
-          {user && users[user] && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-          {isAdmin && <span className="bg-red-600 px-2 py-1 rounded text-xs hidden md:inline">ADMIN</span>}
-          {user ? (
-            <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
-          ) : (
-            <button onClick={() => setShowLoginModal(true)} className="px-3 py-1 bg-white text-blue-600 rounded font-bold hover:bg-gray-200 text-sm">Login</button>
-          )}
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white">
-            {mobileMenuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </div>
-
-      {mobileMenuOpen && (
-        <div className={`md:hidden p-4 ${cardClass} border-b`}>
-          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
-          <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
-          {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
-          {user ? (
-            <button onClick={handleLogout} className="text-red-600">Logout</button>
-          ) : (
-            <button onClick={() => setShowLoginModal(true)} className="text-blue-600 font-bold">Login</button>
-          )}
-        </div>
-      )}
-
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
-            <h1 className="text-3xl font-bold mb-2 text-blue-600">Atlanta Stock Exchange</h1>
-            <p className="text-sm mb-6 opacity-75">Login</p>
-            <input type="text" placeholder="Username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Login</button>
-            <button onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
-            <button onClick={() => setShowLoginModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
-            <p className="text-xs mt-4 opacity-50">Demo: demo/demo | Admin: admin/admin</p>
-          </div>
-        </div>
-      )}
-
-      {showSignupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
-            <h1 className="text-3xl font-bold mb-2 text-blue-600">Create Account</h1>
-            <p className="text-sm mb-6 opacity-75">Sign Up</p>
-            {signupError && <p className="text-red-600 text-sm mb-4">{signupError}</p>}
-            <input type="text" placeholder="Username" value={signupUsername} onChange={(e) => setSignupUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={(e) => setSignupConfirmPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={handleSignup} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
-            <button onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Back to Login</button>
-            <button onClick={() => setShowSignupModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
-            <p className="text-xs mt-4 opacity-50">Starting balance: $50,000</p>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className={`bg-blue-700 text-white p-4 flex gap-4 overflow-x-auto`}>
-          <button onClick={() => setAdminTab('create')} className={`px-4 py-2 rounded ${adminTab === 'create' ? 'bg-white text-blue-600' : ''}`}>Create Stock</button>
-          <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
-          <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
-          <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Market Speed</button>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'create' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Create New Stock</h2>
-            <input type="text" placeholder="Stock Name" value={newStockName} onChange={(e) => setNewStockName(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="text" placeholder="Ticker" value={newStockTicker} onChange={(e) => setNewStockTicker(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Price" value={newStockPrice} onChange={(e) => setNewStockPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Market Cap (optional, e.g. 500000000000)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={createStock} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Create Stock</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'adjust' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Adjust Stock Price</h2>
-            <select value={selectedStockForAdmin} onChange={(e) => setSelectedStockForAdmin(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select Stock</option>
-              {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
-            </select>
-            <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
-            
-            <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'money' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Adjust User Balance</h2>
-            <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select User</option>
-              {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <input type="number" placeholder="Amount to Add/Remove" value={adjustMoney} onChange={(e) => setAdjustMoney(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={adjustMoneySetter} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust Money</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'speed' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Market Speed Modifier</h2>
-            <p className="mb-4">Current Speed: <span className="font-bold text-blue-600">{speedMultiplier}x</span></p>
-            <input type="range" min="0.1" max="1000" step="0.1" value={speedMultiplier} onChange={(e) => updateSpeedMultiplier(parseFloat(e.target.value))} className="w-full mb-4" />
-            <div className="flex gap-2 mb-4 flex-wrap">
-              <button onClick={() => updateSpeedMultiplier(1)} className="px-4 py-2 bg-gray-400 text-white rounded font-bold hover:bg-gray-500">1x (Normal)</button>
-              <button onClick={() => updateSpeedMultiplier(2)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">2x</button>
-              <button onClick={() => updateSpeedMultiplier(5)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">5x</button>
-              <button onClick={() => updateSpeedMultiplier(10)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">10x</button>
-              <button onClick={() => updateSpeedMultiplier(50)} className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">50x</button>
-              <button onClick={() => updateSpeedMultiplier(100)} className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700">100x</button>
-              <button onClick={() => updateSpeedMultiplier(1000)} className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">1000x</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto p-4">
-        <div className="mb-6 bg-blue-600 text-white p-4 rounded-lg">
-          <h3 className="font-bold mb-2">How to Buy/Sell</h3>
-          <p className="text-sm">1. Click "Login" button in top right and sign in (demo/demo or admin/admin)</p>
-          <p className="text-sm">2. Click on any stock to view details</p>
-          <p className="text-sm">3. Enter quantity and click Buy or Sell</p>
-          <p className="text-sm">4. Use the moon/sun icon to toggle dark mode</p>
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredStocks.map(stock => {
-            const priceChange = stock.price - stock.open;
-            const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
-            const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
-            
-            return (
-              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold">{stock.name}</h3>
-                    <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
-                    <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
-                  </div>
-                </div>
-                
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={stock.history}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="opacity-75">High:</span> <span className="font-bold">${stock.high.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Low:</span> <span className="font-bold">${stock.low.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Market Cap:</span> <span className="font-bold">${(stock.marketCap / 1000000000).toFixed(2)}B</span></div>
-                  <div><span className="opacity-75">P/E:</span> <span className="font-bold">{stock.pe.toFixed(2)}</span></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default ATLStockExchange;
