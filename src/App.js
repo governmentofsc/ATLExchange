@@ -42,6 +42,9 @@ const ATLStockExchange = () => {
   const [adminSharesStock, setAdminSharesStock] = useState('');
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [tradeHistory, setTradeHistory] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
+  const [stockFilter, setStockFilter] = useState('');
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -309,14 +312,27 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
-      // Calculate price impact based on market cap (real-world model)
-      // Price impact = (sale value / market cap) as percentage decrease
+      // Log trade if over $500M
+      if (proceeds > 500000000) {
+        const tradeRecord = {
+          timestamp: new Date().toISOString(),
+          user: user,
+          type: 'sell',
+          ticker: selectedStock.ticker,
+          quantity: quantity,
+          price: selectedStock.price,
+          total: proceeds
+        };
+        const historyRef = ref(database, `tradeHistory/${Date.now()}`);
+        set(historyRef, tradeRecord);
+      }
+      
+      // Calculate price impact based on market cap
       const saleValue = proceeds;
       const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
       const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
       const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
-      // Update stock price based on sale
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -463,8 +479,28 @@ const ATLStockExchange = () => {
   };
 
   const getFilteredStocks = () => {
-    if (!searchQuery) return stocks.slice(0, 5).sort((a, b) => b.marketCap - a.marketCap);
-    return stocks.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.ticker.toLowerCase().includes(searchQuery.toLowerCase()));
+    let filtered = stocks;
+    
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(s => 
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        s.ticker.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    // Filter by stock filter (price range, market cap, etc)
+    if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
+    if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
+    if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
+    if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
+    if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
+    if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
+    
+    // Sort by market cap if no search
+    if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
+    
+    return filtered.slice(0, 10);
   };
 
   const filteredStocks = getFilteredStocks();
@@ -771,6 +807,118 @@ const ATLStockExchange = () => {
           <p className="text-sm">2. Click on any stock to view details</p>
           <p className="text-sm">3. Enter quantity and click Buy or Sell</p>
           <p className="text-sm">4. Use the moon/sun icon to toggle dark mode</p>
+        </div>
+
+        {user && (
+          <div className="mb-6 flex gap-2">
+            <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>My Portfolio</button>
+            <button onClick={() => setAdminTab('leaderboard')} className={`px-4 py-2 rounded font-bold ${adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Leaderboard</button>
+          </div>
+        )}
+
+        {user && adminTab === 'portfolio' && (
+          <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+            <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+              <div className="p-4 bg-blue-600 text-white rounded">
+                <p className="text-sm opacity-75">Cash</p>
+                <p className="text-2xl font-bold">${(users[user]?.balance || 0).toFixed(2)}</p>
+              </div>
+              <div className="p-4 bg-green-600 text-white rounded">
+                <p className="text-sm opacity-75">Holdings Value</p>
+                <p className="text-2xl font-bold">${(Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                  const stock = stocks.find(s => s.ticker === ticker);
+                  return sum + (qty * (stock?.price || 0));
+                }, 0)).toFixed(2)}</p>
+              </div>
+              <div className="p-4 bg-purple-600 text-white rounded">
+                <p className="text-sm opacity-75">Total Value</p>
+                <p className="text-2xl font-bold">${((users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                  const stock = stocks.find(s => s.ticker === ticker);
+                  return sum + (qty * (stock?.price || 0));
+                }, 0)).toFixed(2)}</p>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold mb-4">Holdings</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-300 dark:bg-gray-700">
+                  <tr>
+                    <th className="p-2 text-left">Symbol</th>
+                    <th className="p-2 text-right">Quantity</th>
+                    <th className="p-2 text-right">Last Price</th>
+                    <th className="p-2 text-right">Current Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(users[user]?.portfolio || {}).map(([ticker, qty]) => {
+                    const stock = stocks.find(s => s.ticker === ticker);
+                    if (!stock) return null;
+                    return (
+                      <tr key={ticker} className="border-t">
+                        <td className="p-2 font-bold">{ticker}</td>
+                        <td className="p-2 text-right">{qty}</td>
+                        <td className="p-2 text-right">${stock.price.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${(qty * stock.price).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'leaderboard' && (
+          <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+            <h2 className="text-2xl font-bold mb-4">Leaderboard - Top Traders</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-300 dark:bg-gray-700">
+                  <tr>
+                    <th className="p-2 text-left">Rank</th>
+                    <th className="p-2 text-left">User</th>
+                    <th className="p-2 text-right">Cash</th>
+                    <th className="p-2 text-right">Holdings</th>
+                    <th className="p-2 text-right">Total Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(users)
+                    .map(([username, userData]) => {
+                      const holdingsValue = Object.entries(userData.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                        const stock = stocks.find(s => s.ticker === ticker);
+                        return sum + (qty * (stock?.price || 0));
+                      }, 0);
+                      const totalValue = userData.balance + holdingsValue;
+                      return { username, balance: userData.balance, holdingsValue, totalValue };
+                    })
+                    .sort((a, b) => b.totalValue - a.totalValue)
+                    .map((entry, idx) => (
+                      <tr key={entry.username} className={`border-t ${entry.username === user ? 'bg-yellow-100 dark:bg-yellow-900' : ''}`}>
+                        <td className="p-2 font-bold">#{idx + 1}</td>
+                        <td className="p-2">{entry.username} {entry.username === user && <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">YOU</span>}</td>
+                        <td className="p-2 text-right">${entry.balance.toFixed(2)}</td>
+                        <td className="p-2 text-right">${entry.holdingsValue.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${entry.totalValue.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
+        <div className="mb-4 flex gap-2 flex-wrap">
+          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>All</button>
+          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Under $100</button>
+          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>$100-$500</button>
+          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Over $500</button>
+          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Large Cap</button>
+          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Mid Cap</button>
+          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>Small Cap</button>
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
         
