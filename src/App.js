@@ -42,8 +42,6 @@ const ATLStockExchange = () => {
   const [adminSharesStock, setAdminSharesStock] = useState('');
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
-  const [tradeHistory, setTradeHistory] = useState([]);
-  const [auditLog, setAuditLog] = useState([]);
   const [stockFilter, setStockFilter] = useState('');
 
   useEffect(() => {
