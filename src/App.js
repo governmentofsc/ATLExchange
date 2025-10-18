@@ -557,7 +557,6 @@ const ATLStockExchange = () => {
             </div>
           )}
         </div>
-        </div>
       </div>
     );
   }
