@@ -40,12 +40,10 @@ const ATLStockExchange = () => {
   const [targetUser, setTargetUser] = useState('');
   const [initialized, setInitialized] = useState(false);
 
-  // Initialize Firebase data on first load
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
 
-    // Listen to stocks
     onValue(stocksRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -65,7 +63,6 @@ const ATLStockExchange = () => {
       }
     });
 
-    // Listen to users
     onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -82,7 +79,6 @@ const ATLStockExchange = () => {
     setInitialized(true);
   }, [initialized]);
 
-  // Update stock prices - ONLY admin updates this at 1x speed
   useEffect(() => {
     if (stocks.length === 0 || !isAdmin) return;
     
@@ -146,14 +142,12 @@ const ATLStockExchange = () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const now = new Date();
-    
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
     for (let i = 0; i <= minutesFromMidnight; i++) {
       const change = (Math.random() - 0.5) * 0.4;
       price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
-      
       const pointTime = new Date(startOfDay.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
       const min = pointTime.getMinutes().toString().padStart(2,'0');
@@ -182,17 +176,14 @@ const ATLStockExchange = () => {
   function generateExtendedHistory(basePrice) {
     const data = [];
     let price = basePrice * 0.92;
-    
     for (let day = 0; day < 7; day++) {
       const growth = (day / 7) * 0.08;
       const dayPrice = price * (1 + growth);
       price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      
       const date = new Date();
       date.setDate(date.getDate() - (7 - day));
       date.setHours(0, 0, 0, 0);
       const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      
       data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
     }
     return data;
@@ -201,17 +192,14 @@ const ATLStockExchange = () => {
   function generateYearHistory(basePrice) {
     const data = [];
     let price = basePrice * 0.85;
-    
     for (let day = 0; day < 60; day++) {
       const growth = (day / 60) * 0.15;
       const dayPrice = (basePrice * 0.85) * (1 + growth);
       price = dayPrice + (Math.random() - 0.5) * dayPrice * 0.03;
-      
       const date = new Date();
       date.setDate(date.getDate() - (60 - day));
       date.setHours(0, 0, 0, 0);
       const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      
       data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
     }
     return data;
@@ -511,6 +499,13 @@ const ATLStockExchange = () => {
               <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
                 <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
                 <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+                <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
+                <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
+              </div>
+
+              <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
+                <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
                 <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
                 <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
               </div>
