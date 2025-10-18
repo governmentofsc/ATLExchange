@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Menu, X, Moon, Sun, LogOut } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { database } from './firebase';
+import { ref, set, onValue, update } from 'firebase/database';
 
 const ATLStockExchange = () => {
   const [darkMode, setDarkMode] = useState(false);
@@ -39,37 +41,146 @@ const ATLStockExchange = () => {
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [baseTime, setBaseTime] = useState(new Date());
   const [dayStartTime] = useState(() => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return now;
-});
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now;
+  });
+  const [initialized, setInitialized] = useState(false);
 
+  // Initialize Firebase data on first load
+  useEffect(() => {
+    const stocksRef = ref(database, 'stocks');
+    const usersRef = ref(database, 'users');
+    const speedRef = ref(database, 'speedMultiplier');
+    const baseTimeRef = ref(database, 'baseTime');
+
+    // Listen to stocks
+    onValue(stocksRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setStocks(data);
+      } else if (!initialized) {
+        // Initialize with default stocks on first run
+        const initialStocks = [
+          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
+          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
+          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
+          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
+          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
+          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
+          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
+          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+        ];
+        set(stocksRef, initialStocks);
+      }
+    });
+
+    // Listen to users
+    onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setUsers(data);
+      } else if (!initialized) {
+        // Initialize with default users
+        const initialUsers = {
+          'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
+          'admin': { password: 'admin', balance: 1000000, portfolio: {} }
+        };
+        set(usersRef, initialUsers);
+      }
+    });
+
+    // Listen to speed multiplier
+    onValue(speedRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        setSpeedMultiplier(data);
+      } else if (!initialized) {
+        set(speedRef, 1);
+      }
+    });
+
+    // Listen to base time
+    onValue(baseTimeRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setBaseTime(new Date(data));
+      } else if (!initialized) {
+        set(baseTimeRef, new Date().toISOString());
+      }
+    });
+
+    setInitialized(true);
+  }, [initialized]);
+
+  // Update base time based on speed multiplier
   useEffect(() => {
     const interval = setInterval(() => {
-      setBaseTime(prev => new Date(prev.getTime() + 2000 * speedMultiplier));
+      const newTime = new Date(baseTime.getTime() + 2000 * speedMultiplier);
+      setBaseTime(newTime);
+      
+      // Update Firebase with new time (only if we're not in the middle of receiving an update)
+      const baseTimeRef = ref(database, 'baseTime');
+      set(baseTimeRef, newTime.toISOString());
     }, 2000);
-    return () => clearInterval(interval);
-  }, [speedMultiplier]);
-
-  useEffect(() => {
-    const initialStocks = [
-      { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
-      { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
-      { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
-      { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
-      { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
-      { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
-      { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
-      { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
-    ];
-    setStocks(initialStocks);
     
-    const initialUsers = {
-      'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
-      'admin': { password: 'admin', balance: 1000000, portfolio: {} }
-    };
-    setUsers(initialUsers);
-  }, []);
+    return () => clearInterval(interval);
+  }, [speedMultiplier, baseTime]);
+
+  // Update stock prices at regular intervals
+  useEffect(() => {
+    if (stocks.length === 0) return;
+    
+    const interval = setInterval(() => {
+      const updatedStocks = stocks.map(stock => {
+        const change = (Math.random() - 0.5) * 0.3;
+        const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
+        const newPrice2 = parseFloat(newPrice.toFixed(2));
+        
+        const newHigh = Math.max(stock.high, newPrice2);
+        const newLow = Math.min(stock.low, newPrice2);
+        
+        const newHistory = [...stock.history];
+        const elapsedMs = baseTime - dayStartTime;
+        const elapsedMinutes = Math.floor(elapsedMs / 60000);
+        const expectedPoints = elapsedMinutes + 1;
+        
+        if (newHistory.length < expectedPoints) {
+          const hour = baseTime.getHours();
+          const min = baseTime.getMinutes().toString().padStart(2,'0');
+          let displayHour = hour;
+          let ampm = 'AM';
+          
+          if (hour === 0) {
+            displayHour = 12;
+            ampm = 'AM';
+          } else if (hour < 12) {
+            displayHour = hour;
+            ampm = 'AM';
+          } else if (hour === 12) {
+            displayHour = 12;
+            ampm = 'PM';
+          } else {
+            displayHour = hour - 12;
+            ampm = 'PM';
+          }
+          
+          newHistory.push({ time: `${displayHour}:${min} ${ampm}`, price: newPrice2 });
+        }
+        
+        const sharesOutstanding = stock.marketCap / stock.price;
+        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice2));
+        
+        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
+      });
+      
+      // Update Firebase
+      const stocksRef = ref(database, 'stocks');
+      set(stocksRef, updatedStocks);
+    }, 2000 / speedMultiplier);
+    
+    return () => clearInterval(interval);
+  }, [stocks, speedMultiplier, baseTime, dayStartTime]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
@@ -148,55 +259,6 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStocks(prevStocks => {
-        return prevStocks.map(stock => {
-          const change = (Math.random() - 0.5) * 0.3;
-          const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
-          const newPrice2 = parseFloat(newPrice.toFixed(2));
-          
-          const newHigh = Math.max(stock.high, newPrice2);
-          const newLow = Math.min(stock.low, newPrice2);
-          
-          const newHistory = [...stock.history];
-          const elapsedMs = baseTime - dayStartTime;
-          const elapsedMinutes = Math.floor(elapsedMs / 60000);
-          const expectedPoints = elapsedMinutes + 1;
-          
-          if (newHistory.length < expectedPoints) {
-            const hour = baseTime.getHours();
-            const min = baseTime.getMinutes().toString().padStart(2,'0');
-            let displayHour = hour;
-            let ampm = 'AM';
-            
-            if (hour === 0) {
-              displayHour = 12;
-              ampm = 'AM';
-            } else if (hour < 12) {
-              displayHour = hour;
-              ampm = 'AM';
-            } else if (hour === 12) {
-              displayHour = 12;
-              ampm = 'PM';
-            } else {
-              displayHour = hour - 12;
-              ampm = 'PM';
-            }
-            
-            newHistory.push({ time: `${displayHour}:${min} ${ampm}`, price: newPrice2 });
-          }
-          
-          const sharesOutstanding = stock.marketCap / stock.price;
-          const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice2));
-          
-          return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
-        });
-      });
-    }, 2000 / speedMultiplier);
-    return () => clearInterval(interval);
-  }, [speedMultiplier, baseTime, dayStartTime]);
-
   const handleLogin = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
       setUser('admin');
@@ -227,10 +289,10 @@ const ATLStockExchange = () => {
       setSignupError('Username already exists');
       return;
     }
-    setUsers(prev => ({
-      ...prev,
-      [signupUsername]: { password: signupPassword, balance: 50000, portfolio: {} }
-    }));
+    
+    const usersRef = ref(database, `users/${signupUsername}`);
+    set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
+    
     setUser(signupUsername);
     setIsAdmin(false);
     setShowSignupModal(false);
@@ -251,14 +313,13 @@ const ATLStockExchange = () => {
     if (!selectedStock || !buyQuantity) return;
     const cost = selectedStock.price * parseInt(buyQuantity);
     if (users[user].balance >= cost) {
-      setUsers(prev => ({
-        ...prev,
-        [user]: {
-          ...prev[user],
-          balance: prev[user].balance - cost,
-          portfolio: { ...prev[user].portfolio, [selectedStock.ticker]: (prev[user].portfolio[selectedStock.ticker] || 0) + parseInt(buyQuantity) }
-        }
-      }));
+      const userRef = ref(database, `users/${user}`);
+      const newBalance = users[user].balance - cost;
+      const newPortfolio = { 
+        ...users[user].portfolio, 
+        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + parseInt(buyQuantity) 
+      };
+      update(userRef, { balance: newBalance, portfolio: newPortfolio });
       setBuyQuantity('');
     }
   };
@@ -267,14 +328,13 @@ const ATLStockExchange = () => {
     if (!selectedStock || !sellQuantity) return;
     if ((users[user].portfolio[selectedStock.ticker] || 0) >= parseInt(sellQuantity)) {
       const proceeds = selectedStock.price * parseInt(sellQuantity);
-      setUsers(prev => ({
-        ...prev,
-        [user]: {
-          ...prev[user],
-          balance: prev[user].balance + proceeds,
-          portfolio: { ...prev[user].portfolio, [selectedStock.ticker]: prev[user].portfolio[selectedStock.ticker] - parseInt(sellQuantity) }
-        }
-      }));
+      const userRef = ref(database, `users/${user}`);
+      const newBalance = users[user].balance + proceeds;
+      const newPortfolio = { 
+        ...users[user].portfolio, 
+        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - parseInt(sellQuantity) 
+      };
+      update(userRef, { balance: newBalance, portfolio: newPortfolio });
       setSellQuantity('');
     }
   };
@@ -305,7 +365,10 @@ const ATLStockExchange = () => {
       extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
       yearHistory: generateYearHistory(parseFloat(newStockPrice))
     };
-    setStocks(prev => [...prev, newStock]);
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, [...stocks, newStock]);
+    
     setNewStockName('');
     setNewStockTicker('');
     setNewStockPrice('');
@@ -318,7 +381,8 @@ const ATLStockExchange = () => {
 
   const adjustPriceByAmount = () => {
     if (!selectedStockForAdmin || !priceAdjustment) return;
-    setStocks(prev => prev.map(s => {
+    
+    const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const newPrice = parseFloat((parseFloat(s.price) + parseFloat(priceAdjustment)).toFixed(2));
         const newHigh = Math.max(s.high, newPrice);
@@ -328,13 +392,17 @@ const ATLStockExchange = () => {
         return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
       }
       return s;
-    }));
+    });
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, updatedStocks);
     setPriceAdjustment('');
   };
 
   const adjustPriceByPercentage = () => {
     if (!selectedStockForAdmin || !pricePercentage) return;
-    setStocks(prev => prev.map(s => {
+    
+    const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const percentChange = parseFloat(pricePercentage) / 100;
         const newPrice = parseFloat((s.price * (1 + percentChange)).toFixed(2));
@@ -345,18 +413,27 @@ const ATLStockExchange = () => {
         return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
       }
       return s;
-    }));
+    });
+    
+    const stocksRef = ref(database, 'stocks');
+    set(stocksRef, updatedStocks);
     setPricePercentage('');
   };
 
   const adjustMoneySetter = () => {
     if (!targetUser || !adjustMoney) return;
-    setUsers(prev => ({
-      ...prev,
-      [targetUser]: { ...prev[targetUser], balance: prev[targetUser].balance + parseFloat(adjustMoney) }
-    }));
+    
+    const userRef = ref(database, `users/${targetUser}`);
+    const newBalance = users[targetUser].balance + parseFloat(adjustMoney);
+    update(userRef, { balance: newBalance });
+    
     setAdjustMoney('');
     setTargetUser('');
+  };
+
+  const updateSpeedMultiplier = (newSpeed) => {
+    const speedRef = ref(database, 'speedMultiplier');
+    set(speedRef, newSpeed);
   };
 
   const getFilteredStocks = () => {
@@ -396,7 +473,7 @@ const ATLStockExchange = () => {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
     if (!stockData) return null;
     
-    const userHolding = user ? (users[user].portfolio[selectedStock.ticker] || 0) : 0;
+    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
@@ -504,7 +581,7 @@ const ATLStockExchange = () => {
         <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
         <div className="flex items-center gap-2 md:gap-4">
           <input type="text" placeholder="Search stocks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-3 py-1 rounded text-gray-900 text-sm" />
-          {user && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
+          {user && users[user] && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
           <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
@@ -522,7 +599,7 @@ const ATLStockExchange = () => {
 
       {mobileMenuOpen && (
         <div className={`md:hidden p-4 ${cardClass} border-b`}>
-          {user && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
+          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
           <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
           {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
           {user ? (
@@ -627,15 +704,15 @@ const ATLStockExchange = () => {
           <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
             <h2 className="text-xl font-bold mb-4">Market Speed Modifier</h2>
             <p className="mb-4">Current Speed: <span className="font-bold text-blue-600">{speedMultiplier}x</span></p>
-            <input type="range" min="0.1" max="1000" step="0.1" value={speedMultiplier} onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))} className="w-full mb-4" />
+            <input type="range" min="0.1" max="1000" step="0.1" value={speedMultiplier} onChange={(e) => updateSpeedMultiplier(parseFloat(e.target.value))} className="w-full mb-4" />
             <div className="flex gap-2 mb-4 flex-wrap">
-              <button onClick={() => setSpeedMultiplier(1)} className="px-4 py-2 bg-gray-400 text-white rounded font-bold hover:bg-gray-500">1x (Normal)</button>
-              <button onClick={() => setSpeedMultiplier(2)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">2x</button>
-              <button onClick={() => setSpeedMultiplier(5)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">5x</button>
-              <button onClick={() => setSpeedMultiplier(10)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">10x</button>
-              <button onClick={() => setSpeedMultiplier(50)} className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">50x</button>
-              <button onClick={() => setSpeedMultiplier(100)} className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700">100x</button>
-              <button onClick={() => setSpeedMultiplier(1000)} className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">1000x</button>
+              <button onClick={() => updateSpeedMultiplier(1)} className="px-4 py-2 bg-gray-400 text-white rounded font-bold hover:bg-gray-500">1x (Normal)</button>
+              <button onClick={() => updateSpeedMultiplier(2)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">2x</button>
+              <button onClick={() => updateSpeedMultiplier(5)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">5x</button>
+              <button onClick={() => updateSpeedMultiplier(10)} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">10x</button>
+              <button onClick={() => updateSpeedMultiplier(50)} className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">50x</button>
+              <button onClick={() => updateSpeedMultiplier(100)} className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700">100x</button>
+              <button onClick={() => updateSpeedMultiplier(1000)} className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">1000x</button>
             </div>
           </div>
         </div>
