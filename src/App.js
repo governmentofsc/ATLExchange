@@ -39,12 +39,6 @@ const ATLStockExchange = () => {
   const [adjustMoney, setAdjustMoney] = useState('');
   const [targetUser, setTargetUser] = useState('');
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
-  const [baseTime, setBaseTime] = useState(new Date());
-  const [dayStartTime] = useState(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  });
   const [initialized, setInitialized] = useState(false);
 
   // Initialize Firebase data on first load
@@ -52,7 +46,6 @@ const ATLStockExchange = () => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
     const speedRef = ref(database, 'speedMultiplier');
-    const baseTimeRef = ref(database, 'baseTime');
 
     // Listen to stocks
     onValue(stocksRef, (snapshot) => {
@@ -100,40 +93,18 @@ const ATLStockExchange = () => {
       }
     });
 
-    // Listen to base time
-    onValue(baseTimeRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setBaseTime(new Date(data));
-      } else if (!initialized) {
-        set(baseTimeRef, new Date().toISOString());
-      }
-    });
-
     setInitialized(true);
   }, [initialized]);
 
-  // Update base time based on speed multiplier - only one instance should do this
+  // ONLY update stock prices if you're admin - this prevents conflicts
   useEffect(() => {
-    // Only update if we're admin or if there's no active updater
-    const shouldUpdate = isAdmin;
-    
-    if (!shouldUpdate) return;
+    if (stocks.length === 0 || !isAdmin) return;
     
     const interval = setInterval(() => {
-      const baseTimeRef = ref(database, 'baseTime');
-      const newTime = new Date(Date.now() + 2000 * speedMultiplier);
-      set(baseTimeRef, newTime.toISOString());
-    }, 2000);
-    
-    return () => clearInterval(interval);
-  }, [speedMultiplier, isAdmin]);
-
-  // Update stock prices at regular intervals
-  useEffect(() => {
-    if (stocks.length === 0) return;
-    
-    const interval = setInterval(() => {
+      const now = new Date();
+      const dayStartTime = new Date();
+      dayStartTime.setHours(0, 0, 0, 0);
+      
       const updatedStocks = stocks.map(stock => {
         const change = (Math.random() - 0.5) * 0.3;
         const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
@@ -143,13 +114,13 @@ const ATLStockExchange = () => {
         const newLow = Math.min(stock.low, newPrice2);
         
         const newHistory = [...stock.history];
-        const elapsedMs = baseTime - dayStartTime;
+        const elapsedMs = now - dayStartTime;
         const elapsedMinutes = Math.floor(elapsedMs / 60000);
         const expectedPoints = elapsedMinutes + 1;
         
         if (newHistory.length < expectedPoints) {
-          const hour = baseTime.getHours();
-          const min = baseTime.getMinutes().toString().padStart(2,'0');
+          const hour = now.getHours();
+          const min = now.getMinutes().toString().padStart(2,'0');
           let displayHour = hour;
           let ampm = 'AM';
           
@@ -182,7 +153,7 @@ const ATLStockExchange = () => {
     }, 2000 / speedMultiplier);
     
     return () => clearInterval(interval);
-  }, [stocks, speedMultiplier, baseTime, dayStartTime]);
+  }, [stocks, speedMultiplier, isAdmin]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
