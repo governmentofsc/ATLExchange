@@ -257,30 +257,73 @@ const ATLStockExchange = () => {
 
   const buyStock = () => {
     if (!selectedStock || !buyQuantity) return;
-    const cost = selectedStock.price * parseInt(buyQuantity);
+    const quantity = parseInt(buyQuantity);
+    const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + parseInt(buyQuantity) 
+        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      
+      // Calculate price impact based on market cap (real-world model)
+      // Price impact = (purchase value / market cap) as percentage increase
+      const purchaseValue = cost;
+      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      
+      // Update stock price based on purchase
+      const updatedStocks = stocks.map(s => {
+        if (s.ticker === selectedStock.ticker) {
+          const newHigh = Math.max(s.high, newPrice);
+          const newLow = Math.min(s.low, newPrice);
+          const sharesOutstanding = s.marketCap / s.price;
+          const newMarketCap = sharesOutstanding * newPrice;
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+        }
+        return s;
+      });
+      
+      const stocksRef = ref(database, 'stocks');
+      set(stocksRef, updatedStocks);
       setBuyQuantity('');
     }
   };
 
   const sellStock = () => {
     if (!selectedStock || !sellQuantity) return;
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= parseInt(sellQuantity)) {
-      const proceeds = selectedStock.price * parseInt(sellQuantity);
+    const quantity = parseInt(sellQuantity);
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - parseInt(sellQuantity) 
+        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      
+      // Calculate price impact (0.01% per 1000 shares sold - slight negative impact)
+      const priceImpact = -(quantity / 100000) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      
+      // Update stock price based on sale
+      const updatedStocks = stocks.map(s => {
+        if (s.ticker === selectedStock.ticker) {
+          const newHigh = Math.max(s.high, newPrice);
+          const newLow = Math.min(s.low, newPrice);
+          const sharesOutstanding = s.marketCap / s.price;
+          const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+        }
+        return s;
+      });
+      
+      const stocksRef = ref(database, 'stocks');
+      set(stocksRef, updatedStocks);
       setSellQuantity('');
     }
   };
@@ -437,7 +480,7 @@ const ATLStockExchange = () => {
     const chartDomain = getChartDomain(chartData);
 
     return (
-      <div className={`min-h-screen ${bgClass}`}>
+      <div className={`min-h-screen flex flex-col ${bgClass}`}>
         <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
           <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
@@ -448,7 +491,7 @@ const ATLStockExchange = () => {
           </button>
         </div>
 
-        <div className="max-w-7xl mx-auto p-4">
+        <div className="flex-1 max-w-7xl mx-auto p-4 w-full">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
             <div className={`lg:col-span-2 p-6 rounded-lg border-2 ${cardClass}`}>
               <h2 className="text-2xl font-bold mb-2">{stockData.name} ({stockData.ticker})</h2>
