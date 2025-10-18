@@ -306,8 +306,11 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
-      // Calculate price impact (0.01% per 1000 shares sold - slight negative impact)
-      const priceImpact = -(quantity / 100000) * selectedStock.price;
+      // Calculate price impact based on market cap (real-world model)
+      // Price impact = (sale value / market cap) as percentage decrease
+      const saleValue = proceeds;
+      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
       const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       // Update stock price based on sale
@@ -316,7 +319,7 @@ const ATLStockExchange = () => {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
-          const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+          const newMarketCap = sharesOutstanding * newPrice;
           return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
         }
         return s;
@@ -457,7 +460,7 @@ const ATLStockExchange = () => {
 
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    if (!stockData) return null;
+    if (!stockData || !stocks || stocks.length === 0) return <div className={`min-h-screen ${bgClass} flex items-center justify-center`}><p>Loading stock data...</p></div>;
     
     const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
@@ -465,33 +468,26 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
-    let chartData;
-    if (chartPeriod === '1d') {
-      chartData = stockData.history;
-    } else if (chartPeriod === '1w') {
-      chartData = stockData.extendedHistory;
-    } else if (chartPeriod === '1m') {
-      chartData = stockData.extendedHistory;
-    } else if (chartPeriod === '1y') {
-      chartData = stockData.yearHistory;
-    } else {
-      chartData = stockData.history;
-    }
+    let chartData = stockData.history || [];
+    if (chartPeriod === '1w') chartData = stockData.extendedHistory || [];
+    if (chartPeriod === '1m') chartData = stockData.extendedHistory || [];
+    if (chartPeriod === '1y') chartData = stockData.yearHistory || [];
+    
     const chartDomain = getChartDomain(chartData);
 
     return (
-      <div className={`min-h-screen flex flex-col ${bgClass}`}>
-        <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+      <div className={`min-h-screen ${bgClass}`}>
+        <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
           <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
-            <span className="font-bold">Atlanta Stock Exchange</span>
+            <span className="font-bold">Back</span>
           </button>
           <button onClick={() => setDarkMode(!darkMode)} className="p-2">
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
         </div>
 
-        <div className="flex-1 max-w-7xl mx-auto p-4 w-full">
+        <div className="max-w-7xl mx-auto p-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
             <div className={`lg:col-span-2 p-6 rounded-lg border-2 ${cardClass}`}>
               <h2 className="text-2xl font-bold mb-2">{stockData.name} ({stockData.ticker})</h2>
@@ -506,15 +502,19 @@ const ATLStockExchange = () => {
                 ))}
               </div>
 
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData}>
-                  <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                  <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
-                  <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
-                  <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
-                  <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              {chartData && chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
+                    <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
+                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-96 flex items-center justify-center text-gray-500">No chart data available</div>
+              )}
             </div>
 
             <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
@@ -556,6 +556,7 @@ const ATLStockExchange = () => {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     );
