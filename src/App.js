@@ -42,6 +42,7 @@ const ATLStockExchange = () => {
   const [adminSharesStock, setAdminSharesStock] = useState('');
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [stockFilter, setStockFilter] = useState('');
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -97,7 +98,7 @@ const ATLStockExchange = () => {
         dayStartTime.setHours(0, 0, 0, 0);
 
         const updatedStocks = latestStocks.map(stock => {
-          const change = (Math.random() - 0.5) * 0.15;
+          const change = (Math.random() - 0.5) * 0.1;
           const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
           const newPrice2 = parseFloat(newPrice.toFixed(2));
 
@@ -142,7 +143,7 @@ const ATLStockExchange = () => {
       } catch (err) {
         console.log('Price update error:', err);
       }
-    }, 10000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
@@ -500,6 +501,13 @@ const ATLStockExchange = () => {
       );
     }
 
+    if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
+    if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
+    if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
+    if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
+    if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
+    if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
+
     if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
 
     return filtered.slice(0, 10);
@@ -811,7 +819,16 @@ const ATLStockExchange = () => {
         </div>
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="mb-4 flex gap-2 flex-wrap">
+          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
+          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
+          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
+          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
+          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
+          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
+          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
+        </div>
+        <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
           {filteredStocks.map(stock => {
             const priceChange = stock.price - stock.open;
             const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
