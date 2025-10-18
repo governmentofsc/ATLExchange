@@ -83,17 +83,7 @@ const ATLStockExchange = () => {
     setInitialized(true);
   }, [initialized]);
 
-  useEffect(() => {
-    if (stocks.length === 0) return;
-    
-    const interval = setInterval(() => {
-      const now = new Date();
-      const dayStartTime = new Date();
-      dayStartTime.setHours(0, 0, 0, 0);
-      
-      const updatedStocks = stocks.map(stock => {
-        const change = (Math.random() - 0.5) * 0.15;
-        const newPrice = Math.max(stock.open * 0.98, Math.min(stock.open * 1.02, stock.price + change));
+0.98, Math.min(stock.open * 1.02, stock.price + change));
         const newPrice2 = parseFloat(newPrice.toFixed(2));
         
         const newHigh = Math.max(stock.high, newPrice2);
@@ -135,7 +125,7 @@ const ATLStockExchange = () => {
       
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-    }, 2000);
+    }, 8000);
     
     return () => clearInterval(interval);
   }, [stocks]);
@@ -269,26 +259,35 @@ const ATLStockExchange = () => {
     setSelectedStock(null);
   };
 
-  const buyStock = () => {
+  const buyStock = async () => {
     if (!selectedStock || !buyQuantity) return;
     const quantity = parseInt(buyQuantity);
-    const cost = selectedStock.price * quantity;
+    
+    // Read latest stock data from Firebase
+    const stocksRef = ref(database, 'stocks');
+    const stockSnapshot = await new Promise((resolve) => {
+      onValue(stocksRef, resolve, { onlyOnce: true });
+    });
+    const latestStocks = stockSnapshot.val();
+    const currentStock = latestStocks.find(s => s.ticker === selectedStock.ticker);
+    
+    const cost = currentStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
+        [currentStock.ticker]: (users[user].portfolio[currentStock.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (purchaseValue / currentStock.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * currentStock.price;
+      const newPrice = parseFloat((currentStock.price + priceImpact).toFixed(2));
       
-      const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+      const updatedStocks = latestStocks.map(s => {
+        if (s.ticker === currentStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -299,22 +298,30 @@ const ATLStockExchange = () => {
         return s;
       });
       
-      const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
       setBuyQuantity('');
     }
   };
 
-  const sellStock = () => {
+  const sellStock = async () => {
     if (!selectedStock || !sellQuantity) return;
     const quantity = parseInt(sellQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
-      const proceeds = selectedStock.price * quantity;
+    
+    // Read latest stock data from Firebase
+    const stocksRef = ref(database, 'stocks');
+    const stockSnapshot = await new Promise((resolve) => {
+      onValue(stocksRef, resolve, { onlyOnce: true });
+    });
+    const latestStocks = stockSnapshot.val();
+    const currentStock = latestStocks.find(s => s.ticker === selectedStock.ticker);
+    
+    if ((users[user].portfolio[currentStock.ticker] || 0) >= quantity) {
+      const proceeds = currentStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
+        [currentStock.ticker]: users[user].portfolio[currentStock.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
@@ -323,9 +330,9 @@ const ATLStockExchange = () => {
           timestamp: new Date().toISOString(),
           user: user,
           type: 'sell',
-          ticker: selectedStock.ticker,
+          ticker: currentStock.ticker,
           quantity: quantity,
-          price: selectedStock.price,
+          price: currentStock.price,
           total: proceeds
         };
         const historyRef = ref(database, `tradeHistory/${Date.now()}`);
@@ -333,12 +340,12 @@ const ATLStockExchange = () => {
       }
       
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (saleValue / currentStock.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * currentStock.price;
+      const newPrice = parseFloat((currentStock.price + priceImpact).toFixed(2));
       
-      const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+      const updatedStocks = latestStocks.map(s => {
+        if (s.ticker === currentStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -349,7 +356,6 @@ const ATLStockExchange = () => {
         return s;
       });
       
-      const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
       setSellQuantity('');
     }
