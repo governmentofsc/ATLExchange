@@ -809,63 +809,169 @@ const ATLStockExchange = () => {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto p-4">
+<div className="max-w-7xl mx-auto p-4">
         <div className="mb-6 bg-blue-600 text-white p-4 rounded-lg">
           <h3 className="font-bold mb-2">How to Buy/Sell</h3>
           <p className="text-sm">1. Click "Login" and sign in (demo/demo)</p>
           <p className="text-sm">2. Click any stock to view details</p>
           <p className="text-sm">3. Enter quantity and click Buy or Sell</p>
-          <p className="text-sm">4. Prices update every 10 seconds</p>
+          <p className="text-sm">4. Prices update every 15 seconds</p>
         </div>
 
-        <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
-        <div className="mb-4 flex gap-2 flex-wrap">
-          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
-          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
-          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
-          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
-          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
-          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
-          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
-          {filteredStocks.map(stock => {
-            const priceChange = stock.price - stock.open;
-            const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
-            const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
+        {user && (
+          <div className="mb-6 flex gap-2">
+            <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>My Portfolio</button>
+            <button onClick={() => setAdminTab('leaderboard')} className={`px-4 py-2 rounded font-bold ${adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Leaderboard</button>
+          </div>
+        )}
 
-            return (
-              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold">{stock.name}</h3>
-                    <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
-                    <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
-                  </div>
-                </div>
-
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={stock.history}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="opacity-75">High:</span> <span className="font-bold">${stock.high.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Low:</span> <span className="font-bold">${stock.low.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Market Cap:</span> <span className="font-bold">${(stock.marketCap / 1000000000).toFixed(2)}B</span></div>
-                  <div><span className="opacity-75">P/E:</span> <span className="font-bold">{stock.pe.toFixed(2)}</span></div>
-                </div>
+        {user && adminTab === 'portfolio' && (
+          <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+            <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+              <div className="p-4 bg-blue-600 text-white rounded">
+                <p className="text-sm opacity-75">Cash</p>
+                <p className="text-2xl font-bold">${(users[user]?.balance || 0).toFixed(2)}</p>
               </div>
-            );
-          })}
-        </div>
+              <div className="p-4 bg-green-600 text-white rounded">
+                <p className="text-sm opacity-75">Holdings Value</p>
+                <p className="text-2xl font-bold">${(Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                  const stock = stocks.find(s => s.ticker === ticker);
+                  return sum + (qty * (stock?.price || 0));
+                }, 0)).toFixed(2)}</p>
+              </div>
+              <div className="p-4 bg-purple-600 text-white rounded">
+                <p className="text-sm opacity-75">Total Value</p>
+                <p className="text-2xl font-bold">${((users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                  const stock = stocks.find(s => s.ticker === ticker);
+                  return sum + (qty * (stock?.price || 0));
+                }, 0)).toFixed(2)}</p>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold mb-4">Holdings</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
+                  <tr>
+                    <th className="p-2 text-left">Symbol</th>
+                    <th className="p-2 text-right">Quantity</th>
+                    <th className="p-2 text-right">Last Price</th>
+                    <th className="p-2 text-right">Current Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(users[user]?.portfolio || {}).map(([ticker, qty]) => {
+                    const stock = stocks.find(s => s.ticker === ticker);
+                    if (!stock) return null;
+                    return (
+                      <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
+                        <td className="p-2 font-bold">{ticker}</td>
+                        <td className="p-2 text-right">{qty}</td>
+                        <td className="p-2 text-right">${stock.price.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${(qty * stock.price).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'leaderboard' && (
+          <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+            <h2 className="text-2xl font-bold mb-4">Leaderboard - Top Traders</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
+                  <tr>
+                    <th className="p-2 text-left">Rank</th>
+                    <th className="p-2 text-left">User</th>
+                    <th className="p-2 text-right">Cash</th>
+                    <th className="p-2 text-right">Holdings</th>
+                    <th className="p-2 text-right">Total Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(users)
+                    .map(([username, userData]) => {
+                      const holdingsValue = Object.entries(userData.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                        const stock = stocks.find(s => s.ticker === ticker);
+                        return sum + (qty * (stock?.price || 0));
+                      }, 0);
+                      const totalValue = userData.balance + holdingsValue;
+                      return { username, balance: userData.balance, holdingsValue, totalValue };
+                    })
+                    .sort((a, b) => b.totalValue - a.totalValue)
+                    .map((entry, idx) => (
+                      <tr key={entry.username} className={`border-t ${entry.username === user ? `${darkMode ? 'bg-amber-900' : 'bg-yellow-200'}` : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <td className="p-2 font-bold">#{idx + 1}</td>
+                        <td className="p-2">{entry.username} {entry.username === user && <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">YOU</span>}</td>
+                        <td className="p-2 text-right">${entry.balance.toFixed(2)}</td>
+                        <td className="p-2 text-right">${entry.holdingsValue.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${entry.totalValue.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {(adminTab === 'stocks' || (!user && adminTab !== 'portfolio' && adminTab !== 'leaderboard')) && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
+            <div className="mb-4 flex gap-2 flex-wrap">
+              <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
+              <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
+              <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
+              <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
+              <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
+              <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
+              <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
+            </div>
+            <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredStocks.map(stock => {
+                const priceChange = stock.price - stock.open;
+                const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
+                const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
+
+                return (
+                  <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold">{stock.name}</h3>
+                        <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
+                        <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
+                      </div>
+                    </div>
+
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={stock.history}>
+                        <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                        <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
+                        <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
+                        <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="opacity-75">High:</span> <span className="font-bold">${stock.high.toFixed(2)}</span></div>
+                      <div><span className="opacity-75">Low:</span> <span className="font-bold">${stock.low.toFixed(2)}</span></div>
+                      <div><span className="opacity-75">Market Cap:</span> <span className="font-bold">${(stock.marketCap / 1000000000).toFixed(2)}B</span></div>
+                      <div><span className="opacity-75">P/E:</span> <span className="font-bold">{stock.pe.toFixed(2)}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
