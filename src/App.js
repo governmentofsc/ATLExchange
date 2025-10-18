@@ -525,9 +525,9 @@ const ATLStockExchange = () => {
     ];
   };
 
-  const bgClass = darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900';
-  const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-blue-50 border-blue-200';
-  const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300';
+  const bgClass = darkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900';
+  const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
+  const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
 
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
@@ -841,7 +841,7 @@ const ATLStockExchange = () => {
             <h3 className="text-xl font-bold mb-4">Holdings</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-300 dark:bg-gray-700">
+                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
                   <tr>
                     <th className="p-2 text-left">Symbol</th>
                     <th className="p-2 text-right">Quantity</th>
@@ -854,7 +854,7 @@ const ATLStockExchange = () => {
                     const stock = stocks.find(s => s.ticker === ticker);
                     if (!stock) return null;
                     return (
-                      <tr key={ticker} className="border-t">
+                      <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
                         <td className="p-2 font-bold">{ticker}</td>
                         <td className="p-2 text-right">{qty}</td>
                         <td className="p-2 text-right">${stock.price.toFixed(2)}</td>
@@ -873,7 +873,7 @@ const ATLStockExchange = () => {
             <h2 className="text-2xl font-bold mb-4">Leaderboard - Top Traders</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-300 dark:bg-gray-700">
+                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
                   <tr>
                     <th className="p-2 text-left">Rank</th>
                     <th className="p-2 text-left">User</th>
@@ -894,7 +894,7 @@ const ATLStockExchange = () => {
                     })
                     .sort((a, b) => b.totalValue - a.totalValue)
                     .map((entry, idx) => (
-                      <tr key={entry.username} className={`border-t ${entry.username === user ? 'bg-yellow-100 dark:bg-yellow-900' : ''}`}>
+                      <tr key={entry.username} className={`border-t ${entry.username === user ? `${darkMode ? 'bg-amber-900' : 'bg-yellow-200'}` : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <td className="p-2 font-bold">#{idx + 1}</td>
                         <td className="p-2">{entry.username} {entry.username === user && <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">YOU</span>}</td>
                         <td className="p-2 text-right">${entry.balance.toFixed(2)}</td>
