@@ -44,6 +44,8 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
+  const [updateSpeed, setUpdateSpeed] = useState(1000); // Price update interval in ms
+  const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -110,35 +112,42 @@ const ATLStockExchange = () => {
         const newHistory = [...stock.history];
         const elapsedMs = now - dayStartTime;
         
-        // Add new data point every 2 minutes to prevent overcrowding
+        // Rolling update system: update last point every 5 seconds, add new point every 2 minutes
         const elapsed2Min = Math.floor(elapsedMs / 120000);
         const expectedPoints2Min = elapsed2Min + 1;
         
+        const hour = now.getHours();
+        const min = now.getMinutes();
+        let displayHour = hour;
+        let ampm = 'AM';
+        
+        if (hour === 0) {
+          displayHour = 12;
+          ampm = 'AM';
+        } else if (hour < 12) {
+          displayHour = hour;
+          ampm = 'AM';
+        } else if (hour === 12) {
+          displayHour = 12;
+          ampm = 'PM';
+        } else {
+          displayHour = hour - 12;
+          ampm = 'PM';
+        }
+        
+        // Round minutes to nearest 5 for cleaner display
+        const roundedMin = Math.floor(min / 5) * 5;
+        const displayMin = roundedMin.toString().padStart(2, '0');
+        const timeLabel = `${displayHour}:${displayMin} ${ampm}`;
+        
         if (newHistory.length < expectedPoints2Min) {
-          const hour = now.getHours();
-          const min = now.getMinutes();
-          let displayHour = hour;
-          let ampm = 'AM';
-          
-          if (hour === 0) {
-            displayHour = 12;
-            ampm = 'AM';
-          } else if (hour < 12) {
-            displayHour = hour;
-            ampm = 'AM';
-          } else if (hour === 12) {
-            displayHour = 12;
-            ampm = 'PM';
-          } else {
-            displayHour = hour - 12;
-            ampm = 'PM';
+          // Add new data point every 2 minutes
+          newHistory.push({ time: timeLabel, price: newPrice2 });
+        } else {
+          // Update the last point with current price every update cycle
+          if (newHistory.length > 0) {
+            newHistory[newHistory.length - 1] = { time: timeLabel, price: newPrice2 };
           }
-          
-          // Round minutes to nearest 5 for cleaner display
-          const roundedMin = Math.floor(min / 5) * 5;
-          const displayMin = roundedMin.toString().padStart(2, '0');
-          
-          newHistory.push({ time: `${displayHour}:${displayMin} ${ampm}`, price: newPrice2 });
         }
         
         const sharesOutstanding = stock.marketCap / stock.price;
@@ -149,10 +158,10 @@ const ATLStockExchange = () => {
       
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-    }, 1000); // Update every second instead of every 2 seconds
+    }, updateSpeed); // Use configurable update speed
     
     return () => clearInterval(interval);
-  }, [stocks]);
+  }, [stocks, updateSpeed]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
@@ -753,6 +762,7 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
           <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
           <button onClick={() => setAdminTab('shares')} className={`px-4 py-2 rounded ${adminTab === 'shares' ? 'bg-white text-blue-600' : ''}`}>Buy/Sell Shares</button>
+          <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Speed Settings</button>
         </div>
       )}
 
@@ -820,6 +830,73 @@ const ATLStockExchange = () => {
             <div className="grid grid-cols-2 gap-2">
               <button onClick={adminGiveShares} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Give Shares</button>
               <button onClick={adminRemoveShares} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Remove Shares</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'speed' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Speed Settings</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">Price Update Speed (milliseconds)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="number" 
+                    value={updateSpeed} 
+                    onChange={(e) => setUpdateSpeed(parseInt(e.target.value) || 1000)} 
+                    className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    min="500" 
+                    max="10000" 
+                    step="500"
+                  />
+                  <button 
+                    onClick={() => setUpdateSpeed(1000)} 
+                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Reset (1s)
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Current: {updateSpeed}ms ({1000/updateSpeed}x speed)
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold mb-2">Chart Update Speed (milliseconds)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="number" 
+                    value={chartUpdateSpeed} 
+                    onChange={(e) => setChartUpdateSpeed(parseInt(e.target.value) || 5000)} 
+                    className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    min="1000" 
+                    max="30000" 
+                    step="1000"
+                  />
+                  <button 
+                    onClick={() => setChartUpdateSpeed(5000)} 
+                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Reset (5s)
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Current: {chartUpdateSpeed}ms - Updates last chart point every {chartUpdateSpeed/1000}s
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded">
+                <h3 className="font-bold mb-2">How it works:</h3>
+                <ul className="text-sm space-y-1">
+                  <li>• <strong>Price Update Speed:</strong> How often stock prices change (affects all price calculations)</li>
+                  <li>• <strong>Chart Update Speed:</strong> How often the last chart point updates (shows real-time movement)</li>
+                  <li>• <strong>New chart points:</strong> Added every 2 minutes regardless of speed settings</li>
+                  <li>• <strong>Rolling updates:</strong> Last point updates continuously, keeping charts responsive</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
