@@ -45,8 +45,8 @@ function generatePriceHistory(basePrice) {
   
   const newData = [...existingData];
   
-  // Add new data points every 3 minutes from last existing time to now
-  for (let minutes = lastExistingMinutes + 3; minutes <= totalMinutes; minutes += 3) {
+  // Add new data points every 1 minute from last existing time to now
+  for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
     const time = new Date(startOfDay.getTime() + minutes * 60000);
     const hour = time.getHours();
     const minute = time.getMinutes();
@@ -56,27 +56,25 @@ function generatePriceHistory(basePrice) {
     const period = hour >= 12 ? 'PM' : 'AM';
     const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
     
-    // Generate realistic price movement with multiple patterns
-    // Use a fixed day length (24 hours = 1440 minutes) for consistent progress calculation
-    const progress = minutes / 1440; // 0 to 1 based on 24-hour day, not current time
+    // Generate completely deterministic price based only on time of day
+    // This ensures the same time always produces the same price
+    const timeOfDay = minutes / 1440; // 0 to 1 based on 24-hour day
     
-    // Multiple wave patterns for more realistic movement
-    const morningWave = Math.sin(progress * Math.PI * 2) * 0.03; // Morning trend
-    const volatilityWave = Math.sin(progress * Math.PI * 8) * 0.02; // Higher frequency volatility
-    const microMovements = Math.sin(progress * Math.PI * 20) * 0.01; // Micro movements
+    // Create a deterministic seed based on basePrice and time
+    const seed = Math.floor(basePrice * 1000) + minutes;
     
-    // Use seeded random for consistent noise - seed based on minutes for consistency
-    const pointSeed = Math.floor(basePrice * 1000) + minutes;
-    const pointSeededRandom = () => {
-      let localSeed = pointSeed;
-      localSeed = (localSeed * 9301 + 49297) % 233280;
-      return localSeed / 233280;
+    // Deterministic random function
+    const deterministicRandom = (seed) => {
+      let x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
     };
     
-    const randomNoise = (pointSeededRandom() - 0.5) * (0.01 + progress * 0.02);
+    // Generate price using only time-based patterns (no current time dependency)
+    const morningTrend = Math.sin(timeOfDay * Math.PI * 2) * 0.02; // Daily cycle
+    const volatility = Math.sin(timeOfDay * Math.PI * 12) * 0.015; // Higher frequency
+    const microNoise = (deterministicRandom(seed) - 0.5) * 0.01; // Small random variation
     
-    // Combine all patterns
-    const totalChange = morningWave + volatilityWave + microMovements + randomNoise;
+    const totalChange = morningTrend + volatility + microNoise;
     const price = basePrice * (1 + totalChange);
     
     newData.push({
@@ -405,7 +403,7 @@ const ATLStockExchange = () => {
       return seed / 233280;
     };
     
-    for (let i = 0; i <= minutes; i += 3) { // Every 3 minutes for more detail
+    for (let i = 0; i <= minutes; i += 1) { // Every 1 minute for more detail
       const change = (seededRandom() - 0.5) * 0.02; // Smaller changes for minute data
       price = Math.max(basePrice * 0.99, Math.min(basePrice * 1.01, price + change));
       
