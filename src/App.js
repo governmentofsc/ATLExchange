@@ -376,14 +376,8 @@ const ATLStockExchange = () => {
     let data = [];
     
     switch(period) {
-      case '1m':
-        data = generateMinuteHistory(stockData.price, 1);
-        break;
-      case '5m':
-        data = generateMinuteHistory(stockData.price, 5);
-        break;
-      case '15m':
-        data = generateMinuteHistory(stockData.price, 15);
+      case '10m':
+        data = generateMinuteHistory(stockData.price, 10);
         break;
       case '30m':
         data = generateMinuteHistory(stockData.price, 30);
@@ -391,25 +385,14 @@ const ATLStockExchange = () => {
       case '1h':
         data = generateMinuteHistory(stockData.price, 60);
         break;
-      case '4h':
-        data = generateMinuteHistory(stockData.price, 240);
-        break;
       case '1d':
         data = stockData.history || [];
         break;
       case '1w':
         data = stockData.extendedHistory || [];
         break;
-      case '1M':
+      case '1m':
         data = stockData.extendedHistory || [];
-        break;
-      case '3M':
-        // Generate 3 months of data
-        data = generateThreeMonthHistory(stockData.price);
-        break;
-      case '6M':
-        // Generate 6 months of data
-        data = generateSixMonthHistory(stockData.price);
         break;
       case '1y':
         data = stockData.yearHistory || [];
@@ -951,7 +934,7 @@ const ATLStockExchange = () => {
               </div>
               
               <div className="mb-4 flex gap-2 flex-wrap">
-                {['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M', '3M', '6M', '1y'].map(period => (
+                {['10m', '30m', '1h', '1d', '1w', '1m', '1y'].map(period => (
                   <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period}</button>
                 ))}
               </div>
