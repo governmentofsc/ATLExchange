@@ -109,8 +109,6 @@ const ATLStockExchange = () => {
         
         const newHistory = [...stock.history];
         const elapsedMs = now - dayStartTime;
-        const elapsedMinutes = Math.floor(elapsedMs / 60000);
-        const expectedPoints = elapsedMinutes + 1;
         
         // Add new data point every 2 minutes to prevent overcrowding
         const elapsed2Min = Math.floor(elapsedMs / 120000);
