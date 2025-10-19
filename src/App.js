@@ -107,7 +107,7 @@ const ATLStockExchange = () => {
     });
 
     setInitialized(true);
-  }, [initialized]);
+  }, [initialized]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Listen for trading history
   useEffect(() => {
@@ -279,12 +279,7 @@ const ATLStockExchange = () => {
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
     
-    // Use seeded random number generator for consistent data
-    let seed = Math.floor(basePrice * 1000) % 10000;
-    const seededRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
+    // Seeded random number generator removed - using point-specific seeding instead
     
     const newData = [...existingData];
     
