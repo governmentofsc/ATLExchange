@@ -52,7 +52,10 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
-  // Removed stop loss and take profit state variables
+  const [pendingOrders, setPendingOrders] = useState([]); // Pending stop loss/take profit orders
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [takeProfitPrice, setTakeProfitPrice] = useState('');
+  const [orderQuantity, setOrderQuantity] = useState('');
   const [recentTrades, setRecentTrades] = useState([]); // Recent trades from all users
 
   useEffect(() => {
@@ -151,19 +154,9 @@ const ATLStockExchange = () => {
     });
   }, []);
 
-  // Update selectedStock with live data when stocks change
+  // Force chart updates when stocks change
   useEffect(() => {
-    if (selectedStock && stocks.length > 0) {
-      const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
-      if (liveStockData) {
-        // Always update selectedStock with live data, even if price is the same
-        // This ensures we have the latest data including other properties
-        setSelectedStock(liveStockData);
-        console.log('Updated selectedStock with live data:', liveStockData.ticker, liveStockData.price);
-      }
-    }
     setChartKey(prev => prev + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stocks]);
 
   // Market controller system - ensures only one tab controls price updates
@@ -477,35 +470,12 @@ const ATLStockExchange = () => {
 
   const handleLogin = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
-      // Ensure admin has proper data structure
-      if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
-        console.log('Initializing admin data');
-        const usersRef = ref(database, `users/admin`);
-        set(usersRef, { 
-          password: 'admin', 
-          balance: 1000000, 
-          portfolio: {} 
-        });
-      }
-      
       setUser('admin');
       setIsAdmin(true);
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
     } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
-      // Ensure user has proper data structure
-      const userData = users[loginUsername];
-      if (!userData.balance || !userData.portfolio) {
-        console.log('Initializing user data for:', loginUsername);
-        const usersRef = ref(database, `users/${loginUsername}`);
-        set(usersRef, { 
-          password: userData.password || loginPassword, 
-          balance: userData.balance || 1, 
-          portfolio: userData.portfolio || {} 
-        });
-      }
-      
       setUser(loginUsername);
       setIsAdmin(false);
       setShowLoginModal(false);
@@ -549,45 +519,28 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!selectedStock || !buyQuantity || !user) return;
-    
-    // Get live stock data from stocks array
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    if (!stockData || !stockData.ticker) {
-      console.error('Stock not found:', selectedStock.ticker);
-      return;
-    }
-    
+    if (!selectedStock || !buyQuantity) return;
     const quantity = parseInt(buyQuantity);
-    const cost = stockData.price * quantity;
-    
-    // Check if user data exists and has required properties
-    if (!users[user] || !users[user].balance || !users[user].portfolio) {
-      console.error('User data incomplete:', users[user]);
-      return;
-    }
-    
+    const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
-      const currentHolding = users[user].portfolio[stockData.ticker] || 0;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [stockData.ticker]: currentHolding + quantity
+        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
       };
-      
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / stockData.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * stockData.price;
-      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === stockData.ticker) {
+        if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -604,9 +557,9 @@ const ATLStockExchange = () => {
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
-        ticker: stockData.ticker,
+        ticker: selectedStock.ticker,
         quantity: quantity,
-        price: stockData.price,
+        price: selectedStock.price,
         total: cost,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -619,49 +572,31 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!selectedStock || !sellQuantity || !user) return;
-    
-    // Get live stock data from stocks array
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    if (!stockData || !stockData.ticker) {
-      console.error('Stock not found:', selectedStock.ticker);
-      return;
-    }
-    
+    if (!selectedStock || !sellQuantity) return;
     const quantity = parseInt(sellQuantity);
-    
-    // Check if user data exists and has required properties
-    if (!users[user] || !users[user].balance || !users[user].portfolio) {
-      console.error('User data incomplete:', users[user]);
-      return;
-    }
-    
-    const currentHolding = users[user].portfolio[stockData.ticker] || 0;
-    
-    if (currentHolding >= quantity) {
-      const proceeds = stockData.price * quantity;
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [stockData.ticker]: currentHolding - quantity
+        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
       };
-      
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / stockData.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * stockData.price;
-      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'sell',
-        ticker: stockData.ticker,
+        ticker: selectedStock.ticker,
         quantity: quantity,
-        price: stockData.price,
+        price: selectedStock.price,
         total: proceeds,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -670,7 +605,7 @@ const ATLStockExchange = () => {
       set(historyRef, tradeRecord);
       
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === stockData.ticker) {
+        if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -686,7 +621,49 @@ const ATLStockExchange = () => {
     }
   };
 
-  // Removed stop loss and take profit functions - keeping it simple
+  const createStopLossOrder = () => {
+    if (!selectedStock || !stopLossPrice || !orderQuantity) return;
+    const quantity = parseInt(orderQuantity);
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const order = {
+        id: Date.now(),
+        type: 'stop_loss',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        triggerPrice: parseFloat(stopLossPrice),
+        createdAt: Date.now(),
+        status: 'pending'
+      };
+      
+      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
+      set(ordersRef, order);
+      
+      setStopLossPrice('');
+      setOrderQuantity('');
+    }
+  };
+
+  const createTakeProfitOrder = () => {
+    if (!selectedStock || !takeProfitPrice || !orderQuantity) return;
+    const quantity = parseInt(orderQuantity);
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const order = {
+        id: Date.now(),
+        type: 'take_profit',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        triggerPrice: parseFloat(takeProfitPrice),
+        createdAt: Date.now(),
+        status: 'pending'
+      };
+      
+      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
+      set(ordersRef, order);
+      
+      setTakeProfitPrice('');
+      setOrderQuantity('');
+    }
+  };
 
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
@@ -932,58 +909,32 @@ const ATLStockExchange = () => {
   const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
 
   if (selectedStock) {
-    try {
-      // Find the live stock data from the stocks array for real-time updates
-      const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-      if (!stockData) {
-        console.error('Live stock data not found for:', selectedStock.ticker);
-        return (
-          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-            <div className="text-center">
-              <p className="text-lg text-red-600">Stock data not found</p>
-              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
-            </div>
-          </div>
-        );
-      }
-      
-      // Show loading screen if stocks array is empty
-      if (stocks.length === 0) {
-        return (
-          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-            <div className="text-center">
-              <p className="text-lg">Loading stock data...</p>
-              <p className="text-sm text-gray-500 mt-2">Selected: {typeof selectedStock === 'string' ? selectedStock : selectedStock?.ticker}</p>
-              <p className="text-xs text-gray-400 mt-1">Stocks loaded: {stocks.length}</p>
-              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
-            </div>
-          </div>
-        );
-      }
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
     
-      // Wait for user data to load if user is logged in
-      if (user && (!users || !users[user])) {
-        console.log('User data check:', {
-          user,
-          usersExists: !!users,
-          userExists: !!(users && users[user]),
-          userData: users && users[user]
-        });
-        
-        return (
-          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-            <div className="text-center">
-              <p className="text-lg">Loading user data...</p>
-              <p className="text-sm text-gray-500 mt-2">User: {user}</p>
-              <p className="text-xs text-gray-400 mt-1">Users loaded: {Object.keys(users || {}).length}</p>
-              <p className="text-xs text-gray-400 mt-1">User data ready: {users && users[user] ? 'Yes' : 'No'}</p>
-              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
-            </div>
+    // Show loading screen if data isn't ready yet
+    if (!stockData || stocks.length === 0) {
+      return (
+        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+          <div className="text-center">
+            <p className="text-lg">Loading...</p>
+            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
           </div>
-        );
-      }
+        </div>
+      );
+    }
     
-    const userHolding = user && users && users[user] ? (users[user].portfolio?.[stockData.ticker] || 0) : 0;
+    if (user && (!users || !users[user])) {
+      return (
+        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+          <div className="text-center">
+            <p className="text-lg">Loading user data...</p>
+            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+          </div>
+        </div>
+      );
+    }
+    
+    const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
@@ -995,7 +946,7 @@ const ATLStockExchange = () => {
     const chartDomain = getChartDomain(chartData);
 
     return (
-      <div className={`min-h-screen ${bgClass}`} key={`stock-detail-${stockData?.ticker}-${chartKey}`}>
+      <div className={`min-h-screen ${bgClass}`}>
         <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
           <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
@@ -1075,22 +1026,26 @@ const ATLStockExchange = () => {
             </div>
           </div>}
 
-          {/* Removed stop loss and take profit UI - keeping it simple */}
+          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Stop Loss Order</h3>
+              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Stop Price" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3 text-sm text-gray-600">Sell automatically if price drops to stop price</p>
+              <button onClick={createStopLossOrder} className="w-full bg-orange-600 text-white p-2 rounded font-bold hover:bg-orange-700">Set Stop Loss</button>
+            </div>
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Take Profit Order</h3>
+              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Target Price" value={takeProfitPrice} onChange={(e) => setTakeProfitPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3 text-sm text-gray-600">Sell automatically if price reaches target</p>
+              <button onClick={createTakeProfitOrder} className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">Set Take Profit</button>
+            </div>
+          </div>}
         </div>
       </div>
     );
-    } catch (error) {
-      console.error('Error rendering selected stock:', error);
-      return (
-        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-          <div className="text-center">
-            <p className="text-lg text-red-600">Error loading stock data</p>
-            <p className="text-sm text-gray-500 mt-2">Error: {error.message}</p>
-            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
-          </div>
-        </div>
-      );
-    }
   }
 
   return (
@@ -2177,12 +2132,7 @@ const ATLStockExchange = () => {
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
             
             return (
-              <div key={stock.ticker} onClick={() => {
-                console.log('Clicking stock:', stock);
-                console.log('Stock ticker:', stock.ticker);
-                console.log('Stock price:', stock.price);
-                setSelectedStock(stock);
-              }} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold">{stock.name}</h3>
@@ -2219,4 +2169,3 @@ const ATLStockExchange = () => {
 };
 
 export default ATLStockExchange;
-// Build fix - ESLint dependencies resolved
