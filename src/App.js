@@ -403,17 +403,6 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Use static history data but fill in missing time points to current time
-        const historyData = stockData.history || [];
-        const now = getEasternTime();
-        
-        // Get the last data point from history
-        const lastHistoryPoint = historyData[historyData.length - 1];
-        if (!lastHistoryPoint) {
-          data = historyData;
-          break;
-        }
-        
         // Generate fresh data from 12:00 AM to current time
         data = generatePriceHistory(stockData.price);
         break;
