@@ -109,14 +109,16 @@ const ATLStockExchange = () => {
         
         const newHistory = [...stock.history];
         const elapsedMs = now - dayStartTime;
+        const elapsedMinutes = Math.floor(elapsedMs / 60000);
+        const expectedPoints = elapsedMinutes + 1;
         
-        // Add new data point more frequently (every 30 seconds instead of every minute)
-        const elapsed30Sec = Math.floor(elapsedMs / 30000);
-        const expectedPoints30Sec = elapsed30Sec + 1;
+        // Add new data point every 2 minutes to prevent overcrowding
+        const elapsed2Min = Math.floor(elapsedMs / 120000);
+        const expectedPoints2Min = elapsed2Min + 1;
         
-        if (newHistory.length < expectedPoints30Sec) {
+        if (newHistory.length < expectedPoints2Min) {
           const hour = now.getHours();
-          const min = now.getMinutes().toString().padStart(2,'0');
+          const min = now.getMinutes();
           let displayHour = hour;
           let ampm = 'AM';
           
@@ -134,7 +136,11 @@ const ATLStockExchange = () => {
             ampm = 'PM';
           }
           
-          newHistory.push({ time: `${displayHour}:${min} ${ampm}`, price: newPrice2 });
+          // Round minutes to nearest 5 for cleaner display
+          const roundedMin = Math.floor(min / 5) * 5;
+          const displayMin = roundedMin.toString().padStart(2, '0');
+          
+          newHistory.push({ time: `${displayHour}:${displayMin} ${ampm}`, price: newPrice2 });
         }
         
         const sharesOutstanding = stock.marketCap / stock.price;
@@ -625,7 +631,7 @@ const ATLStockExchange = () => {
                 <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 6))} />
                     <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
                     <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
