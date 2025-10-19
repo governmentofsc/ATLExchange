@@ -521,9 +521,16 @@ const ATLStockExchange = () => {
     if (!selectedStock || !buyQuantity || !user) return;
     
     // Check if user data exists and has required properties
-    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+    if (!users[user] || !users[user].balance) {
       console.error('User data incomplete:', users[user]);
       return;
+    }
+    
+    // Ensure portfolio exists, create empty object if it doesn't
+    if (!users[user].portfolio) {
+      const userRef = ref(database, `users/${user}`);
+      update(userRef, { portfolio: {} });
+      return; // Let the update complete and retry
     }
     
     const quantity = parseInt(buyQuantity);
@@ -581,9 +588,16 @@ const ATLStockExchange = () => {
     if (!selectedStock || !sellQuantity || !user) return;
     
     // Check if user data exists and has required properties
-    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+    if (!users[user] || !users[user].balance) {
       console.error('User data incomplete:', users[user]);
       return;
+    }
+    
+    // Ensure portfolio exists, create empty object if it doesn't
+    if (!users[user].portfolio) {
+      const userRef = ref(database, `users/${user}`);
+      update(userRef, { portfolio: {} });
+      return; // Let the update complete and retry
     }
     
     const quantity = parseInt(sellQuantity);
