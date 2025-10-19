@@ -161,9 +161,11 @@ const ATLStockExchange = () => {
     
     // Heartbeat to maintain control
     const heartbeat = setInterval(() => {
-      if (isMarketController) {
-        update(controllerRef, { timestamp: Date.now() });
-      }
+      update(controllerRef, { 
+        sessionId, 
+        timestamp: Date.now(),
+        user: user || 'anonymous'
+      });
     }, 5000);
     
     // Listen for controller changes
@@ -181,7 +183,7 @@ const ATLStockExchange = () => {
       if (retryTimeout) clearTimeout(retryTimeout);
       unsubscribe();
     };
-  }, [user, isMarketController]);
+  }, [user]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
