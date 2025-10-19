@@ -171,7 +171,7 @@ const ATLStockExchange = () => {
     if (selectedStock) {
       setChartKey(prev => prev + 1);
     }
-  }, [stocks, selectedStock]);
+  }, [stocks, selectedStock?.ticker]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
