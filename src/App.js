@@ -2043,7 +2043,7 @@ const ATLStockExchange = () => {
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
             
             return (
-              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold">{stock.name}</h3>
@@ -2055,8 +2055,14 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
                 
-                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  <LineChart data={stock.history}>
+                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}-${stock.price}`}>
+                  <LineChart data={stock.history.map((point, index, array) => {
+                    // Update the last data point with current live price
+                    if (index === array.length - 1) {
+                      return { ...point, price: stock.price };
+                    }
+                    return point;
+                  })}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
                     <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
