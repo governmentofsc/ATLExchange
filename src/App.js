@@ -908,30 +908,44 @@ const ATLStockExchange = () => {
   const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
 
   if (selectedStock) {
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    
-    // Show loading screen if data isn't ready yet
-    if (!stockData || stocks.length === 0) {
-      return (
-        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-          <div className="text-center">
-            <p className="text-lg">Loading...</p>
-            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+    try {
+      // If selectedStock is a string (ticker), find the stock data
+      // If selectedStock is an object, use it directly
+      const stockData = typeof selectedStock === 'string' 
+        ? stocks.find(s => s.ticker === selectedStock)
+        : selectedStock;
+      
+      // Debug logging
+      console.log('Selected stock:', selectedStock);
+      console.log('Stock data found:', stockData);
+      console.log('Stocks array length:', stocks.length);
+      console.log('User:', user);
+      console.log('Users data:', users);
+      
+      // Show loading screen if data isn't ready yet
+      if (!stockData || stocks.length === 0) {
+        return (
+          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+            <div className="text-center">
+              <p className="text-lg">Loading stock data...</p>
+              <p className="text-sm text-gray-500 mt-2">Selected: {typeof selectedStock === 'string' ? selectedStock : selectedStock?.ticker}</p>
+              <p className="text-xs text-gray-400 mt-1">Stocks loaded: {stocks.length}</p>
+              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+            </div>
           </div>
-        </div>
-      );
-    }
+        );
+      }
     
-    if (user && (!users || !users[user])) {
-      return (
-        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
-          <div className="text-center">
-            <p className="text-lg">Loading user data...</p>
-            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+      if (user && (!users || !users[user])) {
+        return (
+          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+            <div className="text-center">
+              <p className="text-lg">Loading user data...</p>
+              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+            </div>
           </div>
-        </div>
-      );
-    }
+        );
+      }
     
     const userHolding = user ? (users[user]?.portfolio[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
@@ -1045,6 +1059,18 @@ const ATLStockExchange = () => {
         </div>
       </div>
     );
+    } catch (error) {
+      console.error('Error rendering selected stock:', error);
+      return (
+        <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+          <div className="text-center">
+            <p className="text-lg text-red-600">Error loading stock data</p>
+            <p className="text-sm text-gray-500 mt-2">Error: {error.message}</p>
+            <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
@@ -2131,7 +2157,10 @@ const ATLStockExchange = () => {
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
             
             return (
-              <div key={stock.ticker} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+              <div key={stock.ticker} onClick={() => {
+                console.log('Clicking stock:', stock);
+                setSelectedStock(stock);
+              }} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold">{stock.name}</h3>
