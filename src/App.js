@@ -52,7 +52,6 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
-  const [pendingOrders, setPendingOrders] = useState([]); // Pending stop loss/take profit orders
   const [stopLossPrice, setStopLossPrice] = useState('');
   const [takeProfitPrice, setTakeProfitPrice] = useState('');
   const [orderQuantity, setOrderQuantity] = useState('');
