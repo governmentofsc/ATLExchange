@@ -908,14 +908,25 @@ const ATLStockExchange = () => {
   const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
 
   if (selectedStock) {
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+    // If selectedStock is a string (ticker), find the stock data
+    // If selectedStock is an object, use it directly
+    const stockData = typeof selectedStock === 'string' 
+      ? stocks.find(s => s.ticker === selectedStock)
+      : selectedStock;
+    
+    // Debug logging
+    console.log('Selected stock:', selectedStock);
+    console.log('Stock data found:', stockData);
+    console.log('Stocks array length:', stocks.length);
     
     // Show loading screen if data isn't ready yet
     if (!stockData || stocks.length === 0) {
       return (
         <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
           <div className="text-center">
-            <p className="text-lg">Loading...</p>
+            <p className="text-lg">Loading stock data...</p>
+            <p className="text-sm text-gray-500 mt-2">Selected: {typeof selectedStock === 'string' ? selectedStock : selectedStock?.ticker}</p>
+            <p className="text-xs text-gray-400 mt-1">Stocks loaded: {stocks.length}</p>
             <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
           </div>
         </div>
