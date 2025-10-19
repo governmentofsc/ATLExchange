@@ -136,7 +136,7 @@ const ATLStockExchange = () => {
       if (retryTimeout) clearTimeout(retryTimeout);
       unsubscribe();
     };
-  }, [isAdmin, user]);
+  }, [isAdmin, user, isMarketController]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
