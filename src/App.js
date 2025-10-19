@@ -166,15 +166,18 @@ const ATLStockExchange = () => {
       const ticker = typeof selectedStock === 'string' ? selectedStock : selectedStock.ticker;
       const liveStockData = stocks.find(s => s.ticker === ticker);
       if (liveStockData) {
-        // Only update if the price actually changed to prevent unnecessary re-renders
-        if (!currentStockData || currentStockData.price !== liveStockData.price) {
-          setCurrentStockData(liveStockData);
-        }
+        setCurrentStockData(prevData => {
+          // Only update if the price actually changed to prevent unnecessary re-renders
+          if (!prevData || prevData.price !== liveStockData.price) {
+            return liveStockData;
+          }
+          return prevData;
+        });
       }
     } else {
       setCurrentStockData(null);
     }
-  }, [stocks, selectedStock]); // Removed currentStockData from dependencies to prevent infinite loops
+  }, [stocks, selectedStock]);
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
