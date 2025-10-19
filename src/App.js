@@ -232,7 +232,7 @@ const ATLStockExchange = () => {
         }
         
         const sharesOutstanding = stock.marketCap / stock.price;
-        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice2));
+        const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
         
         return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
       });
@@ -451,6 +451,12 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
+      // Calculate price impact based on market cap
+      const saleValue = proceeds;
+      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
@@ -464,12 +470,6 @@ const ATLStockExchange = () => {
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
-      
-      // Calculate price impact based on market cap
-      const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
@@ -537,7 +537,7 @@ const ATLStockExchange = () => {
         const newHigh = Math.max(s.high, newPrice);
         const newLow = Math.min(s.low, newPrice);
         const sharesOutstanding = s.marketCap / s.price;
-        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+        const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice);
         return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
       }
       return s;
@@ -559,7 +559,7 @@ const ATLStockExchange = () => {
         const newHigh = Math.max(s.high, newPrice);
         const newLow = Math.min(s.low, newPrice);
         const sharesOutstanding = s.marketCap / s.price;
-        const newMarketCap = Math.max(50000000000, Math.min(1000000000000, sharesOutstanding * newPrice));
+        const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice);
         return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
       }
       return s;
