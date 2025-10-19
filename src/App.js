@@ -162,6 +162,7 @@ const ATLStockExchange = () => {
     } else {
       setChartKey(prev => prev + 1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stocks, selectedStock?.ticker]);
 
   // Market controller system - ensures only one tab controls price updates
