@@ -469,35 +469,12 @@ const ATLStockExchange = () => {
 
   const handleLogin = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
-      // Ensure admin has proper data structure
-      if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
-        console.log('Initializing admin data');
-        const usersRef = ref(database, `users/admin`);
-        set(usersRef, { 
-          password: 'admin', 
-          balance: 1000000, 
-          portfolio: {} 
-        });
-      }
-      
       setUser('admin');
       setIsAdmin(true);
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
     } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
-      // Ensure user has proper data structure
-      const userData = users[loginUsername];
-      if (!userData.balance || !userData.portfolio) {
-        console.log('Initializing user data for:', loginUsername);
-        const usersRef = ref(database, `users/${loginUsername}`);
-        set(usersRef, { 
-          password: userData.password || loginPassword, 
-          balance: userData.balance || 1, 
-          portfolio: userData.portfolio || {} 
-        });
-      }
-      
       setUser(loginUsername);
       setIsAdmin(false);
       setShowLoginModal(false);
@@ -960,12 +937,13 @@ const ATLStockExchange = () => {
       }
     
       // Wait for user data to load if user is logged in
-      if (user && (!users || !users[user])) {
+      if (user && (!users || !users[user] || !users[user].portfolio)) {
         console.log('User data check:', {
           user,
           usersExists: !!users,
           userExists: !!(users && users[user]),
-          userData: users && users[user]
+          userData: users && users[user],
+          hasPortfolio: !!(users && users[user] && users[user].portfolio)
         });
         
         return (
@@ -975,6 +953,8 @@ const ATLStockExchange = () => {
               <p className="text-sm text-gray-500 mt-2">User: {user}</p>
               <p className="text-xs text-gray-400 mt-1">Users loaded: {Object.keys(users || {}).length}</p>
               <p className="text-xs text-gray-400 mt-1">User data ready: {users && users[user] ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-gray-400 mt-1">Has portfolio: {users && users[user] && users[user].portfolio ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-gray-400 mt-1">User data keys: {users && users[user] ? Object.keys(users[user]).join(', ') : 'None'}</p>
               <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
             </div>
           </div>
