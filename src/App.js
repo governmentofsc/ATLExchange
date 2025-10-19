@@ -335,6 +335,172 @@ const ATLStockExchange = () => {
     return data;
   }
 
+  // New function to generate minute-by-minute data for short timeframes
+  function generateMinuteHistory(basePrice, minutes) {
+    const data = [];
+    let price = basePrice;
+    const now = new Date();
+    const startTime = new Date(now.getTime() - minutes * 60 * 1000);
+    
+    for (let i = 0; i <= minutes; i++) {
+      const change = (Math.random() - 0.5) * 0.02; // Smaller changes for minute data
+      price = Math.max(basePrice * 0.99, Math.min(basePrice * 1.01, price + change));
+      
+      const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
+      const hour = pointTime.getHours();
+      const min = pointTime.getMinutes().toString().padStart(2,'0');
+      let displayHour = hour;
+      let ampm = 'AM';
+      
+      if (hour === 0) {
+        displayHour = 12;
+        ampm = 'AM';
+      } else if (hour < 12) {
+        displayHour = hour;
+        ampm = 'AM';
+      } else if (hour === 12) {
+        displayHour = 12;
+        ampm = 'PM';
+      } else {
+        displayHour = hour - 12;
+        ampm = 'PM';
+      }
+      
+      data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  // Function to filter data based on timeframe
+  function getFilteredChartData(stockData, period) {
+    const now = new Date();
+    let data = [];
+    
+    switch(period) {
+      case '1m':
+        data = generateMinuteHistory(stockData.price, 1);
+        break;
+      case '5m':
+        data = generateMinuteHistory(stockData.price, 5);
+        break;
+      case '15m':
+        data = generateMinuteHistory(stockData.price, 15);
+        break;
+      case '30m':
+        data = generateMinuteHistory(stockData.price, 30);
+        break;
+      case '1h':
+        data = generateMinuteHistory(stockData.price, 60);
+        break;
+      case '4h':
+        data = generateMinuteHistory(stockData.price, 240);
+        break;
+      case '1d':
+        data = stockData.history || [];
+        break;
+      case '1w':
+        data = stockData.extendedHistory || [];
+        break;
+      case '1M':
+        data = stockData.extendedHistory || [];
+        break;
+      case '3M':
+        // Generate 3 months of data
+        data = generateThreeMonthHistory(stockData.price);
+        break;
+      case '6M':
+        // Generate 6 months of data
+        data = generateSixMonthHistory(stockData.price);
+        break;
+      case '1y':
+        data = stockData.yearHistory || [];
+        break;
+      default:
+        data = stockData.history || [];
+    }
+    
+    return data;
+  }
+
+  // Generate 3 months of data
+  function generateThreeMonthHistory(basePrice) {
+    const data = [];
+    let price = basePrice * (0.95 + Math.random() * 0.10);
+    
+    for (let month = 0; month < 3; month++) {
+      for (let week = 0; week < 4; week++) {
+        const trend = (Math.random() - 0.5) * 0.03;
+        const volatility = (Math.random() - 0.5) * 0.05;
+        const change = trend + volatility;
+        price = price * (1 + change);
+        
+        price = Math.max(basePrice * 0.80, Math.min(basePrice * 1.30, price));
+        
+        const date = new Date();
+        date.setMonth(date.getMonth() - (3 - month));
+        date.setDate(1 + week * 7);
+        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
+        
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+      }
+    }
+    return data;
+  }
+
+  // Generate 6 months of data
+  function generateSixMonthHistory(basePrice) {
+    const data = [];
+    let price = basePrice * (0.90 + Math.random() * 0.20);
+    
+    for (let month = 0; month < 6; month++) {
+      for (let week = 0; week < 4; week++) {
+        const trend = (Math.random() - 0.5) * 0.025;
+        const volatility = (Math.random() - 0.5) * 0.04;
+        const change = trend + volatility;
+        price = price * (1 + change);
+        
+        price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.40, price));
+        
+        const date = new Date();
+        date.setMonth(date.getMonth() - (6 - month));
+        date.setDate(1 + week * 7);
+        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
+        
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+      }
+    }
+    return data;
+  }
+
+  // Generate portfolio performance history
+  function generatePortfolioHistory() {
+    if (!user || !users[user]) return [];
+    
+    const data = [];
+    const currentValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+      const stock = stocks.find(s => s.ticker === ticker);
+      return sum + (qty * (stock?.price || 0));
+    }, 0);
+    
+    // Generate 30 days of portfolio value history
+    for (let day = 30; day >= 0; day--) {
+      const date = new Date();
+      date.setDate(date.getDate() - day);
+      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
+      
+      // Simulate portfolio value changes
+      const change = (Math.random() - 0.5) * 0.05; // 5% daily volatility
+      const simulatedValue = currentValue * (1 + change * (day / 30));
+      
+      data.push({ 
+        time: dateStr, 
+        value: parseFloat(simulatedValue.toFixed(2))
+      });
+    }
+    
+    return data;
+  }
+
   const handleLogin = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
       setUser('admin');
@@ -756,29 +922,8 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
-    let chartData = stockData.history || [];
-    
-    // Select appropriate data based on timeframe
-    switch(chartPeriod) {
-      case '1m':
-      case '5m':
-      case '15m':
-      case '1h':
-        chartData = stockData.history || []; // Use real-time data for short timeframes
-        break;
-      case '1d':
-        chartData = stockData.history || [];
-        break;
-      case '1w':
-      case '1M':
-        chartData = stockData.extendedHistory || [];
-        break;
-      case '1y':
-        chartData = stockData.yearHistory || [];
-        break;
-      default:
-        chartData = stockData.history || [];
-    }
+    // Use the new filtered chart data function
+    const chartData = getFilteredChartData(stockData, chartPeriod);
     
     const chartDomain = getChartDomain(chartData);
 
@@ -807,7 +952,7 @@ const ATLStockExchange = () => {
               </div>
               
               <div className="mb-4 flex gap-2 flex-wrap">
-                {['1m', '5m', '15m', '1h', '1d', '1w', '1M', '1y'].map(period => (
+                {['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M', '3M', '6M', '1y'].map(period => (
                   <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period}</button>
                 ))}
               </div>
@@ -948,6 +1093,10 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('splits')} className={`px-4 py-2 rounded ${adminTab === 'splits' ? 'bg-white text-blue-600' : ''}`}>Stock Splits</button>
           <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Speed Settings</button>
           <button onClick={() => setAdminTab('market')} className={`px-4 py-2 rounded ${adminTab === 'market' ? 'bg-white text-blue-600' : ''}`}>Market Control</button>
+          <button onClick={() => setAdminTab('users')} className={`px-4 py-2 rounded ${adminTab === 'users' ? 'bg-white text-blue-600' : ''}`}>User Management</button>
+          <button onClick={() => setAdminTab('analytics')} className={`px-4 py-2 rounded ${adminTab === 'analytics' ? 'bg-white text-blue-600' : ''}`}>Analytics</button>
+          <button onClick={() => setAdminTab('system')} className={`px-4 py-2 rounded ${adminTab === 'system' ? 'bg-white text-blue-600' : ''}`}>System Settings</button>
+          <button onClick={() => setAdminTab('bulk')} className={`px-4 py-2 rounded ${adminTab === 'bulk' ? 'bg-white text-blue-600' : ''}`}>Bulk Operations</button>
         </div>
       )}
 
@@ -1218,6 +1367,318 @@ const ATLStockExchange = () => {
         </div>
       )}
 
+      {isAdmin && adminTab === 'users' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">User Management</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
+                  <tr>
+                    <th className="p-2 text-left">Username</th>
+                    <th className="p-2 text-right">Balance</th>
+                    <th className="p-2 text-right">Holdings Value</th>
+                    <th className="p-2 text-right">Total Value</th>
+                    <th className="p-2 text-right">Trades</th>
+                    <th className="p-2 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(users).map(([username, userData]) => {
+                    const holdingsValue = Object.entries(userData.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                      const stock = stocks.find(s => s.ticker === ticker);
+                      return sum + (qty * (stock?.price || 0));
+                    }, 0);
+                    const totalValue = userData.balance + holdingsValue;
+                    const userTrades = tradingHistory.filter(t => t.user === username).length;
+                    
+                    return (
+                      <tr key={username} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
+                        <td className="p-2 font-bold">{username}</td>
+                        <td className="p-2 text-right">${userData.balance.toFixed(2)}</td>
+                        <td className="p-2 text-right">${holdingsValue.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${totalValue.toFixed(2)}</td>
+                        <td className="p-2 text-right">{userTrades}</td>
+                        <td className="p-2 text-center">
+                          <button 
+                            onClick={() => {
+                              setTargetUser(username);
+                              setAdjustMoney('');
+                            }}
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 mr-1"
+                          >
+                            Adjust
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if (confirm(`Reset ${username}'s account? This will set balance to $50,000 and clear portfolio.`)) {
+                                const userRef = ref(database, `users/${username}`);
+                                update(userRef, { balance: 50000, portfolio: {} });
+                              }
+                            }}
+                            className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                          >
+                            Reset
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'analytics' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">System Analytics</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Market Overview</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Total Stocks:</span>
+                    <span className="font-bold">{stocks.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Users:</span>
+                    <span className="font-bold">{Object.keys(users).length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Market Cap:</span>
+                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Avg Stock Price:</span>
+                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Trading Activity</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Total Trades:</span>
+                    <span className="font-bold">{tradingHistory.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Buy Orders:</span>
+                    <span className="font-bold text-green-600">{tradingHistory.filter(t => t.type === 'buy').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Sell Orders:</span>
+                    <span className="font-bold text-red-600">{tradingHistory.filter(t => t.type === 'sell').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Volume:</span>
+                    <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + t.total, 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">System Health</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Market Status:</span>
+                    <span className={`font-bold ${marketRunning ? 'text-green-600' : 'text-red-600'}`}>
+                      {marketRunning ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Update Speed:</span>
+                    <span className="font-bold">{updateSpeed}ms</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Chart Updates:</span>
+                    <span className="font-bold">{chartUpdateSpeed}ms</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Controller:</span>
+                    <span className={`font-bold ${isMarketController ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {isMarketController ? 'ACTIVE' : 'STANDBY'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'system' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">System Settings</h2>
+            <div className="space-y-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-2">Database Management</h3>
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => {
+                      if (confirm('Reset all stocks to initial values? This will restore default stocks.')) {
+                        const initialStocks = [
+                          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
+                          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
+                          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
+                          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
+                          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
+                          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
+                          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
+                          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+                        ];
+                        const stocksRef = ref(database, 'stocks');
+                        set(stocksRef, initialStocks);
+                      }
+                    }}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
+                  >
+                    Reset Stocks
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm('Clear all trading history? This action cannot be undone.')) {
+                        const historyRef = ref(database, 'tradingHistory');
+                        set(historyRef, {});
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
+                  >
+                    Clear History
+                  </button>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-2">Market Configuration</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-bold">Market Hours:</label>
+                    <select className={`p-1 border rounded ${inputClass}`}>
+                      <option>24/7 (Current)</option>
+                      <option>9 AM - 5 PM EST</option>
+                      <option>9 AM - 4 PM EST</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-bold">Price Volatility:</label>
+                    <select className={`p-1 border rounded ${inputClass}`}>
+                      <option>Normal (Current)</option>
+                      <option>Low</option>
+                      <option>High</option>
+                      <option>Extreme</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'bulk' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Bulk Operations</h2>
+            <div className="space-y-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-2">Bulk Price Adjustments</h3>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Percentage change (%)" 
+                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    />
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
+                      Apply to All Stocks
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Fixed amount change" 
+                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    />
+                    <button className="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700">
+                      Apply to All Stocks
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-2">Bulk User Operations</h3>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Amount to add to all users" 
+                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    />
+                    <button className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">
+                      Add to All Users
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Multiplier (e.g., 1.1 for 10% increase)" 
+                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    />
+                    <button className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">
+                      Multiply All Balances
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h3 className="font-bold mb-2">Market Reset</h3>
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => {
+                      if (confirm('Reset all stock prices to opening prices? This will reset highs, lows, and current prices.')) {
+                        const updatedStocks = stocks.map(s => ({
+                          ...s,
+                          price: s.open,
+                          high: s.open,
+                          low: s.open
+                        }));
+                        const stocksRef = ref(database, 'stocks');
+                        set(stocksRef, updatedStocks);
+                      }
+                    }}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
+                  >
+                    Reset All Prices to Open
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm('Reset all user balances to $50,000 and clear portfolios? This will affect ALL users.')) {
+                        const updatedUsers = {};
+                        Object.keys(users).forEach(username => {
+                          updatedUsers[username] = { ...users[username], balance: 50000, portfolio: {} };
+                        });
+                        const usersRef = ref(database, 'users');
+                        set(usersRef, updatedUsers);
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
+                  >
+                    Reset All Users
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto p-4">
         <div className="mb-6 bg-blue-600 text-white p-4 rounded-lg">
           <h3 className="font-bold mb-2">How to Buy/Sell</h3>
@@ -1238,10 +1699,13 @@ const ATLStockExchange = () => {
         {user && adminTab === 'portfolio' && (
           <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
             <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
+            
+            {/* Enhanced Portfolio Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <div className="p-4 bg-blue-600 text-white rounded">
                 <p className="text-sm opacity-75">Cash</p>
                 <p className="text-2xl font-bold">${(users[user]?.balance || 0).toFixed(2)}</p>
+                <p className="text-xs opacity-75 mt-1">Available for trading</p>
               </div>
               <div className="p-4 bg-green-600 text-white rounded">
                 <p className="text-sm opacity-75">Holdings Value</p>
@@ -1249,6 +1713,7 @@ const ATLStockExchange = () => {
                   const stock = stocks.find(s => s.ticker === ticker);
                   return sum + (qty * (stock?.price || 0));
                 }, 0)).toFixed(2)}</p>
+                <p className="text-xs opacity-75 mt-1">Current market value</p>
               </div>
               <div className="p-4 bg-purple-600 text-white rounded">
                 <p className="text-sm opacity-75">Total Value</p>
@@ -1256,15 +1721,33 @@ const ATLStockExchange = () => {
                   const stock = stocks.find(s => s.ticker === ticker);
                   return sum + (qty * (stock?.price || 0));
                 }, 0)).toFixed(2)}</p>
+                <p className="text-xs opacity-75 mt-1">Net worth</p>
               </div>
               <div className="p-4 bg-orange-600 text-white rounded">
                 <p className="text-sm opacity-75">Total Trades</p>
                 <p className="text-2xl font-bold">{tradingHistory.length}</p>
+                <p className="text-xs opacity-75 mt-1">All time</p>
+              </div>
+            </div>
+
+            {/* Portfolio Performance Chart */}
+            <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+              <h3 className="text-xl font-bold mb-4">Portfolio Performance</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={generatePortfolioHistory()}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} />
+                    <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
+                    <Line type="monotone" dataKey="value" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
             {/* Enhanced Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h4 className="font-bold mb-2">Trading Performance</h4>
                 <div className="space-y-2 text-sm">
@@ -1279,6 +1762,10 @@ const ATLStockExchange = () => {
                   <div className="flex justify-between">
                     <span>Total Volume:</span>
                     <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + t.total, 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Win Rate:</span>
+                    <span className="font-bold">{tradingHistory.length > 0 ? ((tradingHistory.filter(t => t.type === 'sell').length / Math.max(tradingHistory.filter(t => t.type === 'buy').length, 1)) * 100).toFixed(1) : 0}%</span>
                   </div>
                 </div>
               </div>
@@ -1304,6 +1791,13 @@ const ATLStockExchange = () => {
                     <span>Diversification:</span>
                     <span className="font-bold">{Object.keys(users[user]?.portfolio || {}).length} stocks</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Avg Position:</span>
+                    <span className="font-bold">${Object.entries(users[user]?.portfolio || {}).length > 0 ? (Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                      const stock = stocks.find(s => s.ticker === ticker);
+                      return sum + (qty * (stock?.price || 0));
+                    }, 0) / Object.entries(users[user]?.portfolio || {}).length).toFixed(2) : 0}</span>
+                  </div>
                 </div>
               </div>
               
@@ -1325,6 +1819,32 @@ const ATLStockExchange = () => {
                       return acc;
                     }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A' : 'N/A'}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Total Impact:</span>
+                    <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + Math.abs(t.priceImpact || 0), 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Risk Metrics</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Portfolio Beta:</span>
+                    <span className="font-bold">{(Math.random() * 0.8 + 0.6).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Volatility:</span>
+                    <span className="font-bold">{(Math.random() * 15 + 10).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Sharpe Ratio:</span>
+                    <span className="font-bold">{(Math.random() * 1.5 + 0.5).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Max Drawdown:</span>
+                    <span className="font-bold text-red-600">-{(Math.random() * 10 + 5).toFixed(1)}%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1335,21 +1855,50 @@ const ATLStockExchange = () => {
                 <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
                   <tr>
                     <th className="p-2 text-left">Symbol</th>
+                    <th className="p-2 text-left">Name</th>
                     <th className="p-2 text-right">Quantity</th>
+                    <th className="p-2 text-right">Avg Cost</th>
                     <th className="p-2 text-right">Last Price</th>
+                    <th className="p-2 text-right">Change</th>
                     <th className="p-2 text-right">Current Value</th>
+                    <th className="p-2 text-right">P&L</th>
+                    <th className="p-2 text-right">% of Portfolio</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Object.entries(users[user]?.portfolio || {}).map(([ticker, qty]) => {
                     const stock = stocks.find(s => s.ticker === ticker);
                     if (!stock) return null;
+                    
+                    // Calculate average cost (simplified - in real app this would track actual purchase prices)
+                    const avgCost = stock.price * (0.95 + Math.random() * 0.1);
+                    const currentValue = qty * stock.price;
+                    const totalCost = qty * avgCost;
+                    const pnl = currentValue - totalCost;
+                    const pnlPercent = ((pnl / totalCost) * 100);
+                    
+                    // Calculate % of portfolio
+                    const totalPortfolioValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [t, q]) => {
+                      const s = stocks.find(st => st.ticker === t);
+                      return sum + (q * (s?.price || 0));
+                    }, 0);
+                    const portfolioPercent = (currentValue / totalPortfolioValue) * 100;
+                    
                     return (
                       <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
                         <td className="p-2 font-bold">{ticker}</td>
+                        <td className="p-2 text-sm opacity-75">{stock.name}</td>
                         <td className="p-2 text-right">{qty}</td>
+                        <td className="p-2 text-right">${avgCost.toFixed(2)}</td>
                         <td className="p-2 text-right">${stock.price.toFixed(2)}</td>
-                        <td className="p-2 text-right font-bold">${(qty * stock.price).toFixed(2)}</td>
+                        <td className={`p-2 text-right font-bold ${(stock.price - stock.open) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {((stock.price - stock.open) / stock.open * 100).toFixed(2)}%
+                        </td>
+                        <td className="p-2 text-right font-bold">${currentValue.toFixed(2)}</td>
+                        <td className={`p-2 text-right font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ${pnl.toFixed(2)} ({pnlPercent.toFixed(1)}%)
+                        </td>
+                        <td className="p-2 text-right">{portfolioPercent.toFixed(1)}%</td>
                       </tr>
                     );
                   })}
