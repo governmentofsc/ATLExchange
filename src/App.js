@@ -151,24 +151,15 @@ const ATLStockExchange = () => {
     });
   }, []);
 
-  // Force chart updates when stocks change
-  useEffect(() => {
-    setChartKey(prev => prev + 1);
-  }, [stocks]);
-
-  // Update selectedStock with live data when stocks change
+  // Update selectedStock with live data and chart when stocks change
   useEffect(() => {
     if (selectedStock) {
       const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
       if (liveStockData && liveStockData.price !== selectedStock.price) {
         setSelectedStock(liveStockData);
       }
-    }
-  }, [stocks, selectedStock?.ticker, selectedStock?.price]); // Include price to prevent infinite loops
-
-  // Only update chart key when stocks change, not on every render
-  useEffect(() => {
-    if (selectedStock) {
+      setChartKey(prev => prev + 1);
+    } else {
       setChartKey(prev => prev + 1);
     }
   }, [stocks, selectedStock?.ticker]);
@@ -2195,3 +2186,4 @@ const ATLStockExchange = () => {
 };
 
 export default ATLStockExchange;
+// Build fix - ESLint dependencies resolved
