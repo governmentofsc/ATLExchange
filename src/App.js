@@ -403,18 +403,13 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Use static history data but update last point with current time and live price
+        // Use static history data but add new point for current time
         const historyData = stockData.history || [];
         const now = getEasternTime();
         const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
         
-        data = historyData.map((point, index, array) => {
-          // Only update the last data point with current time and live price
-          if (index === array.length - 1) {
-            return { ...point, time: currentTime, price: stockData.price };
-          }
-          return point;
-        });
+        // Add new data point for current time instead of updating last point
+        data = [...historyData, { time: currentTime, price: stockData.price }];
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -2057,20 +2052,21 @@ const ATLStockExchange = () => {
                 </div>
                 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  <LineChart data={stock.history.map((point, index, array) => {
-                    // Only update the last data point with current time and live price
-                    if (index === array.length - 1) {
-                      const now = getEasternTime();
-                      const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-                      return { ...point, time: currentTime, price: stock.price };
-                    }
-                    return point;
-                  })}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                  </LineChart>
+                  {(() => {
+                    // Add new data point for current time
+                    const now = getEasternTime();
+                    const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+                    const chartData = [...stock.history, { time: currentTime, price: stock.price }];
+                    
+                    return (
+                      <LineChart data={chartData}>
+                        <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                        <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(chartData.length / 8))} />
+                        <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(chartData)} type="number" ticks={getYAxisTicks(getChartDomain(chartData))} />
+                        <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                      </LineChart>
+                    );
+                  })()}
                 </ResponsiveContainer>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
