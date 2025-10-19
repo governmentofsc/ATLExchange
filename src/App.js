@@ -432,10 +432,12 @@ const ATLStockExchange = () => {
         
         const lastMinutes = parseTime(lastTime);
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        const lastSeconds = lastMinutes * 60;
         
-        console.log('Chart interpolation - lastMinutes:', lastMinutes, 'currentMinutes:', currentMinutes);
+        console.log('Chart interpolation - lastMinutes:', lastMinutes, 'currentMinutes:', currentMinutes, 'currentSeconds:', currentSeconds);
         
-        // Add intermediate points every 15 minutes
+        // Add intermediate points every 15 minutes, but also add current time if it's within the same minute
         for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
           const hour = Math.floor(minutes / 60);
           const min = minutes % 60;
@@ -449,6 +451,16 @@ const ATLStockExchange = () => {
           
           console.log('Adding point:', timeStr, 'price:', interpolatedPrice.toFixed(2));
           filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+        }
+        
+        // Always add current time point if it's different from last point
+        if (currentSeconds > lastSeconds) {
+          const currentTimeStr = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+          const progress = (currentSeconds - lastSeconds) / (currentSeconds - lastSeconds);
+          const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
+          
+          console.log('Adding current time point:', currentTimeStr, 'price:', stockData.price.toFixed(2));
+          filledData.push({ time: currentTimeStr, price: parseFloat(stockData.price.toFixed(2)) });
         }
         
         data = filledData;
