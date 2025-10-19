@@ -125,13 +125,14 @@ const ATLStockExchange = () => {
   useEffect(() => {
     if (selectedStock && stocks.length > 0) {
       const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
-      if (liveStockData) {
+      if (liveStockData && liveStockData.price !== selectedStock.price) {
+        console.log('Updating selectedStock with live data:', liveStockData.ticker, 'old price:', selectedStock.price, 'new price:', liveStockData.price);
         setSelectedStock(liveStockData);
       }
     }
     setChartKey(prev => prev + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, selectedStock?.ticker]);
+  }, [stocks]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
@@ -880,6 +881,11 @@ const ATLStockExchange = () => {
 
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+    
+    // Debug logging
+    if (stockData && selectedStock) {
+      console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
+    }
     
     // Show loading screen if data isn't ready yet
     if (!stockData || stocks.length === 0) {
