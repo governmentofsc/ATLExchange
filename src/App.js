@@ -887,7 +887,7 @@ const ATLStockExchange = () => {
       );
     }
     
-    if (user && (!users || !users[user] || !users[user].portfolio)) {
+    if (user && (!users || !users[user])) {
       return (
         <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
           <div className="text-center">
@@ -901,7 +901,7 @@ const ATLStockExchange = () => {
       );
     }
     
-    const userHolding = user && users && users[user] && users[user].portfolio ? (users[user].portfolio[selectedStock.ticker] || 0) : 0;
+    const userHolding = user && users && users[user] ? (users[user].portfolio?.[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
