@@ -416,7 +416,8 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        data = stockData.history || [];
+        // Generate fresh data from 12:00 AM to current time with live price
+        data = generatePriceHistory(stockData.price);
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -979,7 +980,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
+                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}-${chartPeriod === '1d' ? stockData.price : 'static'}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 6))} />
