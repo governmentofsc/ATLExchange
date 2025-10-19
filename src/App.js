@@ -403,13 +403,51 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Use static history data but add new point for current time
+        // Use static history data but fill in missing time points to current time
         const historyData = stockData.history || [];
         const now = getEasternTime();
         const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
         
-        // Add new data point for current time instead of updating last point
-        data = [...historyData, { time: currentTime, price: stockData.price }];
+        // Get the last data point from history
+        const lastHistoryPoint = historyData[historyData.length - 1];
+        if (!lastHistoryPoint) {
+          data = historyData;
+          break;
+        }
+        
+        // Fill in missing time points between last history point and current time
+        const filledData = [...historyData];
+        const lastTime = lastHistoryPoint.time;
+        
+        // Parse last time to get minutes since midnight
+        const parseTime = (timeStr) => {
+          const [time, period] = timeStr.split(' ');
+          const [hours, minutes] = time.split(':').map(Number);
+          let totalMinutes = hours * 60 + minutes;
+          if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
+          if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
+          return totalMinutes;
+        };
+        
+        const lastMinutes = parseTime(lastTime);
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        // Add intermediate points every 15 minutes
+        for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
+          const hour = Math.floor(minutes / 60);
+          const min = minutes % 60;
+          const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+          const period = hour >= 12 ? 'PM' : 'AM';
+          const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
+          
+          // Interpolate price between last history price and current price
+          const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
+          const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
+          
+          filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+        }
+        
+        data = filledData;
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -2053,10 +2091,47 @@ const ATLStockExchange = () => {
                 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
                   {(() => {
-                    // Add new data point for current time
+                    // Fill in missing time points between last history point and current time
                     const now = getEasternTime();
                     const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-                    const chartData = [...stock.history, { time: currentTime, price: stock.price }];
+                    
+                    const lastHistoryPoint = stock.history[stock.history.length - 1];
+                    if (!lastHistoryPoint) {
+                      return <LineChart data={stock.history}><CartesianGrid stroke={darkMode ? '#444' : '#ccc'} /><XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} /><YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} /><Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} /></LineChart>;
+                    }
+                    
+                    const filledData = [...stock.history];
+                    const lastTime = lastHistoryPoint.time;
+                    
+                    // Parse last time to get minutes since midnight
+                    const parseTime = (timeStr) => {
+                      const [time, period] = timeStr.split(' ');
+                      const [hours, minutes] = time.split(':').map(Number);
+                      let totalMinutes = hours * 60 + minutes;
+                      if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
+                      if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
+                      return totalMinutes;
+                    };
+                    
+                    const lastMinutes = parseTime(lastTime);
+                    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                    
+                    // Add intermediate points every 15 minutes
+                    for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
+                      const hour = Math.floor(minutes / 60);
+                      const min = minutes % 60;
+                      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                      const period = hour >= 12 ? 'PM' : 'AM';
+                      const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
+                      
+                      // Interpolate price between last history price and current price
+                      const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
+                      const interpolatedPrice = lastHistoryPoint.price + (stock.price - lastHistoryPoint.price) * progress;
+                      
+                      filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+                    }
+                    
+                    const chartData = filledData;
                     
                     return (
                       <LineChart data={chartData}>
