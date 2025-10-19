@@ -181,7 +181,7 @@ const ATLStockExchange = () => {
     if (selectedStock) {
       setChartKey(prev => prev + 1);
     }
-  }, [stocks]);
+  }, [stocks, selectedStock]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
@@ -566,28 +566,28 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!selectedStock || !buyQuantity) return;
+    if (!currentStockData || !buyQuantity) return;
     const quantity = parseInt(buyQuantity);
-    const cost = selectedStock.price * quantity;
+    const cost = currentStockData.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
+        [currentStockData.ticker]: (users[user].portfolio[currentStockData.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (purchaseValue / currentStockData.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * currentStockData.price;
+      const newPrice = parseFloat((currentStockData.price + priceImpact).toFixed(2));
       
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+        if (s.ticker === currentStockData.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -604,9 +604,9 @@ const ATLStockExchange = () => {
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
-        ticker: selectedStock.ticker,
+        ticker: currentStockData.ticker,
         quantity: quantity,
-        price: selectedStock.price,
+        price: currentStockData.price,
         total: cost,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -619,31 +619,31 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!selectedStock || !sellQuantity) return;
+    if (!currentStockData || !sellQuantity) return;
     const quantity = parseInt(sellQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
-      const proceeds = selectedStock.price * quantity;
+    if ((users[user].portfolio[currentStockData.ticker] || 0) >= quantity) {
+      const proceeds = currentStockData.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
+        [currentStockData.ticker]: users[user].portfolio[currentStockData.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (saleValue / currentStockData.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * currentStockData.price;
+      const newPrice = parseFloat((currentStockData.price + priceImpact).toFixed(2));
       
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'sell',
-        ticker: selectedStock.ticker,
+        ticker: currentStockData.ticker,
         quantity: quantity,
-        price: selectedStock.price,
+        price: currentStockData.price,
         total: proceeds,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -652,7 +652,7 @@ const ATLStockExchange = () => {
       set(historyRef, tradeRecord);
       
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+        if (s.ticker === currentStockData.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -669,13 +669,13 @@ const ATLStockExchange = () => {
   };
 
   const createStopLossOrder = () => {
-    if (!selectedStock || !stopLossPrice || !orderQuantity) return;
+    if (!currentStockData || !stopLossPrice || !orderQuantity) return;
     const quantity = parseInt(orderQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+    if ((users[user].portfolio[currentStockData.ticker] || 0) >= quantity) {
       const order = {
         id: Date.now(),
         type: 'stop_loss',
-        ticker: selectedStock.ticker,
+        ticker: currentStockData.ticker,
         quantity: quantity,
         triggerPrice: parseFloat(stopLossPrice),
         createdAt: Date.now(),
@@ -691,13 +691,13 @@ const ATLStockExchange = () => {
   };
 
   const createTakeProfitOrder = () => {
-    if (!selectedStock || !takeProfitPrice || !orderQuantity) return;
+    if (!currentStockData || !takeProfitPrice || !orderQuantity) return;
     const quantity = parseInt(orderQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+    if ((users[user].portfolio[currentStockData.ticker] || 0) >= quantity) {
       const order = {
         id: Date.now(),
         type: 'take_profit',
-        ticker: selectedStock.ticker,
+        ticker: currentStockData.ticker,
         quantity: quantity,
         triggerPrice: parseFloat(takeProfitPrice),
         createdAt: Date.now(),
