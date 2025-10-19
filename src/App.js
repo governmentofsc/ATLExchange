@@ -151,19 +151,20 @@ const ATLStockExchange = () => {
     });
   }, []);
 
-  // Update selectedStock with live data and chart when stocks change
+  // Update selectedStock with live data when stocks change
   useEffect(() => {
-    if (selectedStock) {
+    if (selectedStock && stocks.length > 0) {
       const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
-      if (liveStockData && liveStockData.price !== selectedStock.price) {
+      if (liveStockData) {
+        // Always update selectedStock with live data, even if price is the same
+        // This ensures we have the latest data including other properties
         setSelectedStock(liveStockData);
+        console.log('Updated selectedStock with live data:', liveStockData.ticker, liveStockData.price);
       }
-      setChartKey(prev => prev + 1);
-    } else {
-      setChartKey(prev => prev + 1);
     }
+    setChartKey(prev => prev + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stocks, selectedStock?.ticker]);
+  }, [stocks]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
@@ -550,12 +551,22 @@ const ATLStockExchange = () => {
   const buyStock = () => {
     if (!selectedStock || !buyQuantity || !user) return;
     
-    // Get live stock data
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
-    if (!stockData || !stockData.ticker) return;
+    // Get live stock data from stocks array
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+    if (!stockData || !stockData.ticker) {
+      console.error('Stock not found:', selectedStock.ticker);
+      return;
+    }
     
     const quantity = parseInt(buyQuantity);
     const cost = stockData.price * quantity;
+    
+    // Check if user data exists and has required properties
+    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+      console.error('User data incomplete:', users[user]);
+      return;
+    }
+    
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
@@ -610,11 +621,21 @@ const ATLStockExchange = () => {
   const sellStock = () => {
     if (!selectedStock || !sellQuantity || !user) return;
     
-    // Get live stock data
-    const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
-    if (!stockData || !stockData.ticker) return;
+    // Get live stock data from stocks array
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+    if (!stockData || !stockData.ticker) {
+      console.error('Stock not found:', selectedStock.ticker);
+      return;
+    }
     
     const quantity = parseInt(sellQuantity);
+    
+    // Check if user data exists and has required properties
+    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+      console.error('User data incomplete:', users[user]);
+      return;
+    }
+    
     const currentHolding = users[user].portfolio[stockData.ticker] || 0;
     
     if (currentHolding >= quantity) {
@@ -913,10 +934,21 @@ const ATLStockExchange = () => {
   if (selectedStock) {
     try {
       // Find the live stock data from the stocks array for real-time updates
-      const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
+      const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
+      if (!stockData) {
+        console.error('Live stock data not found for:', selectedStock.ticker);
+        return (
+          <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+            <div className="text-center">
+              <p className="text-lg text-red-600">Stock data not found</p>
+              <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
+            </div>
+          </div>
+        );
+      }
       
-      // Show loading screen if data isn't ready yet
-      if (!stockData || stocks.length === 0) {
+      // Show loading screen if stocks array is empty
+      if (stocks.length === 0) {
         return (
           <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
             <div className="text-center">
