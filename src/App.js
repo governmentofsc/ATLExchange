@@ -12,10 +12,32 @@ const getEasternTime = (date = new Date()) => {
 // Store static chart data to prevent regeneration - moved outside component
 let staticChartData = {};
 
-function generatePriceHistory(basePrice) {
+function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   const now = getEasternTime();
   const totalMinutes = now.getHours() * 60 + now.getMinutes();
-  const dataKey = `${basePrice}`; // Key based on price only
+
+  // Normalize parameters: allow (open), (open, current), or (open, current, seedKey) or (open, seedKey)
+  let currentPrice = openPrice;
+  let seedKey = '';
+  if (typeof currentOrSeed === 'number') {
+    currentPrice = currentOrSeed;
+    seedKey = typeof maybeSeedKey === 'string' ? maybeSeedKey : '';
+  } else if (typeof currentOrSeed === 'string') {
+    seedKey = currentOrSeed;
+  }
+
+  // Simple string hash for stable seeding per ticker
+  const hashString = (str) => {
+    if (!str) return Math.floor(openPrice * 1000);
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h;
+  };
+
+  const dateKey = now.toDateString();
+  const dataKey = `${seedKey || Math.floor(openPrice)}-${dateKey}`; // cache per day per ticker
   
   // Get existing data or create new
   let existingData = staticChartData[dataKey] || [];
@@ -59,8 +81,8 @@ function generatePriceHistory(basePrice) {
     // Generate smooth, realistic price movement
     const timeOfDay = minutes / 1440; // 0 to 1 based on 24-hour day
     
-    // Create a deterministic seed based on basePrice and time
-    const seed = Math.floor(basePrice * 1000) + minutes;
+    // Create a deterministic seed based on seedKey/openPrice and time
+    const seed = hashString(seedKey) + minutes;
     
     // Deterministic random function
     const deterministicRandom = (seed) => {
@@ -73,7 +95,7 @@ function generatePriceHistory(basePrice) {
     const smallNoise = (deterministicRandom(seed) - 0.5) * 0.005; // Very small random variation (0.5%)
     
     const totalChange = dailyTrend + smallNoise;
-    const price = basePrice * (1 + totalChange);
+    const price = openPrice * (1 + totalChange);
     
     newData.push({
       time: timeStr,
@@ -86,7 +108,7 @@ function generatePriceHistory(basePrice) {
     const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
     newData[newData.length - 1] = {
       time: currentTime,
-      price: parseFloat(basePrice.toFixed(2))
+      price: parseFloat(currentPrice.toFixed(2))
     };
   }
   
@@ -156,14 +178,14 @@ const ATLStockExchange = () => {
         setStocks(data);
       } else if (!initialized) {
         const initialStocks = [
-          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
-          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
-          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
-          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
-          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
-          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
-          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
-          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
+          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
+          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
+          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
+          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
+          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
+          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
+          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
         ];
         set(stocksRef, initialStocks);
       }
@@ -445,8 +467,8 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Generate fresh data from 12:00 AM to current time - COMPLETELY REWRITTEN
-        data = generatePriceHistory(stockData.price);
+        // Stable: generate from open to now, seeded by ticker so old points never change
+        data = generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -716,7 +738,7 @@ const ATLStockExchange = () => {
       low52w: low52w,
       dividend: dividend,
       qtrlyDiv: dividend / 4,
-      history: generatePriceHistory(parseFloat(newStockPrice)),
+      history: generatePriceHistory(parseFloat(newStockPrice), parseFloat(newStockPrice), newStockTicker || ''),
       extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
       yearHistory: generateYearHistory(parseFloat(newStockPrice))
     };
@@ -2089,10 +2111,10 @@ const ATLStockExchange = () => {
                 </div>
                 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  <LineChart data={generatePriceHistory(stock.price)}>
+                  <LineChart data={generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 10))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.price))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.price)))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker).length / 10))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
