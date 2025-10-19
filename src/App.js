@@ -418,6 +418,8 @@ const ATLStockExchange = () => {
         const filledData = [...historyData];
         const lastTime = lastHistoryPoint.time;
         
+        console.log('Chart interpolation - lastTime:', lastTime, 'current time:', now.toLocaleTimeString());
+        
         // Parse last time to get minutes since midnight
         const parseTime = (timeStr) => {
           const [time, period] = timeStr.split(' ');
@@ -431,6 +433,8 @@ const ATLStockExchange = () => {
         const lastMinutes = parseTime(lastTime);
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         
+        console.log('Chart interpolation - lastMinutes:', lastMinutes, 'currentMinutes:', currentMinutes);
+        
         // Add intermediate points every 15 minutes
         for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
           const hour = Math.floor(minutes / 60);
@@ -443,6 +447,7 @@ const ATLStockExchange = () => {
           const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
           const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
           
+          console.log('Adding point:', timeStr, 'price:', interpolatedPrice.toFixed(2));
           filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
         }
         
