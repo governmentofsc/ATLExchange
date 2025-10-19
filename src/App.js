@@ -47,10 +47,12 @@ const ATLStockExchange = () => {
   const [updateSpeed, setUpdateSpeed] = useState(1000); // Price update interval in ms
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
+  const [marketRunning, setMarketRunning] = useState(true); // Market state
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
+    const marketStateRef = ref(database, 'marketState');
 
     onValue(stocksRef, (snapshot) => {
       const data = snapshot.val();
@@ -84,6 +86,17 @@ const ATLStockExchange = () => {
       }
     });
 
+    // Listen for market state
+    onValue(marketStateRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setMarketRunning(data.running !== false); // Default to true if not set
+      } else if (!initialized) {
+        // Initialize market state as running
+        set(marketStateRef, { running: true });
+      }
+    });
+
     setInitialized(true);
   }, [initialized]);
 
@@ -94,8 +107,6 @@ const ATLStockExchange = () => {
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
-    if (!isAdmin) return;
-    
     const controllerRef = ref(database, 'marketController');
     const sessionId = Date.now() + Math.random();
     let retryTimeout = null;
@@ -105,7 +116,7 @@ const ATLStockExchange = () => {
       set(controllerRef, { 
         sessionId, 
         timestamp: Date.now(),
-        user: user 
+        user: user || 'anonymous'
       }).catch(() => {
         // If we can't become controller, retry after a delay
         retryTimeout = setTimeout(becomeController, 2000);
@@ -136,13 +147,13 @@ const ATLStockExchange = () => {
       if (retryTimeout) clearTimeout(retryTimeout);
       unsubscribe();
     };
-  }, [isAdmin, user, isMarketController]);
+  }, [user, isMarketController]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
     
-    // Only run price updates if this tab is the market controller
-    if (!isAdmin || !isMarketController) return;
+    // Only run price updates if this tab is the market controller AND market is running
+    if (!isMarketController || !marketRunning) return;
     
     const interval = setInterval(() => {
       const now = new Date();
@@ -211,7 +222,7 @@ const ATLStockExchange = () => {
     }, updateSpeed); // Use configurable update speed
     
     return () => clearInterval(interval);
-  }, [stocks, updateSpeed, isAdmin, isMarketController]);
+  }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
@@ -562,6 +573,16 @@ const ATLStockExchange = () => {
     setAdminSharesQuantity('');
   };
 
+  const startMarket = () => {
+    const marketStateRef = ref(database, 'marketState');
+    set(marketStateRef, { running: true });
+  };
+
+  const stopMarket = () => {
+    const marketStateRef = ref(database, 'marketState');
+    set(marketStateRef, { running: false });
+  };
+
   const getFilteredStocks = () => {
     let filtered = stocks;
     
@@ -751,6 +772,9 @@ const ATLStockExchange = () => {
           </button>
           {isAdmin && <span className="bg-red-600 px-2 py-1 rounded text-xs hidden md:inline">ADMIN</span>}
           {isAdmin && isMarketController && <span className="bg-green-600 px-2 py-1 rounded text-xs hidden md:inline">MARKET CONTROLLER</span>}
+          <span className={`px-2 py-1 rounded text-xs hidden md:inline ${marketRunning ? 'bg-green-600' : 'bg-red-600'}`}>
+            MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
+          </span>
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
           ) : (
@@ -815,6 +839,7 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
           <button onClick={() => setAdminTab('shares')} className={`px-4 py-2 rounded ${adminTab === 'shares' ? 'bg-white text-blue-600' : ''}`}>Buy/Sell Shares</button>
           <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Speed Settings</button>
+          <button onClick={() => setAdminTab('market')} className={`px-4 py-2 rounded ${adminTab === 'market' ? 'bg-white text-blue-600' : ''}`}>Market Control</button>
         </div>
       )}
 
@@ -965,6 +990,54 @@ const ATLStockExchange = () => {
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'market' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Market Control</h2>
+            <div className="space-y-4">
+              <div className={`p-4 rounded ${marketRunning ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <h3 className="font-bold mb-2">
+                  Market Status: {marketRunning ? '🟢 RUNNING' : '🔴 STOPPED'}
+                </h3>
+                <p className="text-sm mb-4">
+                  {marketRunning 
+                    ? 'The market is currently active and prices are updating automatically.'
+                    : 'The market is stopped. Prices will not update until you start it.'
+                  }
+                </p>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={startMarket} 
+                    disabled={marketRunning}
+                    className={`px-4 py-2 rounded font-bold ${marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white`}
+                  >
+                    Start Market
+                  </button>
+                  <button 
+                    onClick={stopMarket} 
+                    disabled={!marketRunning}
+                    className={`px-4 py-2 rounded font-bold ${!marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white`}
+                  >
+                    Stop Market
+                  </button>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded">
+                <h3 className="font-bold mb-2">How it works:</h3>
+                <ul className="text-sm space-y-1">
+                  <li>• <strong>Automatic Operation:</strong> Market runs automatically without requiring admin presence</li>
+                  <li>• <strong>Start/Stop Control:</strong> Only admins can start or stop the market</li>
+                  <li>• <strong>Persistent State:</strong> Market state is saved and persists across all tabs/devices</li>
+                  <li>• <strong>Real-time Sync:</strong> All users see the same market state immediately</li>
+                  <li>• <strong>Independent Operation:</strong> Market continues running even if no admin is logged in</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
