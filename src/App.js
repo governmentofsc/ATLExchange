@@ -46,6 +46,7 @@ const ATLStockExchange = () => {
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
   const [updateSpeed, setUpdateSpeed] = useState(1000); // Price update interval in ms
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
+  const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -91,8 +92,61 @@ const ATLStockExchange = () => {
     setChartKey(prev => prev + 1);
   }, [stocks]);
 
+  // Market controller system - ensures only one tab controls price updates
+  useEffect(() => {
+    if (!isAdmin) return;
+    
+    const controllerRef = ref(database, 'marketController');
+    const sessionId = Date.now() + Math.random();
+    
+    // Try to become the market controller
+    const becomeController = () => {
+      set(controllerRef, { 
+        sessionId, 
+        timestamp: Date.now(),
+        user: user 
+      }).catch(() => {
+        // If we can't become controller, check if current controller is still active
+        onValue(controllerRef, (snapshot) => {
+          const data = snapshot.val();
+          if (!data || Date.now() - data.timestamp > 10000) {
+            // Current controller is inactive, try again
+            setTimeout(becomeController, 1000);
+          }
+        });
+      });
+    };
+    
+    becomeController();
+    
+    // Heartbeat to maintain control
+    const heartbeat = setInterval(() => {
+      if (isMarketController) {
+        update(controllerRef, { timestamp: Date.now() });
+      }
+    }, 5000);
+    
+    // Listen for controller changes
+    const unsubscribe = onValue(controllerRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.sessionId === sessionId) {
+        setIsMarketController(true);
+      } else {
+        setIsMarketController(false);
+      }
+    });
+    
+    return () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+  }, [isAdmin, user]);
+
   useEffect(() => {
     if (stocks.length === 0) return;
+    
+    // Only run price updates if this tab is the market controller
+    if (!isAdmin || !isMarketController) return;
     
     const interval = setInterval(() => {
       const now = new Date();
@@ -161,7 +215,7 @@ const ATLStockExchange = () => {
     }, updateSpeed); // Use configurable update speed
     
     return () => clearInterval(interval);
-  }, [stocks, updateSpeed]);
+  }, [stocks, updateSpeed, isAdmin, isMarketController]);
 
   function generatePriceHistory(basePrice) {
     const data = [];
@@ -700,6 +754,7 @@ const ATLStockExchange = () => {
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
           {isAdmin && <span className="bg-red-600 px-2 py-1 rounded text-xs hidden md:inline">ADMIN</span>}
+          {isAdmin && isMarketController && <span className="bg-green-600 px-2 py-1 rounded text-xs hidden md:inline">MARKET CONTROLLER</span>}
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
           ) : (
@@ -716,6 +771,7 @@ const ATLStockExchange = () => {
           {user && users[user] && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
           <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
           {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
+          {isAdmin && isMarketController && <span className="block bg-green-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">MARKET CONTROLLER</span>}
           {user ? (
             <button onClick={handleLogout} className="text-red-600">Logout</button>
           ) : (
@@ -895,8 +951,24 @@ const ATLStockExchange = () => {
                   <li>• <strong>Chart Update Speed:</strong> How often the last chart point updates (shows real-time movement)</li>
                   <li>• <strong>New chart points:</strong> Added every 2 minutes regardless of speed settings</li>
                   <li>• <strong>Rolling updates:</strong> Last point updates continuously, keeping charts responsive</li>
+                  <li>• <strong>Market Controller:</strong> Only one admin tab controls price updates to ensure synchronization</li>
+                  <li>• <strong>Real-time Sync:</strong> All users see the same prices and updates across all tabs/devices</li>
                 </ul>
               </div>
+              
+              {isAdmin && (
+                <div className={`p-4 rounded ${isMarketController ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                  <h3 className="font-bold mb-2">
+                    Market Controller Status: {isMarketController ? '✅ ACTIVE' : '⏳ WAITING'}
+                  </h3>
+                  <p className="text-sm">
+                    {isMarketController 
+                      ? 'This tab is controlling market updates. All other tabs will sync to your changes.'
+                      : 'Another admin tab is controlling market updates. This tab will sync to those changes.'
+                    }
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
