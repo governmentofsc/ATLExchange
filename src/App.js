@@ -406,7 +406,6 @@ const ATLStockExchange = () => {
         // Use static history data but fill in missing time points to current time
         const historyData = stockData.history || [];
         const now = getEasternTime();
-        const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
         
         // Get the last data point from history
         const lastHistoryPoint = historyData[historyData.length - 1];
@@ -2093,7 +2092,6 @@ const ATLStockExchange = () => {
                   {(() => {
                     // Fill in missing time points between last history point and current time
                     const now = getEasternTime();
-                    const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
                     
                     const lastHistoryPoint = stock.history[stock.history.length - 1];
                     if (!lastHistoryPoint) {
