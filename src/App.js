@@ -33,6 +33,7 @@ const ATLStockExchange = () => {
   const [newStockDividend, setNewStockDividend] = useState('');
   const [newStockHigh52w, setNewStockHigh52w] = useState('');
   const [newStockLow52w, setNewStockLow52w] = useState('');
+  const [newStockCategory, setNewStockCategory] = useState('');
   const [priceAdjustment, setPriceAdjustment] = useState('');
   const [pricePercentage, setPricePercentage] = useState('');
   const [selectedStockForAdmin, setSelectedStockForAdmin] = useState('');
@@ -51,6 +52,10 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [takeProfitPrice, setTakeProfitPrice] = useState('');
+  const [orderQuantity, setOrderQuantity] = useState('');
+  const [recentTrades, setRecentTrades] = useState([]); // Recent trades from all users
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -63,14 +68,14 @@ const ATLStockExchange = () => {
         setStocks(data);
       } else if (!initialized) {
         const initialStocks = [
-          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
-          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
-          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
-          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
-          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
-          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
-          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
-          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, category: 'Finance', history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
+          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, category: 'Finance', history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
+          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, category: 'Transportation', history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
+          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, category: 'Technology', history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
+          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, category: 'Materials', history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
+          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, category: 'Energy', history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
+          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, category: 'Industrial', history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
+          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, category: 'Healthcare', history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
         ];
         set(stocksRef, initialStocks);
       }
@@ -82,7 +87,7 @@ const ATLStockExchange = () => {
         setUsers(data);
       } else if (!initialized) {
         const initialUsers = {
-          'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
+          'demo': { password: 'demo', balance: 1, portfolio: { GFI: 10, ATL: 5 } },
           'admin': { password: 'admin', balance: 1000000, portfolio: {} }
         };
         set(usersRef, initialUsers);
@@ -119,6 +124,34 @@ const ATLStockExchange = () => {
       }
     });
   }, [user]);
+
+  // Listen for recent trades from all users
+  useEffect(() => {
+    const recentTradesRef = ref(database, 'tradingHistory');
+    onValue(recentTradesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Collect all trades from all users
+        const allTrades = [];
+        Object.keys(data).forEach(userId => {
+          if (data[userId]) {
+            Object.values(data[userId]).forEach(trade => {
+              allTrades.push({ ...trade, user: userId });
+            });
+          }
+        });
+        
+        // Sort by timestamp and take the 20 most recent
+        const recentTradesArray = allTrades
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 20);
+        
+        setRecentTrades(recentTradesArray);
+      } else {
+        setRecentTrades([]);
+      }
+    });
+  }, []);
 
   // Force chart updates when stocks change
   useEffect(() => {
@@ -466,7 +499,7 @@ const ATLStockExchange = () => {
     }
     
     const usersRef = ref(database, `users/${signupUsername}`);
-    set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
+    set(usersRef, { password: signupPassword, balance: 1, portfolio: {} });
     
     setUser(signupUsername);
     setIsAdmin(false);
@@ -587,6 +620,50 @@ const ATLStockExchange = () => {
     }
   };
 
+  const createStopLossOrder = () => {
+    if (!selectedStock || !stopLossPrice || !orderQuantity) return;
+    const quantity = parseInt(orderQuantity);
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const order = {
+        id: Date.now(),
+        type: 'stop_loss',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        triggerPrice: parseFloat(stopLossPrice),
+        createdAt: Date.now(),
+        status: 'pending'
+      };
+      
+      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
+      set(ordersRef, order);
+      
+      setStopLossPrice('');
+      setOrderQuantity('');
+    }
+  };
+
+  const createTakeProfitOrder = () => {
+    if (!selectedStock || !takeProfitPrice || !orderQuantity) return;
+    const quantity = parseInt(orderQuantity);
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const order = {
+        id: Date.now(),
+        type: 'take_profit',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        triggerPrice: parseFloat(takeProfitPrice),
+        createdAt: Date.now(),
+        status: 'pending'
+      };
+      
+      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
+      set(ordersRef, order);
+      
+      setTakeProfitPrice('');
+      setOrderQuantity('');
+    }
+  };
+
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
     
@@ -609,6 +686,7 @@ const ATLStockExchange = () => {
       low52w: low52w,
       dividend: dividend,
       qtrlyDiv: dividend / 4,
+      category: newStockCategory || 'Other',
       history: generatePriceHistory(parseFloat(newStockPrice)),
       extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
       yearHistory: generateYearHistory(parseFloat(newStockPrice))
@@ -625,6 +703,7 @@ const ATLStockExchange = () => {
     setNewStockDividend('');
     setNewStockHigh52w('');
     setNewStockLow52w('');
+    setNewStockCategory('');
   };
 
   const adjustPriceByAmount = () => {
@@ -781,13 +860,18 @@ const ATLStockExchange = () => {
       );
     }
     
-    // Filter by stock filter (price range, market cap, etc)
+    // Filter by stock filter (price range, market cap, category, etc)
     if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
     if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
     if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
     if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
     if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
     if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
+    
+    // Filter by category
+    if (stockFilter && ['Technology', 'Finance', 'Healthcare', 'Energy', 'Industrial', 'Materials', 'Transportation'].includes(stockFilter)) {
+      filtered = filtered.filter(s => s.category === stockFilter);
+    }
     
     // Sort by market cap if no search
     if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
@@ -940,6 +1024,24 @@ const ATLStockExchange = () => {
               <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
             </div>
           </div>}
+
+          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Stop Loss Order</h3>
+              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Stop Price" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3 text-sm text-gray-600">Sell automatically if price drops to stop price</p>
+              <button onClick={createStopLossOrder} className="w-full bg-orange-600 text-white p-2 rounded font-bold hover:bg-orange-700">Set Stop Loss</button>
+            </div>
+
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="font-bold mb-4">Take Profit Order</h3>
+              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Target Price" value={takeProfitPrice} onChange={(e) => setTakeProfitPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <p className="mb-3 text-sm text-gray-600">Sell automatically if price reaches target</p>
+              <button onClick={createTakeProfitOrder} className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">Set Take Profit</button>
+            </div>
+          </div>}
         </div>
       </div>
     );
@@ -1012,7 +1114,7 @@ const ATLStockExchange = () => {
             <button onClick={handleSignup} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
             <button onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Back to Login</button>
             <button onClick={() => setShowSignupModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
-            <p className="text-xs mt-4 opacity-50">Starting balance: $50,000</p>
+            <p className="text-xs mt-4 opacity-50">Starting balance: $1</p>
           </div>
         </div>
       )}
@@ -1044,7 +1146,18 @@ const ATLStockExchange = () => {
             <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+            <select value={newStockCategory} onChange={(e) => setNewStockCategory(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`}>
+              <option value="">Select Category (optional)</option>
+              <option value="Technology">Technology</option>
+              <option value="Finance">Finance</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Energy">Energy</option>
+              <option value="Industrial">Industrial</option>
+              <option value="Materials">Materials</option>
+              <option value="Transportation">Transportation</option>
+              <option value="Other">Other</option>
+            </select>
             <button onClick={createStock} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Create Stock</button>
           </div>
         </div>
@@ -1838,6 +1951,37 @@ const ATLStockExchange = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Recent Trades Feed */}
+            <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+              <h3 className="text-xl font-bold mb-4">Recent Market Activity</h3>
+              {recentTrades.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No recent trades</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {recentTrades.map((trade, idx) => (
+                    <div key={idx} className={`p-3 rounded border ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                            {trade.type.toUpperCase()}
+                          </span>
+                          <span className="font-bold">{trade.ticker}</span>
+                          <span className="text-sm text-gray-600">{trade.user}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold">${trade.total.toFixed(2)}</div>
+                          <div className="text-sm text-gray-600">{trade.quantity} shares @ ${trade.price.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(trade.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1877,6 +2021,37 @@ const ATLStockExchange = () => {
                     ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Recent Trades Feed */}
+            <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+              <h3 className="text-xl font-bold mb-4">Recent Market Activity</h3>
+              {recentTrades.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No recent trades</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {recentTrades.map((trade, idx) => (
+                    <div key={idx} className={`p-3 rounded border ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                            {trade.type.toUpperCase()}
+                          </span>
+                          <span className="font-bold">{trade.ticker}</span>
+                          <span className="text-sm text-gray-600">{trade.user}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold">${trade.total.toFixed(2)}</div>
+                          <div className="text-sm text-gray-600">{trade.quantity} shares @ ${trade.price.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(trade.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1934,6 +2109,18 @@ const ATLStockExchange = () => {
           <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
           <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
           <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
+        </div>
+        
+        <div className="mb-4 flex gap-2 flex-wrap">
+          <span className="text-sm font-bold self-center">Categories:</span>
+          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded text-sm ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
+          <button onClick={() => setStockFilter('Technology')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Technology' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Technology</button>
+          <button onClick={() => setStockFilter('Finance')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Finance' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Finance</button>
+          <button onClick={() => setStockFilter('Healthcare')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Healthcare' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Healthcare</button>
+          <button onClick={() => setStockFilter('Energy')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Energy' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Energy</button>
+          <button onClick={() => setStockFilter('Industrial')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Industrial' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Industrial</button>
+          <button onClick={() => setStockFilter('Materials')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Materials' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Materials</button>
+          <button onClick={() => setStockFilter('Transportation')} className={`px-3 py-1 rounded text-sm ${stockFilter === 'Transportation' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Transportation</button>
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
         
