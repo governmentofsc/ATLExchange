@@ -256,8 +256,15 @@ const ATLStockExchange = () => {
     // Calculate total minutes from midnight to now
     const totalMinutes = now.getHours() * 60 + now.getMinutes();
     
-    // Generate data points every 5 minutes from midnight to now
-    for (let minutes = 0; minutes <= totalMinutes; minutes += 5) {
+    // Use seeded random number generator for consistent data
+    let seed = Math.floor(basePrice * 1000) % 10000;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
+    // Generate data points every 3 minutes from midnight to now
+    for (let minutes = 0; minutes <= totalMinutes; minutes += 3) {
       const time = new Date(startOfDay.getTime() + minutes * 60000);
       const hour = time.getHours();
       const minute = time.getMinutes();
@@ -275,8 +282,8 @@ const ATLStockExchange = () => {
       const volatilityWave = Math.sin(progress * Math.PI * 8) * 0.02; // Higher frequency volatility
       const microMovements = Math.sin(progress * Math.PI * 20) * 0.01; // Micro movements
       
-      // Random noise that varies throughout the day
-      const randomNoise = (Math.random() - 0.5) * (0.01 + progress * 0.02); // More noise later in day
+      // Use seeded random for consistent noise
+      const randomNoise = (seededRandom() - 0.5) * (0.01 + progress * 0.02); // More noise later in day
       
       // Combine all patterns
       const totalChange = morningWave + volatilityWave + microMovements + randomNoise;
@@ -359,7 +366,7 @@ const ATLStockExchange = () => {
       return seed / 233280;
     };
     
-    for (let i = 0; i <= minutes; i += 2) { // Every 2 minutes for more detail
+    for (let i = 0; i <= minutes; i += 3) { // Every 3 minutes for more detail
       const change = (seededRandom() - 0.5) * 0.02; // Smaller changes for minute data
       price = Math.max(basePrice * 0.99, Math.min(basePrice * 1.01, price + change));
       
