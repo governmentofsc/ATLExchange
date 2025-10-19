@@ -267,6 +267,10 @@ const ATLStockExchange = () => {
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
+    console.log('generatePriceHistory - Current ET time:', now.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+    console.log('generatePriceHistory - Minutes from midnight:', minutesFromMidnight);
+    console.log('generatePriceHistory - Start of day:', startOfDay.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+    
     for (let i = 0; i <= minutesFromMidnight; i++) {
       const change = (Math.random() - 0.5) * 0.4;
       price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
@@ -292,6 +296,9 @@ const ATLStockExchange = () => {
       
       data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
     }
+    
+    console.log('generatePriceHistory - Last data point:', data[data.length - 1]);
+    console.log('generatePriceHistory - Total data points:', data.length);
     return data;
   }
 
