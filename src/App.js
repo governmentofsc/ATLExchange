@@ -56,8 +56,7 @@ function generatePriceHistory(basePrice) {
     const period = hour >= 12 ? 'PM' : 'AM';
     const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
     
-    // Generate completely deterministic price based only on time of day
-    // This ensures the same time always produces the same price
+    // Generate smooth, realistic price movement
     const timeOfDay = minutes / 1440; // 0 to 1 based on 24-hour day
     
     // Create a deterministic seed based on basePrice and time
@@ -69,12 +68,11 @@ function generatePriceHistory(basePrice) {
       return x - Math.floor(x);
     };
     
-    // Generate price using only time-based patterns (no current time dependency)
-    const morningTrend = Math.sin(timeOfDay * Math.PI * 2) * 0.02; // Daily cycle
-    const volatility = Math.sin(timeOfDay * Math.PI * 12) * 0.015; // Higher frequency
-    const microNoise = (deterministicRandom(seed) - 0.5) * 0.01; // Small random variation
+    // Generate smooth, gentle price movement
+    const dailyTrend = Math.sin(timeOfDay * Math.PI * 2) * 0.01; // Gentle daily cycle (1%)
+    const smallNoise = (deterministicRandom(seed) - 0.5) * 0.005; // Very small random variation (0.5%)
     
-    const totalChange = morningTrend + volatility + microNoise;
+    const totalChange = dailyTrend + smallNoise;
     const price = basePrice * (1 + totalChange);
     
     newData.push({
