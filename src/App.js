@@ -267,12 +267,16 @@ const ATLStockExchange = () => {
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
-    console.log('generatePriceHistory - Current ET time:', now.toLocaleString('en-US', {timeZone: 'America/New_York'}));
-    console.log('generatePriceHistory - Minutes from midnight:', minutesFromMidnight);
-    console.log('generatePriceHistory - Start of day:', startOfDay.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+    
+    // Use a seeded random number generator for consistent data
+    let seed = Math.floor(basePrice * 1000) % 10000;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
     
     for (let i = 0; i <= minutesFromMidnight; i++) {
-      const change = (Math.random() - 0.5) * 0.4;
+      const change = (seededRandom() - 0.5) * 0.4;
       price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
       const pointTime = new Date(startOfDay.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
@@ -297,8 +301,6 @@ const ATLStockExchange = () => {
       data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
     }
     
-    console.log('generatePriceHistory - Last data point:', data[data.length - 1]);
-    console.log('generatePriceHistory - Total data points:', data.length);
     return data;
   }
 
@@ -363,8 +365,15 @@ const ATLStockExchange = () => {
     const now = getEasternTime();
     const startTime = new Date(now.getTime() - minutes * 60 * 1000);
     
+    // Use a seeded random number generator for consistent data
+    let seed = Math.floor(basePrice * 1000 + minutes) % 10000;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
     for (let i = 0; i <= minutes; i++) {
-      const change = (Math.random() - 0.5) * 0.02; // Smaller changes for minute data
+      const change = (seededRandom() - 0.5) * 0.02; // Smaller changes for minute data
       price = Math.max(basePrice * 0.99, Math.min(basePrice * 1.01, price + change));
       
       const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
@@ -407,7 +416,7 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        data = generatePriceHistory(stockData.price);
+        data = stockData.history || [];
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -936,7 +945,6 @@ const ATLStockExchange = () => {
     // Use the new filtered chart data function with live price
     const chartData = getFilteredChartData(stockData, chartPeriod);
     
-    console.log('Stock detail view - Generating chart data for period:', chartPeriod, 'with price:', stockData.price);
     
     const chartDomain = getChartDomain(chartData);
 
@@ -971,7 +979,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}-${stockData.price}`}>
+                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 6))} />
