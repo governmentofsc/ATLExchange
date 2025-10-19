@@ -52,9 +52,7 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
-  const [stopLossPrice, setStopLossPrice] = useState('');
-  const [takeProfitPrice, setTakeProfitPrice] = useState('');
-  const [orderQuantity, setOrderQuantity] = useState('');
+  // Removed stop loss and take profit state variables
   const [recentTrades, setRecentTrades] = useState([]); // Recent trades from all users
 
   useEffect(() => {
@@ -158,26 +156,7 @@ const ATLStockExchange = () => {
     setChartKey(prev => prev + 1);
   }, [stocks]);
 
-  // Add a state to track the current stock data for real-time updates
-  const [currentStockData, setCurrentStockData] = useState(null);
-  
-  useEffect(() => {
-    if (selectedStock) {
-      const ticker = typeof selectedStock === 'string' ? selectedStock : selectedStock.ticker;
-      const liveStockData = stocks.find(s => s.ticker === ticker);
-      if (liveStockData) {
-        setCurrentStockData(prevData => {
-          // Only update if the price actually changed to prevent unnecessary re-renders
-          if (!prevData || prevData.price !== liveStockData.price) {
-            return liveStockData;
-          }
-          return prevData;
-        });
-      }
-    } else {
-      setCurrentStockData(null);
-    }
-  }, [stocks, selectedStock]);
+  // Remove the complex currentStockData logic - just use selectedStock directly
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
@@ -569,36 +548,29 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!buyQuantity) return;
-    
-    // Get stock data with proper fallback
-    const stockData = currentStockData || selectedStock;
-    if (!stockData || !stockData.ticker || !stockData.price) {
-      console.error('No valid stock data available:', { currentStockData, selectedStock });
-      return;
-    }
+    if (!selectedStock || !buyQuantity) return;
     
     const quantity = parseInt(buyQuantity);
-    const cost = stockData.price * quantity;
+    const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [stockData.ticker]: (users[user].portfolio[stockData.ticker] || 0) + quantity
+        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / stockData.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * stockData.price;
-      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === stockData.ticker) {
+        if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -615,9 +587,9 @@ const ATLStockExchange = () => {
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
-        ticker: stockData.ticker,
+        ticker: selectedStock.ticker,
         quantity: quantity,
-        price: stockData.price,
+        price: selectedStock.price,
         total: cost,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -630,40 +602,32 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!sellQuantity) return;
-    
-    // Get stock data with proper fallback
-    const stockData = currentStockData || selectedStock;
-    if (!stockData || !stockData.ticker || !stockData.price) {
-      console.error('No valid stock data available:', { currentStockData, selectedStock });
-      return;
-    }
+    if (!selectedStock || !sellQuantity) return;
     
     const quantity = parseInt(sellQuantity);
-    
-    if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
-      const proceeds = stockData.price * quantity;
+    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+      const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [stockData.ticker]: users[user].portfolio[stockData.ticker] - quantity
+        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / stockData.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * stockData.price;
-      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
       
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'sell',
-        ticker: stockData.ticker,
+        ticker: selectedStock.ticker,
         quantity: quantity,
-        price: stockData.price,
+        price: selectedStock.price,
         total: proceeds,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -672,7 +636,7 @@ const ATLStockExchange = () => {
       set(historyRef, tradeRecord);
       
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === stockData.ticker) {
+        if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -688,67 +652,7 @@ const ATLStockExchange = () => {
     }
   };
 
-  const createStopLossOrder = () => {
-    if (!stopLossPrice || !orderQuantity) return;
-    
-    // Get stock data with proper fallback
-    const stockData = currentStockData || selectedStock;
-    if (!stockData || !stockData.ticker) {
-      console.error('No valid stock data available:', { currentStockData, selectedStock });
-      return;
-    }
-    
-    const quantity = parseInt(orderQuantity);
-    
-    if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
-      const order = {
-        id: Date.now(),
-        type: 'stop_loss',
-        ticker: stockData.ticker,
-        quantity: quantity,
-        triggerPrice: parseFloat(stopLossPrice),
-        createdAt: Date.now(),
-        status: 'pending'
-      };
-      
-      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
-      set(ordersRef, order);
-      
-      setStopLossPrice('');
-      setOrderQuantity('');
-    }
-  };
-
-  const createTakeProfitOrder = () => {
-    if (!takeProfitPrice || !orderQuantity) return;
-    
-    // Get stock data with proper fallback
-    const stockData = currentStockData || selectedStock;
-    if (!stockData || !stockData.ticker) {
-      console.error('No valid stock data available:', { currentStockData, selectedStock });
-      return;
-    }
-    
-    const quantity = parseInt(orderQuantity);
-    
-    if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
-      const order = {
-        id: Date.now(),
-        type: 'take_profit',
-        ticker: stockData.ticker,
-        quantity: quantity,
-        triggerPrice: parseFloat(takeProfitPrice),
-        createdAt: Date.now(),
-        status: 'pending'
-      };
-      
-      const ordersRef = ref(database, `pendingOrders/${user}/${order.id}`);
-      set(ordersRef, order);
-      
-      setTakeProfitPrice('');
-      setOrderQuantity('');
-    }
-  };
+  // Removed stop loss and take profit functions - keeping it simple
 
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
@@ -995,13 +899,8 @@ const ATLStockExchange = () => {
 
   if (selectedStock) {
     try {
-      // Use the current stock data that updates in real-time
-      const stockData = currentStockData;
-      
-      // Debug logging (reduced frequency)
-      if (stockData && Math.random() < 0.1) { // Only log 10% of the time
-        console.log('Stock price update:', stockData?.price);
-      }
+      // Find the live stock data from the stocks array for real-time updates
+      const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
       
       // Show loading screen if data isn't ready yet
       if (!stockData || stocks.length === 0) {
@@ -1131,23 +1030,7 @@ const ATLStockExchange = () => {
             </div>
           </div>}
 
-          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4">Stop Loss Order</h3>
-              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <input type="number" placeholder="Stop Price" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <p className="mb-3 text-sm text-gray-600">Sell automatically if price drops to stop price</p>
-              <button onClick={createStopLossOrder} className="w-full bg-orange-600 text-white p-2 rounded font-bold hover:bg-orange-700">Set Stop Loss</button>
-            </div>
-
-            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4">Take Profit Order</h3>
-              <input type="number" placeholder="Quantity" value={orderQuantity} onChange={(e) => setOrderQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <input type="number" placeholder="Target Price" value={takeProfitPrice} onChange={(e) => setTakeProfitPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <p className="mb-3 text-sm text-gray-600">Sell automatically if price reaches target</p>
-              <button onClick={createTakeProfitOrder} className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">Set Take Profit</button>
-            </div>
-          </div>}
+          {/* Removed stop loss and take profit UI - keeping it simple */}
         </div>
       </div>
     );
