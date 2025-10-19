@@ -156,7 +156,17 @@ const ATLStockExchange = () => {
     setChartKey(prev => prev + 1);
   }, [stocks]);
 
-  // Remove the complex currentStockData logic - just use selectedStock directly
+  // Update selectedStock with live data when stocks change
+  useEffect(() => {
+    if (selectedStock) {
+      console.log('Updating selectedStock, current:', selectedStock);
+      const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
+      console.log('Found live data:', liveStockData);
+      if (liveStockData) {
+        setSelectedStock(liveStockData);
+      }
+    }
+  }, [stocks]);
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
@@ -548,17 +558,41 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!selectedStock || !buyQuantity) return;
+    console.log('BuyStock called with:', { selectedStock, buyQuantity, user });
     
+    if (!selectedStock || !buyQuantity) {
+      console.log('Buy failed: missing data', { selectedStock, buyQuantity });
+      return;
+    }
+    
+    if (!selectedStock.ticker) {
+      console.log('Buy failed: selectedStock has no ticker. Full object:', selectedStock);
+      console.log('Available keys:', Object.keys(selectedStock || {}));
+      return;
+    }
+    
+    if (!user || !users[user]) {
+      console.log('Buy failed: no user data', { user, users });
+      return;
+    }
+    
+    console.log('Buying stock:', selectedStock.ticker, 'at price:', selectedStock.price);
     const quantity = parseInt(buyQuantity);
     const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
+      console.log('User balance:', users[user].balance, 'Cost:', cost);
+      console.log('Selected stock ticker:', selectedStock.ticker);
+      console.log('Current portfolio:', users[user].portfolio);
+      
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
+      const currentHolding = users[user].portfolio[selectedStock.ticker] || 0;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
+        [selectedStock.ticker]: currentHolding + quantity
       };
+      
+      console.log('New portfolio:', newPortfolio);
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap (real-world model)
@@ -602,17 +636,33 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!selectedStock || !sellQuantity) return;
+    if (!selectedStock || !sellQuantity) {
+      console.log('Sell failed:', { selectedStock, sellQuantity });
+      return;
+    }
     
+    if (!selectedStock.ticker) {
+      console.log('Sell failed: selectedStock has no ticker:', selectedStock);
+      return;
+    }
+    
+    console.log('Selling stock:', selectedStock.ticker, 'at price:', selectedStock.price);
     const quantity = parseInt(sellQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+    const currentHolding = users[user].portfolio[selectedStock.ticker] || 0;
+    console.log('Current holding:', currentHolding, 'Trying to sell:', quantity);
+    console.log('Selected stock ticker:', selectedStock.ticker);
+    console.log('Current portfolio:', users[user].portfolio);
+    
+    if (currentHolding >= quantity) {
       const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
+        [selectedStock.ticker]: currentHolding - quantity
       };
+      
+      console.log('New portfolio after sell:', newPortfolio);
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap
@@ -901,6 +951,9 @@ const ATLStockExchange = () => {
     try {
       // Find the live stock data from the stocks array for real-time updates
       const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
+      
+      // Debug logging
+      console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
       
       // Show loading screen if data isn't ready yet
       if (!stockData || stocks.length === 0) {
@@ -2134,6 +2187,8 @@ const ATLStockExchange = () => {
             return (
               <div key={stock.ticker} onClick={() => {
                 console.log('Clicking stock:', stock);
+                console.log('Stock ticker:', stock.ticker);
+                console.log('Stock price:', stock.price);
                 setSelectedStock(stock);
               }} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
                 <div className="flex justify-between items-start mb-4">
