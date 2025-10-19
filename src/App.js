@@ -158,14 +158,6 @@ const ATLStockExchange = () => {
     setChartKey(prev => prev + 1);
   }, [stocks]);
 
-  // Force re-render of selected stock when stocks change
-  useEffect(() => {
-    if (selectedStock) {
-      // This will trigger a re-render when stocks change
-      setChartKey(prev => prev + 1);
-    }
-  }, [stocks, selectedStock]);
-
   // Add a state to track the current stock data for real-time updates
   const [currentStockData, setCurrentStockData] = useState(null);
   
@@ -174,12 +166,22 @@ const ATLStockExchange = () => {
       const ticker = typeof selectedStock === 'string' ? selectedStock : selectedStock.ticker;
       const liveStockData = stocks.find(s => s.ticker === ticker);
       if (liveStockData) {
-        setCurrentStockData(liveStockData);
+        // Only update if the price actually changed to prevent unnecessary re-renders
+        if (!currentStockData || currentStockData.price !== liveStockData.price) {
+          setCurrentStockData(liveStockData);
+        }
       }
     } else {
       setCurrentStockData(null);
     }
-  }, [stocks, selectedStock]);
+  }, [stocks, selectedStock, currentStockData]);
+
+  // Only update chart key when stocks change, not on every render
+  useEffect(() => {
+    if (selectedStock) {
+      setChartKey(prev => prev + 1);
+    }
+  }, [stocks]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
@@ -958,13 +960,10 @@ const ATLStockExchange = () => {
       // Use the current stock data that updates in real-time
       const stockData = currentStockData;
       
-      // Debug logging
-      console.log('Selected stock:', selectedStock);
-      console.log('Current stock data:', stockData);
-      console.log('Stock price:', stockData?.price);
-      console.log('Stocks array length:', stocks.length);
-      console.log('User:', user);
-      console.log('Users data:', users);
+      // Debug logging (reduced frequency)
+      if (stockData && Math.random() < 0.1) { // Only log 10% of the time
+        console.log('Stock price update:', stockData?.price);
+      }
       
       // Show loading screen if data isn't ready yet
       if (!stockData || stocks.length === 0) {
@@ -1014,7 +1013,7 @@ const ATLStockExchange = () => {
     const chartDomain = getChartDomain(chartData);
 
     return (
-      <div className={`min-h-screen ${bgClass}`} key={`stock-detail-${stockData?.ticker}-${stockData?.price}-${chartKey}`}>
+      <div className={`min-h-screen ${bgClass}`} key={`stock-detail-${stockData?.ticker}-${chartKey}`}>
         <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
           <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
