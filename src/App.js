@@ -2043,8 +2043,6 @@ const ATLStockExchange = () => {
             const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
             
-            // Debug: Log price updates
-            console.log(`Stock ${stock.ticker}: $${stock.price.toFixed(2)} (${percentChange}%)`);
             
             return (
               <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
@@ -2060,16 +2058,10 @@ const ATLStockExchange = () => {
                 </div>
                 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}-${stock.price}`}>
-                  <LineChart data={stock.history.map((point, index, array) => {
-                    // Update the last data point with current live price
-                    if (index === array.length - 1) {
-                      return { ...point, price: stock.price };
-                    }
-                    return point;
-                  })}>
+                  <LineChart data={generatePriceHistory(stock.price)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 8))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.price))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.price)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
