@@ -9,6 +9,97 @@ const getEasternTime = (date = new Date()) => {
   return new Date(date.toLocaleString("en-US", {timeZone: "America/New_York"}));
 };
 
+// Store static chart data to prevent regeneration - moved outside component
+let staticChartData = {};
+
+function generatePriceHistory(basePrice) {
+  const now = getEasternTime();
+  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+  const dataKey = `${basePrice}`; // Key based on price only
+  
+  // Get existing data or create new
+  let existingData = staticChartData[dataKey] || [];
+  const lastExistingTime = existingData.length > 0 ? existingData[existingData.length - 1].time : null;
+  
+  // Parse last existing time to minutes since midnight
+  const parseTime = (timeStr) => {
+    if (!timeStr) return 0;
+    const [time, period] = timeStr.split(' ');
+    const [hours, minutes] = time.split(':').map(Number);
+    let totalMinutes = hours * 60 + minutes;
+    if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
+    if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
+    return totalMinutes;
+  };
+  
+  const lastExistingMinutes = parseTime(lastExistingTime);
+  
+  // If we already have data up to current time, return it
+  if (lastExistingMinutes >= totalMinutes) {
+    return existingData;
+  }
+  
+  // Generate new data points from last existing time to current time
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const newData = [...existingData];
+  
+  // Add new data points every 3 minutes from last existing time to now
+  for (let minutes = lastExistingMinutes + 3; minutes <= totalMinutes; minutes += 3) {
+    const time = new Date(startOfDay.getTime() + minutes * 60000);
+    const hour = time.getHours();
+    const minute = time.getMinutes();
+    
+    // Format time as 12-hour format
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+    
+    // Generate realistic price movement with multiple patterns
+    // Use a fixed day length (24 hours = 1440 minutes) for consistent progress calculation
+    const progress = minutes / 1440; // 0 to 1 based on 24-hour day, not current time
+    
+    // Multiple wave patterns for more realistic movement
+    const morningWave = Math.sin(progress * Math.PI * 2) * 0.03; // Morning trend
+    const volatilityWave = Math.sin(progress * Math.PI * 8) * 0.02; // Higher frequency volatility
+    const microMovements = Math.sin(progress * Math.PI * 20) * 0.01; // Micro movements
+    
+    // Use seeded random for consistent noise - seed based on minutes for consistency
+    const pointSeed = Math.floor(basePrice * 1000) + minutes;
+    const pointSeededRandom = () => {
+      let localSeed = pointSeed;
+      localSeed = (localSeed * 9301 + 49297) % 233280;
+      return localSeed / 233280;
+    };
+    
+    const randomNoise = (pointSeededRandom() - 0.5) * (0.01 + progress * 0.02);
+    
+    // Combine all patterns
+    const totalChange = morningWave + volatilityWave + microMovements + randomNoise;
+    const price = basePrice * (1 + totalChange);
+    
+    newData.push({
+      time: timeStr,
+      price: parseFloat(price.toFixed(2))
+    });
+  }
+  
+  // Update the last point with current live price
+  if (newData.length > 0) {
+    const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+    newData[newData.length - 1] = {
+      time: currentTime,
+      price: parseFloat(basePrice.toFixed(2))
+    };
+  }
+  
+  // Cache the updated data
+  staticChartData[dataKey] = newData;
+  
+  return newData;
+}
+
 const ATLStockExchange = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [user, setUser] = useState(null);
@@ -245,98 +336,6 @@ const ATLStockExchange = () => {
     return () => clearInterval(interval);
   }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
-  // Store static chart data to prevent regeneration
-  const [staticChartData, setStaticChartData] = useState({});
-  
-  function generatePriceHistory(basePrice) {
-    const now = getEasternTime();
-    const totalMinutes = now.getHours() * 60 + now.getMinutes();
-    const dataKey = `${basePrice}`; // Key based on price only
-    
-    // Get existing data or create new
-    let existingData = staticChartData[dataKey] || [];
-    const lastExistingTime = existingData.length > 0 ? existingData[existingData.length - 1].time : null;
-    
-    // Parse last existing time to minutes since midnight
-    const parseTime = (timeStr) => {
-      if (!timeStr) return 0;
-      const [time, period] = timeStr.split(' ');
-      const [hours, minutes] = time.split(':').map(Number);
-      let totalMinutes = hours * 60 + minutes;
-      if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
-      if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
-      return totalMinutes;
-    };
-    
-    const lastExistingMinutes = parseTime(lastExistingTime);
-    
-    // If we already have data up to current time, return it
-    if (lastExistingMinutes >= totalMinutes) {
-      return existingData;
-    }
-    
-    // Generate new data points from last existing time to current time
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    // Seeded random number generator removed - using point-specific seeding instead
-    
-    const newData = [...existingData];
-    
-    // Add new data points every 3 minutes from last existing time to now
-    for (let minutes = lastExistingMinutes + 3; minutes <= totalMinutes; minutes += 3) {
-      const time = new Date(startOfDay.getTime() + minutes * 60000);
-      const hour = time.getHours();
-      const minute = time.getMinutes();
-      
-      // Format time as 12-hour format
-      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-      const period = hour >= 12 ? 'PM' : 'AM';
-      const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
-      
-      // Generate realistic price movement with multiple patterns
-      // Use a fixed day length (24 hours = 1440 minutes) for consistent progress calculation
-      const progress = minutes / 1440; // 0 to 1 based on 24-hour day, not current time
-      
-      // Multiple wave patterns for more realistic movement
-      const morningWave = Math.sin(progress * Math.PI * 2) * 0.03; // Morning trend
-      const volatilityWave = Math.sin(progress * Math.PI * 8) * 0.02; // Higher frequency volatility
-      const microMovements = Math.sin(progress * Math.PI * 20) * 0.01; // Micro movements
-      
-      // Use seeded random for consistent noise - seed based on minutes for consistency
-      const pointSeed = Math.floor(basePrice * 1000) + minutes;
-      const pointSeededRandom = () => {
-        let localSeed = pointSeed;
-        localSeed = (localSeed * 9301 + 49297) % 233280;
-        return localSeed / 233280;
-      };
-      
-      const randomNoise = (pointSeededRandom() - 0.5) * (0.01 + progress * 0.02);
-      
-      // Combine all patterns
-      const totalChange = morningWave + volatilityWave + microMovements + randomNoise;
-      const price = basePrice * (1 + totalChange);
-      
-      newData.push({
-        time: timeStr,
-        price: parseFloat(price.toFixed(2))
-      });
-    }
-    
-    // Update the last point with current live price
-    if (newData.length > 0) {
-      const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-      newData[newData.length - 1] = {
-        time: currentTime,
-        price: parseFloat(basePrice.toFixed(2))
-      };
-    }
-    
-    // Cache the updated data
-    setStaticChartData(prev => ({ ...prev, [dataKey]: newData }));
-    
-    return newData;
-  }
 
   function generateExtendedHistory(basePrice) {
     const data = [];
