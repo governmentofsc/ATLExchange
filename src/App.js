@@ -373,7 +373,6 @@ const ATLStockExchange = () => {
 
   // Function to filter data based on timeframe
   function getFilteredChartData(stockData, period) {
-    const now = new Date();
     let data = [];
     
     switch(period) {
@@ -2047,5 +2046,4 @@ const ATLStockExchange = () => {
   );
 };
 
-// Force rebuild - all confirm() calls fixed
 export default ATLStockExchange;
