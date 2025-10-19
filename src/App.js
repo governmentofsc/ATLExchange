@@ -437,20 +437,22 @@ const ATLStockExchange = () => {
         
         console.log('Chart interpolation - lastMinutes:', lastMinutes, 'currentMinutes:', currentMinutes, 'currentSeconds:', currentSeconds);
         
-        // Add intermediate points every 15 minutes, but also add current time if it's within the same minute
-        for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
-          const hour = Math.floor(minutes / 60);
-          const min = minutes % 60;
-          const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-          const period = hour >= 12 ? 'PM' : 'AM';
-          const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
-          
-          // Interpolate price between last history price and current price
-          const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
-          const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
-          
-          console.log('Adding point:', timeStr, 'price:', interpolatedPrice.toFixed(2));
-          filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+        // Add intermediate points every minute
+        if (currentMinutes > lastMinutes) {
+          for (let minutes = lastMinutes + 1; minutes < currentMinutes; minutes += 1) {
+            const hour = Math.floor(minutes / 60);
+            const min = minutes % 60;
+            const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+            const period = hour >= 12 ? 'PM' : 'AM';
+            const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
+            
+            // Interpolate price between last history price and current price
+            const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
+            const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
+            
+            console.log('Adding intermediate point:', timeStr, 'price:', interpolatedPrice.toFixed(2));
+            filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+          }
         }
         
         // Always add current time point if it's different from last point
@@ -2129,20 +2131,26 @@ const ATLStockExchange = () => {
                     const lastMinutes = parseTime(lastTime);
                     const currentMinutes = now.getHours() * 60 + now.getMinutes();
                     
-                    // Add intermediate points every 15 minutes
-                    for (let minutes = lastMinutes + 15; minutes <= currentMinutes; minutes += 15) {
-                      const hour = Math.floor(minutes / 60);
-                      const min = minutes % 60;
-                      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                      const period = hour >= 12 ? 'PM' : 'AM';
-                      const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
-                      
-                      // Interpolate price between last history price and current price
-                      const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
-                      const interpolatedPrice = lastHistoryPoint.price + (stock.price - lastHistoryPoint.price) * progress;
-                      
-                      filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+                    // Add intermediate points every minute
+                    if (currentMinutes > lastMinutes) {
+                      for (let minutes = lastMinutes + 1; minutes < currentMinutes; minutes += 1) {
+                        const hour = Math.floor(minutes / 60);
+                        const min = minutes % 60;
+                        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+                        const period = hour >= 12 ? 'PM' : 'AM';
+                        const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
+                        
+                        // Interpolate price between last history price and current price
+                        const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
+                        const interpolatedPrice = lastHistoryPoint.price + (stock.price - lastHistoryPoint.price) * progress;
+                        
+                        filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
+                      }
                     }
+                    
+                    // Add current time point
+                    const currentTimeStr = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+                    filledData.push({ time: currentTimeStr, price: parseFloat(stock.price.toFixed(2)) });
                     
                     const chartData = filledData;
                     
