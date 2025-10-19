@@ -526,23 +526,20 @@ const ATLStockExchange = () => {
       return;
     }
     
-    // Ensure portfolio exists, create empty object if it doesn't
-    if (!users[user].portfolio) {
-      const userRef = ref(database, `users/${user}`);
-      update(userRef, { portfolio: {} });
-      return; // Let the update complete and retry
-    }
-    
     const quantity = parseInt(buyQuantity);
     const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
+      const currentPortfolio = users[user].portfolio || {};
       const newPortfolio = { 
-        ...users[user].portfolio, 
-        [selectedStock.ticker]: (users[user].portfolio[selectedStock.ticker] || 0) + quantity
+        ...currentPortfolio, 
+        [selectedStock.ticker]: (currentPortfolio[selectedStock.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      
+      // Clear the input
+      setBuyQuantity('');
       
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
@@ -593,23 +590,20 @@ const ATLStockExchange = () => {
       return;
     }
     
-    // Ensure portfolio exists, create empty object if it doesn't
-    if (!users[user].portfolio) {
-      const userRef = ref(database, `users/${user}`);
-      update(userRef, { portfolio: {} });
-      return; // Let the update complete and retry
-    }
-    
     const quantity = parseInt(sellQuantity);
-    if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
+    const currentPortfolio = users[user].portfolio || {};
+    if ((currentPortfolio[selectedStock.ticker] || 0) >= quantity) {
       const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
-        ...users[user].portfolio, 
-        [selectedStock.ticker]: users[user].portfolio[selectedStock.ticker] - quantity
+        ...currentPortfolio, 
+        [selectedStock.ticker]: currentPortfolio[selectedStock.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
+      
+      // Clear the input
+      setSellQuantity('');
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
