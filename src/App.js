@@ -139,25 +139,19 @@ const ATLStockExchange = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stocks]);
 
-  // Market controller system - ensures only one tab controls price updates
+  // Simplified market controller - just make this tab the controller
   useEffect(() => {
     const controllerRef = ref(database, 'marketController');
     const sessionId = Date.now() + Math.random();
-    let retryTimeout = null;
     
-    // Try to become the market controller
-    const becomeController = () => {
-      set(controllerRef, { 
-        sessionId, 
-        timestamp: Date.now(),
-        user: user || 'anonymous'
-      }).catch(() => {
-        // If we can't become controller, retry after a delay
-        retryTimeout = setTimeout(becomeController, 2000);
-      });
-    };
+    // Become the market controller immediately
+    set(controllerRef, { 
+      sessionId, 
+      timestamp: Date.now(),
+      user: user || 'anonymous'
+    });
     
-    becomeController();
+    setIsMarketController(true);
     
     // Heartbeat to maintain control
     const heartbeat = setInterval(() => {
@@ -168,36 +162,20 @@ const ATLStockExchange = () => {
       });
     }, 5000);
     
-    // Listen for controller changes
-    const unsubscribe = onValue(controllerRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data && data.sessionId === sessionId) {
-        setIsMarketController(true);
-      } else {
-        setIsMarketController(false);
-      }
-    });
-    
     return () => {
       clearInterval(heartbeat);
-      if (retryTimeout) clearTimeout(retryTimeout);
-      unsubscribe();
     };
   }, [user]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
     
-    console.log('Price update check - isMarketController:', isMarketController, 'marketRunning:', marketRunning);
-    
     // Only run price updates if this tab is the market controller AND market is running
     if (!isMarketController || !marketRunning) {
-      console.log('Price updates disabled - not market controller or market not running');
       return;
     }
     
     const interval = setInterval(() => {
-      console.log('Price update interval running...');
       const now = getEasternTime();
       const dayStartTime = getEasternTime();
       dayStartTime.setHours(0, 0, 0, 0);
@@ -262,7 +240,6 @@ const ATLStockExchange = () => {
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
       setStocks(updatedStocks); // Update local state immediately
-      console.log('Updated stocks with new prices:', updatedStocks.map(s => `${s.ticker}: $${s.price.toFixed(2)}`));
     }, updateSpeed); // Use configurable update speed
     
     return () => clearInterval(interval);
