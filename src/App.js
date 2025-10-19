@@ -130,6 +130,7 @@ const ATLStockExchange = () => {
       }
     }
     setChartKey(prev => prev + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stocks, selectedStock?.ticker]);
 
   // Market controller system - ensures only one tab controls price updates
@@ -1039,7 +1040,8 @@ const ATLStockExchange = () => {
             <h1 className="text-3xl font-bold mb-2 text-blue-600">Atlanta Stock Exchange</h1>
             <p className="text-sm mb-6 opacity-75">Login</p>
             <input type="text" placeholder="Username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
+            {loginError && <p className="text-red-600 text-sm mb-3">{loginError}</p>}
             <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Login</button>
             <button onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
             <button onClick={() => setShowLoginModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
