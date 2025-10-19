@@ -247,45 +247,36 @@ const ATLStockExchange = () => {
 
   function generatePriceHistory(basePrice) {
     const data = [];
-    let price = basePrice;
-    const startOfDay = getEasternTime();
-    startOfDay.setHours(0, 0, 0, 0);
     const now = getEasternTime();
-    const msFromMidnight = now - startOfDay;
-    const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
+    // Start from 12:00 AM ET today
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
     
-    // Use a seeded random number generator for consistent data
-    let seed = Math.floor(basePrice * 1000) % 10000;
-    const seededRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
+    // Calculate total minutes from midnight to now
+    const totalMinutes = now.getHours() * 60 + now.getMinutes();
     
-    for (let i = 0; i <= minutesFromMidnight; i++) {
-      const change = (seededRandom() - 0.5) * 0.4;
-      price = Math.max(basePrice * 0.98, Math.min(basePrice * 1.02, price + change));
-      const pointTime = new Date(startOfDay.getTime() + i * 60 * 1000);
-      const hour = pointTime.getHours();
-      const min = pointTime.getMinutes().toString().padStart(2,'0');
-      let displayHour = hour;
-      let ampm = 'AM';
+    // Generate data points every 15 minutes from midnight to now
+    for (let minutes = 0; minutes <= totalMinutes; minutes += 15) {
+      const time = new Date(startOfDay.getTime() + minutes * 60000);
+      const hour = time.getHours();
+      const minute = time.getMinutes();
       
-      if (hour === 0) {
-        displayHour = 12;
-        ampm = 'AM';
-      } else if (hour < 12) {
-        displayHour = hour;
-        ampm = 'AM';
-      } else if (hour === 12) {
-        displayHour = 12;
-        ampm = 'PM';
-      } else {
-        displayHour = hour - 12;
-        ampm = 'PM';
-      }
+      // Format time as 12-hour format
+      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+      const period = hour >= 12 ? 'PM' : 'AM';
+      const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
       
-      data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
+      // Generate realistic price movement
+      const progress = minutes / totalMinutes; // 0 to 1
+      const volatility = Math.sin(progress * Math.PI * 4) * 0.05; // Smooth wave
+      const randomNoise = (Math.random() - 0.5) * 0.02; // Small random variation
+      const price = basePrice * (1 + volatility + randomNoise);
+      
+      data.push({
+        time: timeStr,
+        price: parseFloat(price.toFixed(2))
+      });
     }
     
     return data;
@@ -403,51 +394,8 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Use static history data and fill in missing time points to current time
-        const historyData = stockData.history || [];
-        const now = getEasternTime();
-        
-        // Get the last data point from history
-        const lastHistoryPoint = historyData[historyData.length - 1];
-        if (!lastHistoryPoint) {
-          data = historyData;
-          break;
-        }
-        
-        // Parse last time to get minutes since midnight
-        const parseTime = (timeStr) => {
-          const [time, period] = timeStr.split(' ');
-          const [hours, minutes] = time.split(':').map(Number);
-          let totalMinutes = hours * 60 + minutes;
-          if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
-          if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
-          return totalMinutes;
-        };
-        
-        const lastMinutes = parseTime(lastHistoryPoint.time);
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        
-        // Start with the existing history data
-        const filledData = [...historyData];
-        
-        // Add intermediate points every minute if there's a gap
-        if (currentMinutes > lastMinutes) {
-          for (let minutes = lastMinutes + 1; minutes <= currentMinutes; minutes += 1) {
-            const hour = Math.floor(minutes / 60);
-            const min = minutes % 60;
-            const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-            const period = hour >= 12 ? 'PM' : 'AM';
-            const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
-            
-            // Interpolate price between last history price and current price
-            const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
-            const interpolatedPrice = lastHistoryPoint.price + (stockData.price - lastHistoryPoint.price) * progress;
-            
-            filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
-          }
-        }
-        
-        data = filledData;
+        // Generate fresh data from 12:00 AM to current time
+        data = generatePriceHistory(stockData.price);
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -2090,59 +2038,12 @@ const ATLStockExchange = () => {
                 </div>
                 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  {(() => {
-                    // Use static history data and fill in missing time points to current time
-                    const historyData = stock.history || [];
-                    const now = getEasternTime();
-                    
-                    // Get the last data point from history
-                    const lastHistoryPoint = historyData[historyData.length - 1];
-                    if (!lastHistoryPoint) {
-                      return <LineChart data={historyData}><CartesianGrid stroke={darkMode ? '#444' : '#ccc'} /><XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(historyData.length / 8))} /><YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(historyData)} type="number" ticks={getYAxisTicks(getChartDomain(historyData))} /><Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} /></LineChart>;
-                    }
-                    
-                    // Parse last time to get minutes since midnight
-                    const parseTime = (timeStr) => {
-                      const [time, period] = timeStr.split(' ');
-                      const [hours, minutes] = time.split(':').map(Number);
-                      let totalMinutes = hours * 60 + minutes;
-                      if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
-                      if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
-                      return totalMinutes;
-                    };
-                    
-                    const lastMinutes = parseTime(lastHistoryPoint.time);
-                    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                    
-                    // Start with the existing history data
-                    const filledData = [...historyData];
-                    
-                    // Add intermediate points every minute if there's a gap
-                    if (currentMinutes > lastMinutes) {
-                      for (let minutes = lastMinutes + 1; minutes <= currentMinutes; minutes += 1) {
-                        const hour = Math.floor(minutes / 60);
-                        const min = minutes % 60;
-                        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                        const period = hour >= 12 ? 'PM' : 'AM';
-                        const timeStr = `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
-                        
-                        // Interpolate price between last history price and current price
-                        const progress = (minutes - lastMinutes) / (currentMinutes - lastMinutes);
-                        const interpolatedPrice = lastHistoryPoint.price + (stock.price - lastHistoryPoint.price) * progress;
-                        
-                        filledData.push({ time: timeStr, price: parseFloat(interpolatedPrice.toFixed(2)) });
-                      }
-                    }
-                    
-                    return (
-                      <LineChart data={filledData}>
-                        <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                        <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(filledData.length / 8))} />
-                        <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(filledData)} type="number" ticks={getYAxisTicks(getChartDomain(filledData))} />
-                        <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                      </LineChart>
-                    );
-                  })()}
+                  <LineChart data={generatePriceHistory(stock.price)}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 8))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.price))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.price)))} />
+                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
                 </ResponsiveContainer>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
