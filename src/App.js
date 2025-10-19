@@ -158,6 +158,14 @@ const ATLStockExchange = () => {
     setChartKey(prev => prev + 1);
   }, [stocks]);
 
+  // Force re-render of selected stock when stocks change
+  useEffect(() => {
+    if (selectedStock) {
+      // This will trigger a re-render when stocks change
+      setChartKey(prev => prev + 1);
+    }
+  }, [stocks, selectedStock]);
+
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
     const controllerRef = ref(database, 'marketController');
@@ -932,15 +940,14 @@ const ATLStockExchange = () => {
 
   if (selectedStock) {
     try {
-      // If selectedStock is a string (ticker), find the stock data
-      // If selectedStock is an object, use it directly
-      const stockData = typeof selectedStock === 'string' 
-        ? stocks.find(s => s.ticker === selectedStock)
-        : selectedStock;
+      // Always find the live stock data from the stocks array to get real-time updates
+      const ticker = typeof selectedStock === 'string' ? selectedStock : selectedStock.ticker;
+      const stockData = stocks.find(s => s.ticker === ticker);
       
       // Debug logging
       console.log('Selected stock:', selectedStock);
       console.log('Stock data found:', stockData);
+      console.log('Stock price:', stockData?.price);
       console.log('Stocks array length:', stocks.length);
       console.log('User:', user);
       console.log('Users data:', users);
@@ -981,7 +988,7 @@ const ATLStockExchange = () => {
         );
       }
     
-    const userHolding = user && users && users[user] ? (users[user].portfolio?.[selectedStock.ticker] || 0) : 0;
+    const userHolding = user && users && users[user] ? (users[user].portfolio?.[stockData.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
@@ -993,7 +1000,7 @@ const ATLStockExchange = () => {
     const chartDomain = getChartDomain(chartData);
 
     return (
-      <div className={`min-h-screen ${bgClass}`}>
+      <div className={`min-h-screen ${bgClass}`} key={`stock-detail-${ticker}-${chartKey}`}>
         <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
           <button onClick={() => setSelectedStock(null)} className="flex items-center gap-2 hover:opacity-80">
             <ArrowLeft className="w-5 h-5" />
