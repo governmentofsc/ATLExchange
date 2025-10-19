@@ -98,6 +98,7 @@ const ATLStockExchange = () => {
     
     const controllerRef = ref(database, 'marketController');
     const sessionId = Date.now() + Math.random();
+    let retryTimeout = null;
     
     // Try to become the market controller
     const becomeController = () => {
@@ -106,14 +107,8 @@ const ATLStockExchange = () => {
         timestamp: Date.now(),
         user: user 
       }).catch(() => {
-        // If we can't become controller, check if current controller is still active
-        onValue(controllerRef, (snapshot) => {
-          const data = snapshot.val();
-          if (!data || Date.now() - data.timestamp > 10000) {
-            // Current controller is inactive, try again
-            setTimeout(becomeController, 1000);
-          }
-        });
+        // If we can't become controller, retry after a delay
+        retryTimeout = setTimeout(becomeController, 2000);
       });
     };
     
@@ -138,6 +133,7 @@ const ATLStockExchange = () => {
     
     return () => {
       clearInterval(heartbeat);
+      if (retryTimeout) clearTimeout(retryTimeout);
       unsubscribe();
     };
   }, [isAdmin, user]);
