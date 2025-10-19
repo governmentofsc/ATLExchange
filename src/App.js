@@ -174,7 +174,7 @@ const ATLStockExchange = () => {
     } else {
       setCurrentStockData(null);
     }
-  }, [stocks, selectedStock, currentStockData]);
+  }, [stocks, selectedStock]); // Removed currentStockData from dependencies to prevent infinite loops
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
@@ -566,13 +566,17 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!currentStockData || !buyQuantity) return;
-    const quantity = parseInt(buyQuantity);
-    const cost = currentStockData.price * quantity;
+    if (!buyQuantity) return;
     
-    // Fallback to selectedStock if currentStockData is not available
+    // Get stock data with proper fallback
     const stockData = currentStockData || selectedStock;
-    if (!stockData) return;
+    if (!stockData || !stockData.ticker || !stockData.price) {
+      console.error('No valid stock data available:', { currentStockData, selectedStock });
+      return;
+    }
+    
+    const quantity = parseInt(buyQuantity);
+    const cost = stockData.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
@@ -623,12 +627,16 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!currentStockData || !sellQuantity) return;
-    const quantity = parseInt(sellQuantity);
+    if (!sellQuantity) return;
     
-    // Fallback to selectedStock if currentStockData is not available
+    // Get stock data with proper fallback
     const stockData = currentStockData || selectedStock;
-    if (!stockData) return;
+    if (!stockData || !stockData.ticker || !stockData.price) {
+      console.error('No valid stock data available:', { currentStockData, selectedStock });
+      return;
+    }
+    
+    const quantity = parseInt(sellQuantity);
     
     if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
       const proceeds = stockData.price * quantity;
@@ -678,12 +686,16 @@ const ATLStockExchange = () => {
   };
 
   const createStopLossOrder = () => {
-    if (!currentStockData || !stopLossPrice || !orderQuantity) return;
-    const quantity = parseInt(orderQuantity);
+    if (!stopLossPrice || !orderQuantity) return;
     
-    // Fallback to selectedStock if currentStockData is not available
+    // Get stock data with proper fallback
     const stockData = currentStockData || selectedStock;
-    if (!stockData) return;
+    if (!stockData || !stockData.ticker) {
+      console.error('No valid stock data available:', { currentStockData, selectedStock });
+      return;
+    }
+    
+    const quantity = parseInt(orderQuantity);
     
     if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
       const order = {
@@ -705,12 +717,16 @@ const ATLStockExchange = () => {
   };
 
   const createTakeProfitOrder = () => {
-    if (!currentStockData || !takeProfitPrice || !orderQuantity) return;
-    const quantity = parseInt(orderQuantity);
+    if (!takeProfitPrice || !orderQuantity) return;
     
-    // Fallback to selectedStock if currentStockData is not available
+    // Get stock data with proper fallback
     const stockData = currentStockData || selectedStock;
-    if (!stockData) return;
+    if (!stockData || !stockData.ticker) {
+      console.error('No valid stock data available:', { currentStockData, selectedStock });
+      return;
+    }
+    
+    const quantity = parseInt(orderQuantity);
     
     if ((users[user].portfolio[stockData.ticker] || 0) >= quantity) {
       const order = {
