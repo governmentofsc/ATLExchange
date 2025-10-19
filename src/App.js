@@ -407,7 +407,7 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        data = stockData.history || [];
+        data = generatePriceHistory(stockData.price);
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -933,8 +933,10 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
-    // Use the new filtered chart data function
+    // Use the new filtered chart data function with live price
     const chartData = getFilteredChartData(stockData, chartPeriod);
+    
+    console.log('Stock detail view - Generating chart data for period:', chartPeriod, 'with price:', stockData.price);
     
     const chartDomain = getChartDomain(chartData);
 
@@ -969,7 +971,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
+                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}-${stockData.price}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 6))} />
