@@ -404,55 +404,6 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  // Generate 3 months of data
-  function generateThreeMonthHistory(basePrice) {
-    const data = [];
-    let price = basePrice * (0.95 + Math.random() * 0.10);
-    
-    for (let month = 0; month < 3; month++) {
-      for (let week = 0; week < 4; week++) {
-        const trend = (Math.random() - 0.5) * 0.03;
-        const volatility = (Math.random() - 0.5) * 0.05;
-        const change = trend + volatility;
-        price = price * (1 + change);
-        
-        price = Math.max(basePrice * 0.80, Math.min(basePrice * 1.30, price));
-        
-        const date = new Date();
-        date.setMonth(date.getMonth() - (3 - month));
-        date.setDate(1 + week * 7);
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-        
-        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-      }
-    }
-    return data;
-  }
-
-  // Generate 6 months of data
-  function generateSixMonthHistory(basePrice) {
-    const data = [];
-    let price = basePrice * (0.90 + Math.random() * 0.20);
-    
-    for (let month = 0; month < 6; month++) {
-      for (let week = 0; week < 4; week++) {
-        const trend = (Math.random() - 0.5) * 0.025;
-        const volatility = (Math.random() - 0.5) * 0.04;
-        const change = trend + volatility;
-        price = price * (1 + change);
-        
-        price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.40, price));
-        
-        const date = new Date();
-        date.setMonth(date.getMonth() - (6 - month));
-        date.setDate(1 + week * 7);
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-        
-        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-      }
-    }
-    return data;
-  }
 
   // Generate portfolio performance history
   function generatePortfolioHistory() {
