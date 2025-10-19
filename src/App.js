@@ -938,6 +938,14 @@ const ATLStockExchange = () => {
     
       // Wait for user data to load if user is logged in
       if (user && (!users || !users[user] || !users[user].portfolio)) {
+        console.log('User data check:', {
+          user,
+          usersExists: !!users,
+          userExists: !!(users && users[user]),
+          userData: users && users[user],
+          hasPortfolio: !!(users && users[user] && users[user].portfolio)
+        });
+        
         return (
           <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
             <div className="text-center">
@@ -945,6 +953,8 @@ const ATLStockExchange = () => {
               <p className="text-sm text-gray-500 mt-2">User: {user}</p>
               <p className="text-xs text-gray-400 mt-1">Users loaded: {Object.keys(users || {}).length}</p>
               <p className="text-xs text-gray-400 mt-1">User data ready: {users && users[user] ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-gray-400 mt-1">Has portfolio: {users && users[user] && users[user].portfolio ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-gray-400 mt-1">User data keys: {users && users[user] ? Object.keys(users[user]).join(', ') : 'None'}</p>
               <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
             </div>
           </div>
