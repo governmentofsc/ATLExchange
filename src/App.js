@@ -403,14 +403,8 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60);
         break;
       case '1d':
-        // Use static history data but update last point with live price
-        data = (stockData.history || []).map((point, index, array) => {
-          // Only update the last data point with current live price
-          if (index === array.length - 1) {
-            return { ...point, price: stockData.price };
-          }
-          return point;
-        });
+        // Generate fresh data from 12:00 AM to current time with live price
+        data = generatePriceHistory(stockData.price);
         break;
       case '1w':
         data = stockData.extendedHistory || [];
@@ -973,7 +967,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
+                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}-${Math.floor(stockData.price)}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
                     <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 6))} />
@@ -1895,12 +1889,12 @@ const ATLStockExchange = () => {
                     const stock = stocks.find(s => s.ticker === ticker);
                     if (!stock) return null;
                     
-                    // Calculate average cost (simplified - in real app this would track actual purchase prices)
-                    const avgCost = stock.price * (0.95 + Math.random() * 0.1);
+                    // Calculate average cost (use a stable calculation based on ticker)
+                    const avgCost = stock.price * (0.95 + (ticker.charCodeAt(0) % 10) * 0.01);
                     const currentValue = qty * stock.price;
                     const totalCost = qty * avgCost;
                     const pnl = currentValue - totalCost;
-                    const pnlPercent = ((pnl / totalCost) * 100);
+                    const pnlPercent = totalCost > 0 ? ((pnl / totalCost) * 100) : 0;
                     
                     // Calculate % of portfolio
                     const totalPortfolioValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [t, q]) => {
@@ -1908,6 +1902,9 @@ const ATLStockExchange = () => {
                       return sum + (q * (s?.price || 0));
                     }, 0);
                     const portfolioPercent = (currentValue / totalPortfolioValue) * 100;
+                    
+                    // Debug portfolio calculations
+                    console.log(`${ticker}: currentValue=${currentValue}, totalPortfolioValue=${totalPortfolioValue}, portfolioPercent=${portfolioPercent.toFixed(2)}%`);
                     
                     return (
                       <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
@@ -2049,17 +2046,11 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
                 
-                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  <LineChart data={stock.history.map((point, index, array) => {
-                    // Only update the last data point with current live price
-                    if (index === array.length - 1) {
-                      return { ...point, price: stock.price };
-                    }
-                    return point;
-                  })}>
+                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}-${Math.floor(stock.price)}`}>
+                  <LineChart data={generatePriceHistory(stock.price)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(stock.history.length / 8))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history)} type="number" ticks={getYAxisTicks(getChartDomain(stock.history))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 8))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.price))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.price)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
