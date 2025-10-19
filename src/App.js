@@ -249,12 +249,8 @@ const ATLStockExchange = () => {
     const data = [];
     const now = getEasternTime();
     
-    // Start from 12:00 AM ET today
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    
-    // Calculate total minutes from midnight to now
-    const totalMinutes = now.getHours() * 60 + now.getMinutes();
+    // Create a rolling 1-week window (7 days back from now)
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
     // Use seeded random number generator for consistent data
     let seed = Math.floor(basePrice * 1000) % 10000;
@@ -263,30 +259,34 @@ const ATLStockExchange = () => {
       return seed / 233280;
     };
     
-    // Generate data points every 3 minutes from midnight to now
+    // Generate data points every 3 minutes for the past 7 days
+    const totalMinutes = 7 * 24 * 60; // 7 days in minutes
     for (let minutes = 0; minutes <= totalMinutes; minutes += 3) {
-      const time = new Date(startOfDay.getTime() + minutes * 60000);
+      const time = new Date(oneWeekAgo.getTime() + minutes * 60000);
       const hour = time.getHours();
       const minute = time.getMinutes();
+      const day = time.getDate();
+      const month = time.getMonth() + 1;
       
-      // Format time as 12-hour format
+      // Format time as 12-hour format with date
       const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
       const period = hour >= 12 ? 'PM' : 'AM';
-      const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+      const timeStr = `${month}/${day} ${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
       
       // Generate realistic price movement with multiple patterns
-      const progress = minutes / totalMinutes; // 0 to 1
+      const progress = minutes / totalMinutes; // 0 to 1 (week progress)
       
       // Multiple wave patterns for more realistic movement
-      const morningWave = Math.sin(progress * Math.PI * 2) * 0.03; // Morning trend
-      const volatilityWave = Math.sin(progress * Math.PI * 8) * 0.02; // Higher frequency volatility
-      const microMovements = Math.sin(progress * Math.PI * 20) * 0.01; // Micro movements
+      const weeklyTrend = Math.sin(progress * Math.PI * 2) * 0.05; // Weekly trend
+      const dailyWave = Math.sin(progress * Math.PI * 14) * 0.03; // Daily cycles
+      const volatilityWave = Math.sin(progress * Math.PI * 56) * 0.02; // Higher frequency volatility
+      const microMovements = Math.sin(progress * Math.PI * 280) * 0.01; // Micro movements
       
       // Use seeded random for consistent noise
-      const randomNoise = (seededRandom() - 0.5) * (0.01 + progress * 0.02); // More noise later in day
+      const randomNoise = (seededRandom() - 0.5) * (0.01 + progress * 0.02);
       
       // Combine all patterns
-      const totalChange = morningWave + volatilityWave + microMovements + randomNoise;
+      const totalChange = weeklyTrend + dailyWave + volatilityWave + microMovements + randomNoise;
       const price = basePrice * (1 + totalChange);
       
       data.push({
@@ -977,7 +977,7 @@ const ATLStockExchange = () => {
                 <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
                   <LineChart data={chartData}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 10))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 14))} />
                     <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
                     <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
@@ -2056,7 +2056,7 @@ const ATLStockExchange = () => {
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
                   <LineChart data={generatePriceHistory(stock.price)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 12))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.price).length / 14))} />
                     <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.price))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.price)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
