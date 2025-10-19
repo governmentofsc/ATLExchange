@@ -253,6 +253,7 @@ const ATLStockExchange = () => {
       
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
+      setStocks(updatedStocks); // Update local state immediately
     }, updateSpeed); // Use configurable update speed
     
     return () => clearInterval(interval);
@@ -2041,6 +2042,9 @@ const ATLStockExchange = () => {
             const priceChange = stock.price - stock.open;
             const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
+            
+            // Debug: Log price updates
+            console.log(`Stock ${stock.ticker}: $${stock.price.toFixed(2)} (${percentChange}%)`);
             
             return (
               <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
