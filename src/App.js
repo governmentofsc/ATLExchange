@@ -164,7 +164,7 @@ const ATLStockExchange = () => {
         setSelectedStock(liveStockData);
       }
     }
-  }, [stocks]); // Removed selectedStock to prevent infinite loops
+  }, [stocks, selectedStock?.ticker]); // Use ticker instead of full object to prevent infinite loops
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
