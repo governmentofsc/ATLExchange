@@ -159,14 +159,12 @@ const ATLStockExchange = () => {
   // Update selectedStock with live data when stocks change
   useEffect(() => {
     if (selectedStock) {
-      console.log('Updating selectedStock, current:', selectedStock);
       const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
-      console.log('Found live data:', liveStockData);
-      if (liveStockData) {
+      if (liveStockData && liveStockData.price !== selectedStock.price) {
         setSelectedStock(liveStockData);
       }
     }
-  }, [stocks, selectedStock]);
+  }, [stocks]); // Removed selectedStock to prevent infinite loops
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
@@ -558,53 +556,35 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    console.log('BuyStock called with:', { selectedStock, buyQuantity, user });
+    if (!selectedStock || !buyQuantity || !user) return;
     
-    if (!selectedStock || !buyQuantity) {
-      console.log('Buy failed: missing data', { selectedStock, buyQuantity });
-      return;
-    }
+    // Get live stock data
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
+    if (!stockData || !stockData.ticker) return;
     
-    if (!selectedStock.ticker) {
-      console.log('Buy failed: selectedStock has no ticker. Full object:', selectedStock);
-      console.log('Available keys:', Object.keys(selectedStock || {}));
-      return;
-    }
-    
-    if (!user || !users[user]) {
-      console.log('Buy failed: no user data', { user, users });
-      return;
-    }
-    
-    console.log('Buying stock:', selectedStock.ticker, 'at price:', selectedStock.price);
     const quantity = parseInt(buyQuantity);
-    const cost = selectedStock.price * quantity;
+    const cost = stockData.price * quantity;
     if (users[user].balance >= cost) {
-      console.log('User balance:', users[user].balance, 'Cost:', cost);
-      console.log('Selected stock ticker:', selectedStock.ticker);
-      console.log('Current portfolio:', users[user].portfolio);
-      
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
-      const currentHolding = users[user].portfolio[selectedStock.ticker] || 0;
+      const currentHolding = users[user].portfolio[stockData.ticker] || 0;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: currentHolding + quantity
+        [stockData.ticker]: currentHolding + quantity
       };
       
-      console.log('New portfolio:', newPortfolio);
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (purchaseValue / stockData.marketCap) * 100;
+      const priceImpact = (priceImpactPercent / 100) * stockData.price;
+      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
       
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+        if (s.ticker === stockData.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -621,9 +601,9 @@ const ATLStockExchange = () => {
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
-        ticker: selectedStock.ticker,
+        ticker: stockData.ticker,
         quantity: quantity,
-        price: selectedStock.price,
+        price: stockData.price,
         total: cost,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -636,48 +616,39 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!selectedStock || !sellQuantity) {
-      console.log('Sell failed:', { selectedStock, sellQuantity });
-      return;
-    }
+    if (!selectedStock || !sellQuantity || !user) return;
     
-    if (!selectedStock.ticker) {
-      console.log('Sell failed: selectedStock has no ticker:', selectedStock);
-      return;
-    }
+    // Get live stock data
+    const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
+    if (!stockData || !stockData.ticker) return;
     
-    console.log('Selling stock:', selectedStock.ticker, 'at price:', selectedStock.price);
     const quantity = parseInt(sellQuantity);
-    const currentHolding = users[user].portfolio[selectedStock.ticker] || 0;
-    console.log('Current holding:', currentHolding, 'Trying to sell:', quantity);
-    console.log('Selected stock ticker:', selectedStock.ticker);
-    console.log('Current portfolio:', users[user].portfolio);
+    const currentHolding = users[user].portfolio[stockData.ticker] || 0;
     
     if (currentHolding >= quantity) {
-      const proceeds = selectedStock.price * quantity;
+      const proceeds = stockData.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
       const newPortfolio = { 
         ...users[user].portfolio, 
-        [selectedStock.ticker]: currentHolding - quantity
+        [stockData.ticker]: currentHolding - quantity
       };
       
-      console.log('New portfolio after sell:', newPortfolio);
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const priceImpactPercent = (saleValue / stockData.marketCap) * 100;
+      const priceImpact = -(priceImpactPercent / 100) * stockData.price;
+      const newPrice = parseFloat((stockData.price + priceImpact).toFixed(2));
       
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'sell',
-        ticker: selectedStock.ticker,
+        ticker: stockData.ticker,
         quantity: quantity,
-        price: selectedStock.price,
+        price: stockData.price,
         total: proceeds,
         newPrice: newPrice,
         priceImpact: priceImpact
@@ -686,7 +657,7 @@ const ATLStockExchange = () => {
       set(historyRef, tradeRecord);
       
       const updatedStocks = stocks.map(s => {
-        if (s.ticker === selectedStock.ticker) {
+        if (s.ticker === stockData.ticker) {
           const newHigh = Math.max(s.high, newPrice);
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
@@ -951,9 +922,6 @@ const ATLStockExchange = () => {
     try {
       // Find the live stock data from the stocks array for real-time updates
       const stockData = stocks.find(s => s.ticker === selectedStock.ticker) || selectedStock;
-      
-      // Debug logging
-      console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
       
       // Show loading screen if data isn't ready yet
       if (!stockData || stocks.length === 0) {
