@@ -4,6 +4,11 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
 
+// Utility function to get Eastern Time
+const getEasternTime = (date = new Date()) => {
+  return new Date(date.toLocaleString("en-US", {timeZone: "America/New_York"}));
+};
+
 const ATLStockExchange = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [user, setUser] = useState(null);
@@ -185,8 +190,8 @@ const ATLStockExchange = () => {
     if (!isMarketController || !marketRunning) return;
     
     const interval = setInterval(() => {
-      const now = new Date();
-      const dayStartTime = new Date();
+      const now = getEasternTime();
+      const dayStartTime = getEasternTime();
       dayStartTime.setHours(0, 0, 0, 0);
       
       const updatedStocks = stocks.map(stock => {
@@ -256,9 +261,9 @@ const ATLStockExchange = () => {
   function generatePriceHistory(basePrice) {
     const data = [];
     let price = basePrice;
-    const startOfDay = new Date();
+    const startOfDay = getEasternTime();
     startOfDay.setHours(0, 0, 0, 0);
-    const now = new Date();
+    const now = getEasternTime();
     const msFromMidnight = now - startOfDay;
     const minutesFromMidnight = Math.floor(msFromMidnight / 60000);
     
@@ -306,9 +311,9 @@ const ATLStockExchange = () => {
         // Keep price within reasonable bounds
         price = Math.max(basePrice * 0.85, Math.min(basePrice * 1.15, price));
         
-        const date = new Date();
+        const date = getEasternTime();
         date.setDate(date.getDate() - (7 - day));
-        date.setHours(9 + period * 4); // Market hours: 9 AM to 9 PM
+        date.setHours(9 + period * 4); // Market hours: 9 AM to 9 PM ET
         const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(9 + period * 4).toString().padStart(2,'0')}:00`;
         
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
@@ -333,7 +338,7 @@ const ATLStockExchange = () => {
         // Keep within reasonable bounds
         price = Math.max(basePrice * 0.60, Math.min(basePrice * 1.60, price));
         
-        const date = new Date();
+        const date = getEasternTime();
         date.setMonth(date.getMonth() - (12 - month));
         date.setDate(1 + week * 7);
         const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
@@ -348,7 +353,7 @@ const ATLStockExchange = () => {
   function generateMinuteHistory(basePrice, minutes) {
     const data = [];
     let price = basePrice;
-    const now = new Date();
+    const now = getEasternTime();
     const startTime = new Date(now.getTime() - minutes * 60 * 1000);
     
     for (let i = 0; i <= minutes; i++) {
@@ -426,7 +431,7 @@ const ATLStockExchange = () => {
     
     // Generate 30 days of portfolio value history
     for (let day = 30; day >= 0; day--) {
-      const date = new Date();
+      const date = getEasternTime();
       date.setDate(date.getDate() - day);
       const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
       
@@ -1026,6 +1031,9 @@ const ATLStockExchange = () => {
           <span className={`px-2 py-1 rounded text-xs hidden md:inline ${marketRunning ? 'bg-green-600' : 'bg-red-600'}`}>
             MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
           </span>
+          <span className="px-2 py-1 rounded text-xs hidden md:inline bg-blue-600 text-white">
+            {getEasternTime().toLocaleTimeString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit'})} ET
+          </span>
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
           ) : (
@@ -1043,6 +1051,12 @@ const ATLStockExchange = () => {
           <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
           {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
           {isAdmin && isMarketController && <span className="block bg-green-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">MARKET CONTROLLER</span>}
+          <span className={`block px-2 py-1 rounded text-xs mb-2 w-fit ${marketRunning ? 'bg-green-600' : 'bg-red-600'} text-white`}>
+            MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
+          </span>
+          <span className="block bg-blue-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">
+            {getEasternTime().toLocaleTimeString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit'})} ET
+          </span>
           {user ? (
             <button onClick={handleLogout} className="text-red-600">Logout</button>
           ) : (
@@ -1970,7 +1984,7 @@ const ATLStockExchange = () => {
                   <tbody>
                     {tradingHistory.map((trade, idx) => (
                       <tr key={idx} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
-                        <td className="p-2">{new Date(trade.timestamp).toLocaleString()}</td>
+                        <td className="p-2">{getEasternTime(new Date(trade.timestamp)).toLocaleString('en-US', {timeZone: 'America/New_York'})} ET</td>
                         <td className="p-2">
                           <span className={`px-2 py-1 rounded text-xs font-bold ${trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                             {trade.type.toUpperCase()}
