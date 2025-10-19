@@ -166,7 +166,7 @@ const ATLStockExchange = () => {
         setSelectedStock(liveStockData);
       }
     }
-  }, [stocks]);
+  }, [stocks, selectedStock]);
 
   // Only update chart key when stocks change, not on every render
   useEffect(() => {
