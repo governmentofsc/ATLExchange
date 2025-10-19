@@ -67,6 +67,9 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   
   const newData = [...existingData];
   
+  // Start from last known price (or open)
+  let prevPrice = newData.length > 0 ? newData[newData.length - 1].price : openPrice;
+  
   // Add new data points every 1 minute from last existing time to now
   for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
     const time = new Date(startOfDay.getTime() + minutes * 60000);
@@ -78,24 +81,19 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     const period = hour >= 12 ? 'PM' : 'AM';
     const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
     
-    // Generate smooth, realistic price movement
-    const timeOfDay = minutes / 1440; // 0 to 1 based on 24-hour day
-    
-    // Create a deterministic seed based on seedKey/openPrice and time
+    // Random-walk style movement with tiny drift and bounded volatility
+    const timeOfDay = minutes / 1440; // 0..1
     const seed = hashString(seedKey) + minutes;
-    
-    // Deterministic random function
-    const deterministicRandom = (seed) => {
-      let x = Math.sin(seed) * 10000;
-      return x - Math.floor(x);
-    };
-    
-    // Generate smooth, gentle price movement
-    const dailyTrend = Math.sin(timeOfDay * Math.PI * 2) * 0.01; // Gentle daily cycle (1%)
-    const smallNoise = (deterministicRandom(seed) - 0.5) * 0.005; // Very small random variation (0.5%)
-    
-    const totalChange = dailyTrend + smallNoise;
-    const price = openPrice * (1 + totalChange);
+    const deterministicRandom = (s) => { let x = Math.sin(s) * 10000; return x - Math.floor(x); };
+    const drift = Math.sin(timeOfDay * Math.PI * 2) * 0.00015; // ~0.015% drift
+    const volatility = 0.0008; // ~0.08% per minute
+    const noise = (deterministicRandom(seed) - 0.5) * 2; // -1..1
+    const step = drift + volatility * noise;
+    const unclamped = prevPrice * (1 + step);
+    const minP = openPrice * 0.92;
+    const maxP = openPrice * 1.08;
+    const price = Math.max(minP, Math.min(maxP, unclamped));
+    prevPrice = price;
     
     newData.push({
       time: timeStr,
