@@ -120,10 +120,16 @@ const ATLStockExchange = () => {
     });
   }, [user]);
 
-  // Force chart updates when stocks change
+  // Update selectedStock with live data when stocks change
   useEffect(() => {
+    if (selectedStock && stocks.length > 0) {
+      const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
+      if (liveStockData) {
+        setSelectedStock(liveStockData);
+      }
+    }
     setChartKey(prev => prev + 1);
-  }, [stocks]);
+  }, [stocks, selectedStock?.ticker]);
 
   // Market controller system - ensures only one tab controls price updates
   useEffect(() => {
@@ -436,17 +442,42 @@ const ATLStockExchange = () => {
 
   const handleLogin = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
+      // Ensure admin has proper data structure
+      if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
+        console.log('Initializing admin data');
+        const usersRef = ref(database, `users/admin`);
+        set(usersRef, { 
+          password: 'admin', 
+          balance: 1000000, 
+          portfolio: {} 
+        });
+      }
+      
       setUser('admin');
       setIsAdmin(true);
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
     } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
+      // Ensure user has proper data structure
+      const userData = users[loginUsername];
+      if (!userData.balance || !userData.portfolio) {
+        console.log('Initializing user data for:', loginUsername);
+        const usersRef = ref(database, `users/${loginUsername}`);
+        set(usersRef, { 
+          password: userData.password || loginPassword, 
+          balance: userData.balance || 50000, 
+          portfolio: userData.portfolio || {} 
+        });
+      }
+      
       setUser(loginUsername);
       setIsAdmin(false);
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
+    } else {
+      setLoginError('Invalid username or password');
     }
   };
 
@@ -485,7 +516,14 @@ const ATLStockExchange = () => {
   };
 
   const buyStock = () => {
-    if (!selectedStock || !buyQuantity) return;
+    if (!selectedStock || !buyQuantity || !user) return;
+    
+    // Check if user data exists and has required properties
+    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+      console.error('User data incomplete:', users[user]);
+      return;
+    }
+    
     const quantity = parseInt(buyQuantity);
     const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
@@ -538,7 +576,14 @@ const ATLStockExchange = () => {
   };
 
   const sellStock = () => {
-    if (!selectedStock || !sellQuantity) return;
+    if (!selectedStock || !sellQuantity || !user) return;
+    
+    // Check if user data exists and has required properties
+    if (!users[user] || !users[user].balance || !users[user].portfolio) {
+      console.error('User data incomplete:', users[user]);
+      return;
+    }
+    
     const quantity = parseInt(sellQuantity);
     if ((users[user].portfolio[selectedStock.ticker] || 0) >= quantity) {
       const proceeds = selectedStock.price * quantity;
@@ -831,7 +876,9 @@ const ATLStockExchange = () => {
       return (
         <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
           <div className="text-center">
-            <p className="text-lg">Loading...</p>
+            <p className="text-lg">Loading stock data...</p>
+            <p className="text-sm text-gray-500 mt-2">Selected: {selectedStock.ticker}</p>
+            <p className="text-xs text-gray-400 mt-1">Stocks loaded: {stocks.length}</p>
             <button onClick={() => setSelectedStock(null)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Back</button>
           </div>
         </div>
