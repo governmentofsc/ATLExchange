@@ -41,6 +41,8 @@ const ATLStockExchange = () => {
   const [adminSharesUser, setAdminSharesUser] = useState('');
   const [adminSharesStock, setAdminSharesStock] = useState('');
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
+  const [splitStock, setSplitStock] = useState('');
+  const [splitRatio, setSplitRatio] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
@@ -48,6 +50,7 @@ const ATLStockExchange = () => {
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
+  const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -99,6 +102,23 @@ const ATLStockExchange = () => {
 
     setInitialized(true);
   }, [initialized]);
+
+  // Listen for trading history
+  useEffect(() => {
+    if (!user) return;
+    
+    const historyRef = ref(database, `tradingHistory/${user}`);
+    onValue(historyRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Convert object to array and sort by timestamp
+        const historyArray = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+        setTradingHistory(historyArray);
+      } else {
+        setTradingHistory([]);
+      }
+    });
+  }, [user]);
 
   // Force chart updates when stocks change
   useEffect(() => {
@@ -263,18 +283,24 @@ const ATLStockExchange = () => {
 
   function generateExtendedHistory(basePrice) {
     const data = [];
-    let price = basePrice * (0.90 + Math.random() * 0.20);
+    let price = basePrice * (0.95 + Math.random() * 0.10); // Start closer to base price
     
+    // Generate 7 days of data with 4-hour intervals
     for (let day = 0; day < 7; day++) {
       for (let period = 0; period < 6; period++) {
-        // Realistic random walk with volatility
-        const randomChange = (Math.random() - 0.5) * 0.06; // 6% volatility
-        price = price * (1 + randomChange);
+        // More realistic price movement with trend
+        const trend = (Math.random() - 0.5) * 0.02; // Small trend component
+        const volatility = (Math.random() - 0.5) * 0.04; // 4% volatility
+        const change = trend + volatility;
+        price = price * (1 + change);
+        
+        // Keep price within reasonable bounds
+        price = Math.max(basePrice * 0.85, Math.min(basePrice * 1.15, price));
         
         const date = new Date();
         date.setDate(date.getDate() - (7 - day));
-        date.setHours(date.getHours() + period * 4);
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(period * 4).toString().padStart(2,'0')}:00`;
+        date.setHours(9 + period * 4); // Market hours: 9 AM to 9 PM
+        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(9 + period * 4).toString().padStart(2,'0')}:00`;
         
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
@@ -284,20 +310,23 @@ const ATLStockExchange = () => {
 
   function generateYearHistory(basePrice) {
     const data = [];
-    let price = basePrice * (0.80 + Math.random() * 0.40);
+    let price = basePrice * (0.90 + Math.random() * 0.20); // Start closer to base price
     
-    for (let day = 0; day < 60; day++) {
-      for (let period = 0; period < 4; period++) {
-        // Realistic random walk - no artificial trends, pure volatility
-        const randomChange = (Math.random() - 0.5) * 0.08; // 8% volatility per period
-        price = price * (1 + randomChange);
+    // Generate 12 months of data with weekly intervals
+    for (let month = 0; month < 12; month++) {
+      for (let week = 0; week < 4; week++) {
+        // Add seasonal trends and realistic volatility
+        const seasonalTrend = Math.sin((month * 4 + week) * Math.PI / 24) * 0.01; // Small seasonal component
+        const randomChange = (Math.random() - 0.5) * 0.06; // 6% volatility
+        const change = seasonalTrend + randomChange;
+        price = price * (1 + change);
         
         // Keep within reasonable bounds
-        price = Math.max(basePrice * 0.50, Math.min(basePrice * 1.80, price));
+        price = Math.max(basePrice * 0.60, Math.min(basePrice * 1.60, price));
         
         const date = new Date();
-        date.setDate(date.getDate() - (60 - day));
-        date.setHours(date.getHours() + period * 6);
+        date.setMonth(date.getMonth() - (12 - month));
+        date.setDate(1 + week * 7);
         const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
         
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
@@ -390,6 +419,21 @@ const ATLStockExchange = () => {
       
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
+      
+      // Record trade in history
+      const tradeRecord = {
+        timestamp: Date.now(),
+        type: 'buy',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        price: selectedStock.price,
+        total: cost,
+        newPrice: newPrice,
+        priceImpact: priceImpact
+      };
+      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
+      set(historyRef, tradeRecord);
+      
       setBuyQuantity('');
     }
   };
@@ -407,20 +451,19 @@ const ATLStockExchange = () => {
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
       
-      // Log trade if over $500M
-      if (proceeds > 500000000) {
-        const tradeRecord = {
-          timestamp: new Date().toISOString(),
-          user: user,
-          type: 'sell',
-          ticker: selectedStock.ticker,
-          quantity: quantity,
-          price: selectedStock.price,
-          total: proceeds
-        };
-        const historyRef = ref(database, `tradeHistory/${Date.now()}`);
-        set(historyRef, tradeRecord);
-      }
+      // Record trade in history
+      const tradeRecord = {
+        timestamp: Date.now(),
+        type: 'sell',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        price: selectedStock.price,
+        total: proceeds,
+        newPrice: newPrice,
+        priceImpact: priceImpact
+      };
+      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
+      set(historyRef, tradeRecord);
       
       // Calculate price impact based on market cap
       const saleValue = proceeds;
@@ -583,6 +626,51 @@ const ATLStockExchange = () => {
     set(marketStateRef, { running: false });
   };
 
+  const executeStockSplit = () => {
+    if (!splitStock || !splitRatio) return;
+    
+    const ratio = parseFloat(splitRatio);
+    if (ratio <= 0) return;
+    
+    const updatedStocks = stocks.map(s => {
+      if (s.ticker === splitStock) {
+        const newPrice = s.price / ratio;
+        const newOpen = s.open / ratio;
+        const newHigh = s.high / ratio;
+        const newLow = s.low / ratio;
+        const newHigh52w = s.high52w / ratio;
+        const newLow52w = s.low52w / ratio;
+        
+        return { 
+          ...s, 
+          price: parseFloat(newPrice.toFixed(2)),
+          open: parseFloat(newOpen.toFixed(2)),
+          high: parseFloat(newHigh.toFixed(2)),
+          low: parseFloat(newLow.toFixed(2)),
+          high52w: parseFloat(newHigh52w.toFixed(2)),
+          low52w: parseFloat(newLow52w.toFixed(2))
+        };
+      }
+      return s;
+    });
+    
+    // Update all user portfolios to reflect the split
+    const updatedUsers = { ...users };
+    Object.keys(updatedUsers).forEach(username => {
+      if (updatedUsers[username].portfolio[splitStock]) {
+        updatedUsers[username].portfolio[splitStock] *= ratio;
+      }
+    });
+    
+    const stocksRef = ref(database, 'stocks');
+    const usersRef = ref(database, 'users');
+    set(stocksRef, updatedStocks);
+    set(usersRef, updatedUsers);
+    
+    setSplitStock('');
+    setSplitRatio('');
+  };
+
   const getFilteredStocks = () => {
     let filtered = stocks;
     
@@ -669,9 +757,28 @@ const ATLStockExchange = () => {
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
     
     let chartData = stockData.history || [];
-    if (chartPeriod === '1w') chartData = stockData.extendedHistory || [];
-    if (chartPeriod === '1m') chartData = stockData.extendedHistory || [];
-    if (chartPeriod === '1y') chartData = stockData.yearHistory || [];
+    
+    // Select appropriate data based on timeframe
+    switch(chartPeriod) {
+      case '1m':
+      case '5m':
+      case '15m':
+      case '1h':
+        chartData = stockData.history || []; // Use real-time data for short timeframes
+        break;
+      case '1d':
+        chartData = stockData.history || [];
+        break;
+      case '1w':
+      case '1M':
+        chartData = stockData.extendedHistory || [];
+        break;
+      case '1y':
+        chartData = stockData.yearHistory || [];
+        break;
+      default:
+        chartData = stockData.history || [];
+    }
     
     const chartDomain = getChartDomain(chartData);
 
@@ -699,9 +806,9 @@ const ATLStockExchange = () => {
                 <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
               </div>
               
-              <div className="mb-4 flex gap-2">
-                {['1d', '1w', '1m', '1y'].map(period => (
-                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period.toUpperCase()}</button>
+              <div className="mb-4 flex gap-2 flex-wrap">
+                {['1m', '5m', '15m', '1h', '1d', '1w', '1M', '1y'].map(period => (
+                  <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period}</button>
                 ))}
               </div>
 
@@ -838,6 +945,7 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
           <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
           <button onClick={() => setAdminTab('shares')} className={`px-4 py-2 rounded ${adminTab === 'shares' ? 'bg-white text-blue-600' : ''}`}>Buy/Sell Shares</button>
+          <button onClick={() => setAdminTab('splits')} className={`px-4 py-2 rounded ${adminTab === 'splits' ? 'bg-white text-blue-600' : ''}`}>Stock Splits</button>
           <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Speed Settings</button>
           <button onClick={() => setAdminTab('market')} className={`px-4 py-2 rounded ${adminTab === 'market' ? 'bg-white text-blue-600' : ''}`}>Market Control</button>
         </div>
@@ -907,6 +1015,73 @@ const ATLStockExchange = () => {
             <div className="grid grid-cols-2 gap-2">
               <button onClick={adminGiveShares} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Give Shares</button>
               <button onClick={adminRemoveShares} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Remove Shares</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'splits' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Stock Splits</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">Select Stock</label>
+                <select value={splitStock} onChange={(e) => setSplitStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                  <option value="">Select Stock</option>
+                  {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker}) - ${s.price.toFixed(2)}</option>)}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold mb-2">Split Ratio</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g., 2 for 2-for-1 split" 
+                  value={splitRatio} 
+                  onChange={(e) => setSplitRatio(e.target.value)} 
+                  className={`w-full p-2 mb-4 border rounded ${inputClass}`}
+                  min="0.1"
+                  step="0.1"
+                />
+                <p className="text-sm text-gray-600 mb-4">
+                  Enter the split ratio (e.g., 2 for 2-for-1 split, 0.5 for reverse split)
+                </p>
+              </div>
+              
+              {splitStock && splitRatio && (
+                <div className="bg-blue-50 p-4 rounded mb-4">
+                  <h3 className="font-bold mb-2">Split Preview:</h3>
+                  <p className="text-sm">
+                    <strong>{stocks.find(s => s.ticker === splitStock)?.name}</strong> will split {splitRatio}x-for-1
+                  </p>
+                  <p className="text-sm">
+                    Current price: <strong>${stocks.find(s => s.ticker === splitStock)?.price.toFixed(2)}</strong> → 
+                    New price: <strong>${(stocks.find(s => s.ticker === splitStock)?.price / parseFloat(splitRatio)).toFixed(2)}</strong>
+                  </p>
+                  <p className="text-sm">
+                    All shareholders will receive {splitRatio}x more shares at the adjusted price
+                  </p>
+                </div>
+              )}
+              
+              <button 
+                onClick={executeStockSplit} 
+                disabled={!splitStock || !splitRatio}
+                className={`w-full p-2 rounded font-bold ${!splitStock || !splitRatio ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+              >
+                Execute Stock Split
+              </button>
+              
+              <div className="bg-yellow-50 p-4 rounded">
+                <h3 className="font-bold mb-2">⚠️ Important:</h3>
+                <ul className="text-sm space-y-1">
+                  <li>• Stock splits are irreversible</li>
+                  <li>• All prices will be adjusted proportionally</li>
+                  <li>• All user portfolios will be updated automatically</li>
+                  <li>• This action affects all users immediately</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -1056,13 +1231,14 @@ const ATLStockExchange = () => {
           <div className="mb-6 flex gap-2">
             <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>My Portfolio</button>
             <button onClick={() => setAdminTab('leaderboard')} className={`px-4 py-2 rounded font-bold ${adminTab === 'leaderboard' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Leaderboard</button>
+            <button onClick={() => setAdminTab('history')} className={`px-4 py-2 rounded font-bold ${adminTab === 'history' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Trading History</button>
           </div>
         )}
 
         {user && adminTab === 'portfolio' && (
           <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
             <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <div className="p-4 bg-blue-600 text-white rounded">
                 <p className="text-sm opacity-75">Cash</p>
                 <p className="text-2xl font-bold">${(users[user]?.balance || 0).toFixed(2)}</p>
@@ -1080,6 +1256,76 @@ const ATLStockExchange = () => {
                   const stock = stocks.find(s => s.ticker === ticker);
                   return sum + (qty * (stock?.price || 0));
                 }, 0)).toFixed(2)}</p>
+              </div>
+              <div className="p-4 bg-orange-600 text-white rounded">
+                <p className="text-sm opacity-75">Total Trades</p>
+                <p className="text-2xl font-bold">{tradingHistory.length}</p>
+              </div>
+            </div>
+
+            {/* Enhanced Analytics */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Trading Performance</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Buy Orders:</span>
+                    <span className="font-bold text-green-600">{tradingHistory.filter(t => t.type === 'buy').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Sell Orders:</span>
+                    <span className="font-bold text-red-600">{tradingHistory.filter(t => t.type === 'sell').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Volume:</span>
+                    <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + t.total, 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Portfolio Allocation</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Cash %:</span>
+                    <span className="font-bold">{((users[user]?.balance || 0) / ((users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                      const stock = stocks.find(s => s.ticker === ticker);
+                      return sum + (qty * (stock?.price || 0));
+                    }, 0)) * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Stocks %:</span>
+                    <span className="font-bold">{(100 - ((users[user]?.balance || 0) / ((users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                      const stock = stocks.find(s => s.ticker === ticker);
+                      return sum + (qty * (stock?.price || 0));
+                    }, 0)) * 100)).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Diversification:</span>
+                    <span className="font-bold">{Object.keys(users[user]?.portfolio || {}).length} stocks</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Market Impact</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Avg Price Impact:</span>
+                    <span className="font-bold">${(tradingHistory.reduce((sum, t) => sum + Math.abs(t.priceImpact || 0), 0) / Math.max(tradingHistory.length, 1)).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Largest Trade:</span>
+                    <span className="font-bold">${Math.max(...tradingHistory.map(t => t.total), 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Most Traded:</span>
+                    <span className="font-bold">{tradingHistory.length > 0 ? Object.entries(tradingHistory.reduce((acc, t) => {
+                      acc[t.ticker] = (acc[t.ticker] || 0) + 1;
+                      return acc;
+                    }, {})).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A' : 'N/A'}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1150,6 +1396,50 @@ const ATLStockExchange = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {user && adminTab === 'history' && (
+          <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
+            <h2 className="text-2xl font-bold mb-4">Trading History</h2>
+            {tradingHistory.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No trades yet. Start trading to see your history here!</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
+                    <tr>
+                      <th className="p-2 text-left">Date/Time</th>
+                      <th className="p-2 text-left">Type</th>
+                      <th className="p-2 text-left">Stock</th>
+                      <th className="p-2 text-right">Quantity</th>
+                      <th className="p-2 text-right">Price</th>
+                      <th className="p-2 text-right">Total</th>
+                      <th className="p-2 text-right">Price Impact</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tradingHistory.map((trade, idx) => (
+                      <tr key={idx} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
+                        <td className="p-2">{new Date(trade.timestamp).toLocaleString()}</td>
+                        <td className="p-2">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                            {trade.type.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-2 font-bold">{trade.ticker}</td>
+                        <td className="p-2 text-right">{trade.quantity}</td>
+                        <td className="p-2 text-right">${trade.price.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${trade.total.toFixed(2)}</td>
+                        <td className={`p-2 text-right ${trade.priceImpact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {trade.priceImpact >= 0 ? '+' : ''}${trade.priceImpact.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
