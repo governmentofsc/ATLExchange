@@ -3247,14 +3247,14 @@ const ATLStockExchange = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                        <span className="text-xs bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">
+                        <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
                           Vol: {formatNumber(stock.marketCap / stock.price)}
                         </span>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-white text-green-700 border border-green-200 dark:bg-green-900 dark:text-green-200 dark:border-green-700' : 'bg-white text-red-700 border border-red-200 dark:bg-red-900 dark:text-red-200 dark:border-red-700'}`}>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
                         {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
                         {percentChange >= 0 ? '+' : ''}{percentChange}%
                       </div>
