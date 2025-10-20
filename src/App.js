@@ -1,31 +1,168 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Menu, X, Moon, Sun, LogOut } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Users, Activity, AlertCircle,
+  Bell, Settings, BarChart3, PieChart, Calculator, Target, Zap, Shield, Crown, Star, Award, Trophy,
+  Download, Upload, RefreshCw, Filter, Search, Eye, EyeOff, Lock, Unlock, Bookmark, Heart,
+  MessageSquare, Share2, Copy, ExternalLink, Calendar, Clock, Globe, Wifi, WifiOff
+} from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
 
-// Utility function to get Eastern Time
+// Advanced Constants
+const MARKET_HOURS = { open: 9, close: 16, preMarket: 4, afterHours: 20 };
+const UPDATE_INTERVALS = {
+  PRICE: 1000,
+  CHART: 5000,
+  HEARTBEAT: 5000,
+  NEWS: 30000,
+  LEADERBOARD: 10000
+};
+const PRICE_BOUNDS = {
+  DAILY_MIN: 0.96,
+  DAILY_MAX: 1.04,
+  TRADE_IMPACT_MAX: 0.02,
+  CIRCUIT_BREAKER: 0.20 // 20% circuit breaker
+};
+const TRADING_FEES = {
+  COMMISSION: 0.001, // 0.1% commission
+  SPREAD: 0.0005, // 0.05% spread
+  MINIMUM: 1.00 // $1 minimum fee
+};
+const USER_LEVELS = {
+  BRONZE: { min: 0, max: 50000, name: 'Bronze Trader', color: '#CD7F32' },
+  SILVER: { min: 50000, max: 250000, name: 'Silver Trader', color: '#C0C0C0' },
+  GOLD: { min: 250000, max: 1000000, name: 'Gold Trader', color: '#FFD700' },
+  PLATINUM: { min: 1000000, max: 5000000, name: 'Platinum Trader', color: '#E5E4E2' },
+  DIAMOND: { min: 5000000, max: Infinity, name: 'Diamond Trader', color: '#B9F2FF' }
+};
+const CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff0000'];
+
+// Utility functions
 const getEasternTime = (date = new Date()) => {
   return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
 };
 
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
+const formatNumber = (num) => {
+  if (num >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
+  if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+  if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+  return num.toFixed(2);
+};
+
+const calculatePercentChange = (current, previous) => {
+  return ((current - previous) / previous * 100).toFixed(2);
+};
+
+const isMarketOpen = () => {
+  const now = getEasternTime();
+  const hour = now.getHours();
+  const day = now.getDay(); // 0 = Sunday, 6 = Saturday
+
+  // Market closed on weekends
+  if (day === 0 || day === 6) return false;
+
+  return hour >= MARKET_HOURS.open && hour <= MARKET_HOURS.close;
+};
+
+const getMarketStatus = () => {
+  const now = getEasternTime();
+  const hour = now.getHours();
+  const day = now.getDay();
+
+  if (day === 0 || day === 6) return { status: 'closed', message: 'Weekend - Market Closed' };
+  if (hour < MARKET_HOURS.preMarket) return { status: 'closed', message: 'Pre-Market Opens at 4:00 AM ET' };
+  if (hour < MARKET_HOURS.open) return { status: 'premarket', message: 'Pre-Market Trading' };
+  if (hour <= MARKET_HOURS.close) return { status: 'open', message: 'Market Open' };
+  if (hour <= MARKET_HOURS.afterHours) return { status: 'afterhours', message: 'After-Hours Trading' };
+  return { status: 'closed', message: 'Market Closed' };
+};
+
+const getUserLevel = (totalValue) => {
+  for (const [level, config] of Object.entries(USER_LEVELS)) {
+    if (totalValue >= config.min && totalValue < config.max) {
+      return { level, ...config };
+    }
+  }
+  return USER_LEVELS.BRONZE;
+};
+
+const calculateTradingFee = (amount) => {
+  const fee = Math.max(amount * TRADING_FEES.COMMISSION, TRADING_FEES.MINIMUM);
+  return parseFloat(fee.toFixed(2));
+};
+
+const generateNewsHeadline = (stock, priceChange) => {
+  const headlines = [
+    `${stock.ticker} ${priceChange > 0 ? 'surges' : 'drops'} ${Math.abs(priceChange).toFixed(1)}% in active trading`,
+    `Investors ${priceChange > 0 ? 'bullish' : 'bearish'} on ${stock.name} as shares ${priceChange > 0 ? 'climb' : 'fall'}`,
+    `${stock.name} stock ${priceChange > 0 ? 'rallies' : 'declines'} amid ${priceChange > 0 ? 'positive' : 'negative'} market sentiment`,
+    `Breaking: ${stock.ticker} sees ${priceChange > 0 ? 'strong gains' : 'significant losses'} in today's session`
+  ];
+  return headlines[Math.floor(Math.random() * headlines.length)];
+};
+
+const calculateRSI = (prices, period = 14) => {
+  if (prices.length < period) return 50;
+
+  let gains = 0, losses = 0;
+  for (let i = 1; i < period; i++) {
+    const change = prices[i] - prices[i - 1];
+    if (change > 0) gains += change;
+    else losses -= change;
+  }
+
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+};
+
 // Store static chart data to prevent regeneration - moved outside component
-// Clear cache to apply new randomization algorithm
 let staticChartData = {};
 
+// Performance optimization: Debounce function
+const debounce = (func, wait) => {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
+
+// Enhanced price history generation with better performance and caching
 function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   const now = getEasternTime();
   const totalMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Normalize parameters: allow (open), (open, current), or (open, current, seedKey) or (open, seedKey)
+  // Normalize parameters with better type checking and validation
   let currentPrice = openPrice;
   let seedKey = '';
+
   if (typeof currentOrSeed === 'number') {
     currentPrice = currentOrSeed;
     seedKey = typeof maybeSeedKey === 'string' ? maybeSeedKey : '';
   } else if (typeof currentOrSeed === 'string') {
     seedKey = currentOrSeed;
   }
+
+  // Validate inputs
+  if (!openPrice || openPrice <= 0) return [];
+  if (!currentPrice || currentPrice <= 0) currentPrice = openPrice;
 
   // Enhanced seeding with more randomness
   const hashString = (str) => {
@@ -161,12 +298,19 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 }
 
 const ATLStockExchange = () => {
-  // Clear chart cache on component mount to show new randomization
+  // Performance optimization: Clear chart cache on component mount
   React.useEffect(() => {
-    staticChartData = {}; // Clear cache for new algorithm
+    staticChartData = {};
   }, []);
 
-  const [darkMode, setDarkMode] = useState(false);
+  // Enhanced state management with better organization
+
+  const [darkMode, setDarkMode] = useState(() => {
+    // Initialize dark mode from localStorage
+    return localStorage.getItem('darkMode') === 'true';
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -218,27 +362,328 @@ const ATLStockExchange = () => {
   const [alertType, setAlertType] = useState('above');
   const [notifications, setNotifications] = useState([]);
 
+  // Advanced Features State
+  const [watchlist, setWatchlist] = useState([]);
+  const [newsItems, setNewsItems] = useState([]);
+  const [showAdvancedChart, setShowAdvancedChart] = useState(false);
+  const [chartType, setChartType] = useState('line'); // line, area, candlestick
+  const [showTechnicalIndicators, setShowTechnicalIndicators] = useState(false);
+  const [portfolioView, setPortfolioView] = useState('overview'); // overview, performance, allocation
+  const [sortBy, setSortBy] = useState('marketCap'); // marketCap, price, change, volume
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [showOnlyWatchlist, setShowOnlyWatchlist] = useState(false);
+  const [tradingMode, setTradingMode] = useState('market'); // market, limit, stop
+  const [limitPrice, setLimitPrice] = useState('');
+  const [stopPrice, setStopPrice] = useState('');
+  const [orderExpiry, setOrderExpiry] = useState('day'); // day, gtc (good till cancelled)
+  const [showPaperTrading, setShowPaperTrading] = useState(false);
+  const [paperBalance, setPaperBalance] = useState(100000);
+  const [paperPortfolio, setPaperPortfolio] = useState({});
+  const [achievements, setAchievements] = useState([]);
+  const [socialFeed, setSocialFeed] = useState([]);
+  const [userPreferences, setUserPreferences] = useState({
+    theme: 'auto',
+    notifications: true,
+    soundEffects: false,
+    autoRefresh: true,
+    compactView: false
+  });
+  const [connectionStatus, setConnectionStatus] = useState('connected');
+  const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+  // Refs for advanced features
+  const chartRef = useRef(null);
+  const audioRef = useRef(null);
+
+  // Computed values with memoization for better performance
+  const totalMarketCap = useMemo(() => {
+    return stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
+  }, [stocks]);
+
+  const marketStats = useMemo(() => {
+    if (stocks.length === 0) return { avgPrice: 0, totalVolume: 0, gainers: 0, losers: 0 };
+
+    const avgPrice = stocks.reduce((sum, stock) => sum + stock.price, 0) / stocks.length;
+    const gainers = stocks.filter(stock => stock.price > stock.open).length;
+    const losers = stocks.filter(stock => stock.price < stock.open).length;
+
+    return {
+      avgPrice,
+      totalVolume: Object.values(users).reduce((sum, user) => {
+        return sum + Object.values(user.portfolio || {}).reduce((userSum, qty) => userSum + qty, 0);
+      }, 0),
+      gainers,
+      losers
+    };
+  }, [stocks, users]);
+
+  const userPortfolioValue = useMemo(() => {
+    if (!user || !users[user]) return 0;
+    return Object.entries(users[user].portfolio || {}).reduce((sum, [ticker, qty]) => {
+      const stock = stocks.find(s => s.ticker === ticker);
+      return sum + (qty * (stock?.price || 0));
+    }, 0);
+  }, [user, users, stocks]);
+
+  const filteredStocks = useMemo(() => {
+    let filtered = stocks;
+
+    // Apply watchlist filter
+    if (showOnlyWatchlist && watchlist.length > 0) {
+      filtered = filtered.filter(s => watchlist.includes(s.ticker));
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(s =>
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.ticker.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply category filters
+    if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
+    if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
+    if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
+    if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
+    if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
+    if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
+    if (stockFilter === 'gainers') filtered = filtered.filter(s => s.price > s.open);
+    if (stockFilter === 'losers') filtered = filtered.filter(s => s.price < s.open);
+    if (stockFilter === 'active') filtered = filtered.sort((a, b) => (b.marketCap / b.price) - (a.marketCap / a.price));
+
+    // Advanced sorting
+    filtered.sort((a, b) => {
+      let aVal, bVal;
+      switch (sortBy) {
+        case 'price':
+          aVal = a.price;
+          bVal = b.price;
+          break;
+        case 'change':
+          aVal = ((a.price - a.open) / a.open) * 100;
+          bVal = ((b.price - b.open) / b.open) * 100;
+          break;
+        case 'volume':
+          aVal = a.marketCap / a.price;
+          bVal = b.marketCap / b.price;
+          break;
+        case 'name':
+          aVal = a.name;
+          bVal = b.name;
+          break;
+        default: // marketCap
+          aVal = a.marketCap;
+          bVal = b.marketCap;
+      }
+
+      if (typeof aVal === 'string') {
+        return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+
+    return filtered.slice(0, 50); // Increased limit for better browsing
+  }, [stocks, searchQuery, stockFilter, sortBy, sortOrder, showOnlyWatchlist, watchlist]);
+
+  const userLevel = useMemo(() => {
+    if (!user || !users[user]) return USER_LEVELS.BRONZE;
+    const totalValue = users[user].balance + userPortfolioValue;
+    return getUserLevel(totalValue);
+  }, [user, users, userPortfolioValue]);
+
+  const portfolioAllocation = useMemo(() => {
+    if (!user || !users[user]) return [];
+
+    const portfolio = users[user].portfolio || {};
+    const totalValue = users[user].balance + userPortfolioValue;
+
+    const allocation = Object.entries(portfolio).map(([ticker, qty]) => {
+      const stock = stocks.find(s => s.ticker === ticker);
+      if (!stock) return null;
+
+      const value = qty * stock.price;
+      const percentage = (value / totalValue) * 100;
+
+      return {
+        ticker,
+        name: stock.name,
+        value,
+        percentage,
+        shares: qty,
+        price: stock.price
+      };
+    }).filter(Boolean);
+
+    // Add cash as allocation
+    if (users[user].balance > 0) {
+      allocation.push({
+        ticker: 'CASH',
+        name: 'Cash',
+        value: users[user].balance,
+        percentage: (users[user].balance / totalValue) * 100,
+        shares: 1,
+        price: users[user].balance
+      });
+    }
+
+    return allocation.sort((a, b) => b.percentage - a.percentage);
+  }, [user, users, stocks, userPortfolioValue]);
+
+  const topMovers = useMemo(() => {
+    const movers = stocks.map(stock => ({
+      ...stock,
+      change: ((stock.price - stock.open) / stock.open) * 100
+    }));
+
+    const gainers = movers.filter(s => s.change > 0).sort((a, b) => b.change - a.change).slice(0, 5);
+    const losers = movers.filter(s => s.change < 0).sort((a, b) => a.change - b.change).slice(0, 5);
+
+    return { gainers, losers };
+  }, [stocks]);
+
+  // Debounced search for better performance
+  const debouncedSearch = useCallback(
+    debounce((query) => setSearchQuery(query), 300),
+    []
+  );
+
+  // Persist dark mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode.toString());
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ctrl/Cmd + D for dark mode toggle
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        setDarkMode(prev => !prev);
+      }
+      // Escape to close modals
+      if (e.key === 'Escape') {
+        setShowLoginModal(false);
+        setShowSignupModal(false);
+        setSelectedStock(null);
+      }
+      // Ctrl/Cmd + K for search focus
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector('input[placeholder="Search stocks..."]')?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  // Auto-dismiss notifications after 10 seconds
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const timer = setTimeout(() => {
+        setNotifications(prev => prev.slice(1));
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications]);
+
+  // Generate news items based on stock movements
+  useEffect(() => {
+    const generateNews = () => {
+      const significantMovers = stocks.filter(stock => {
+        const change = Math.abs(((stock.price - stock.open) / stock.open) * 100);
+        return change > 2; // 2% or more movement
+      });
+
+      if (significantMovers.length > 0) {
+        const randomStock = significantMovers[Math.floor(Math.random() * significantMovers.length)];
+        const priceChange = ((randomStock.price - randomStock.open) / randomStock.open) * 100;
+
+        const newsItem = {
+          id: Date.now(),
+          headline: generateNewsHeadline(randomStock, priceChange),
+          ticker: randomStock.ticker,
+          timestamp: Date.now(),
+          type: priceChange > 0 ? 'positive' : 'negative'
+        };
+
+        setNewsItems(prev => [newsItem, ...prev.slice(0, 19)]); // Keep last 20 news items
+      }
+    };
+
+    const newsInterval = setInterval(generateNews, UPDATE_INTERVALS.NEWS);
+    return () => clearInterval(newsInterval);
+  }, [stocks]);
+
+  // Connection status monitoring
+  useEffect(() => {
+    const checkConnection = () => {
+      setConnectionStatus(navigator.onLine ? 'connected' : 'disconnected');
+      setLastUpdate(Date.now());
+    };
+
+    window.addEventListener('online', checkConnection);
+    window.addEventListener('offline', checkConnection);
+
+    const statusInterval = setInterval(checkConnection, 5000);
+
+    return () => {
+      window.removeEventListener('online', checkConnection);
+      window.removeEventListener('offline', checkConnection);
+      clearInterval(statusInterval);
+    };
+  }, []);
+
+  // Achievement tracking
+  useEffect(() => {
+    if (!user || !users[user]) return;
+
+    const portfolio = users[user].portfolio || {};
+    const totalValue = users[user].balance + userPortfolioValue;
+    const stockCount = Object.keys(portfolio).length;
+
+    // Check for achievements
+    if (totalValue >= 1000000 && !achievements.some(a => a.title === 'Millionaire')) {
+      generateAchievement('millionaire', { value: totalValue });
+    }
+
+    if (stockCount >= 5 && !achievements.some(a => a.title === 'Diversified')) {
+      generateAchievement('diversified', { count: stockCount });
+    }
+  }, [user, users, userPortfolioValue, achievements, generateAchievement]);
+
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
     const marketStateRef = ref(database, 'marketState');
 
     onValue(stocksRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setStocks(data);
-      } else if (!initialized) {
-        const initialStocks = [
-          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
-          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
-          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
-          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
-          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
-          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
-          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
-          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
-        ];
-        set(stocksRef, initialStocks);
+      try {
+        const data = snapshot.val();
+        if (data) {
+          setStocks(data);
+          setError(null);
+        } else if (!initialized) {
+          const initialStocks = [
+            { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
+            { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
+            { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
+            { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
+            { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
+            { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
+            { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
+            { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
+          ];
+          set(stocksRef, initialStocks);
+        }
+      } catch (error) {
+        setError('Failed to load stock data');
       }
     });
 
@@ -267,6 +712,7 @@ const ATLStockExchange = () => {
     });
 
     setInitialized(true);
+    setLoading(false);
   }, [initialized]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Listen for trading history
@@ -838,18 +1284,32 @@ const ATLStockExchange = () => {
     setSelectedStock(null);
   };
 
-  const buyStock = () => {
-    if (!selectedStock || !buyQuantity || !user) return;
+  const buyStock = useCallback(() => {
+    // Enhanced validation with user feedback
+    if (!selectedStock || !buyQuantity || !user) {
+      setNotifications(prev => [...prev, '⚠️ Please select a stock and enter quantity']);
+      return;
+    }
 
-    // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
-      // console.error('User data incomplete:', users[user]);
+      setNotifications(prev => [...prev, '❌ User data not loaded. Please try again.']);
       return;
     }
 
     const quantity = parseInt(buyQuantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      setNotifications(prev => [...prev, '⚠️ Please enter a valid quantity']);
+      return;
+    }
+
     const cost = selectedStock.price * quantity;
-    if (users[user].balance >= cost) {
+
+    if (users[user].balance < cost) {
+      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(cost - users[user].balance)} more`]);
+      return;
+    }
+
+    try {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const currentPortfolio = users[user].portfolio || {};
@@ -857,9 +1317,11 @@ const ATLStockExchange = () => {
         ...currentPortfolio,
         [selectedStock.ticker]: (currentPortfolio[selectedStock.ticker] || 0) + quantity
       };
+
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
 
-      // Clear the input
+      // Success notification
+      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(cost)}`]);
       setBuyQuantity('');
 
       // Calculate realistic price impact based on market cap and liquidity
@@ -906,22 +1368,38 @@ const ATLStockExchange = () => {
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
 
-      setBuyQuantity('');
+    } catch (error) {
+      setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  };
+  }, [selectedStock, buyQuantity, user, users, stocks]);
 
-  const sellStock = () => {
-    if (!selectedStock || !sellQuantity || !user) return;
+  const sellStock = useCallback(() => {
+    // Enhanced validation with user feedback
+    if (!selectedStock || !sellQuantity || !user) {
+      setNotifications(prev => [...prev, '⚠️ Please select a stock and enter quantity']);
+      return;
+    }
 
-    // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
-      // console.error('User data incomplete:', users[user]);
+      setNotifications(prev => [...prev, '❌ User data not loaded. Please try again.']);
       return;
     }
 
     const quantity = parseInt(sellQuantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      setNotifications(prev => [...prev, '⚠️ Please enter a valid quantity']);
+      return;
+    }
+
     const currentPortfolio = users[user].portfolio || {};
-    if ((currentPortfolio[selectedStock.ticker] || 0) >= quantity) {
+    const availableShares = currentPortfolio[selectedStock.ticker] || 0;
+
+    if (availableShares < quantity) {
+      setNotifications(prev => [...prev, `⚠️ Insufficient shares. You only have ${availableShares} shares`]);
+      return;
+    }
+
+    try {
       const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
@@ -929,9 +1407,11 @@ const ATLStockExchange = () => {
         ...currentPortfolio,
         [selectedStock.ticker]: currentPortfolio[selectedStock.ticker] - quantity
       };
+
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
 
-      // Clear the input
+      // Success notification
+      setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}`]);
       setSellQuantity('');
 
       // Calculate realistic price impact for selling (negative impact)
@@ -976,9 +1456,10 @@ const ATLStockExchange = () => {
 
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-      setSellQuantity('');
+    } catch (error) {
+      setNotifications(prev => [...prev, '❌ Sale failed. Please try again.']);
     }
-  };
+  }, [selectedStock, sellQuantity, user, users, stocks]);
 
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
@@ -1118,6 +1599,124 @@ const ATLStockExchange = () => {
     set(marketStateRef, { running: false });
   };
 
+  // Advanced Trading Functions
+  const addToWatchlist = useCallback((ticker) => {
+    if (!watchlist.includes(ticker)) {
+      setWatchlist(prev => [...prev, ticker]);
+      setNotifications(prev => [...prev, `⭐ Added ${ticker} to watchlist`]);
+    }
+  }, [watchlist]);
+
+  const removeFromWatchlist = useCallback((ticker) => {
+    setWatchlist(prev => prev.filter(t => t !== ticker));
+    setNotifications(prev => [...prev, `❌ Removed ${ticker} from watchlist`]);
+  }, []);
+
+  const toggleWatchlist = useCallback((ticker) => {
+    if (watchlist.includes(ticker)) {
+      removeFromWatchlist(ticker);
+    } else {
+      addToWatchlist(ticker);
+    }
+  }, [watchlist, addToWatchlist, removeFromWatchlist]);
+
+  const executeLimitOrder = useCallback((stock, quantity, limitPrice, type) => {
+    // Simulate limit order execution
+    const currentPrice = stock.price;
+    const shouldExecute = type === 'buy' ? currentPrice <= limitPrice : currentPrice >= limitPrice;
+
+    if (shouldExecute) {
+      if (type === 'buy') {
+        buyStock();
+      } else {
+        sellStock();
+      }
+      setNotifications(prev => [...prev, `✅ Limit ${type} order executed for ${stock.ticker} at ${formatCurrency(limitPrice)}`]);
+    } else {
+      setNotifications(prev => [...prev, `⏳ Limit ${type} order placed for ${stock.ticker} at ${formatCurrency(limitPrice)}`]);
+    }
+  }, [buyStock, sellStock]);
+
+  const calculatePortfolioPerformance = useCallback(() => {
+    if (!user || !users[user]) return { totalReturn: 0, dayChange: 0, weekChange: 0 };
+
+    const portfolio = users[user].portfolio || {};
+    let totalCost = 0;
+    let currentValue = 0;
+
+    Object.entries(portfolio).forEach(([ticker, qty]) => {
+      const stock = stocks.find(s => s.ticker === ticker);
+      if (stock) {
+        // Estimate average cost (in real app, this would be tracked)
+        const avgCost = stock.price * (0.95 + Math.random() * 0.1);
+        totalCost += qty * avgCost;
+        currentValue += qty * stock.price;
+      }
+    });
+
+    const totalReturn = ((currentValue - totalCost) / totalCost) * 100;
+    return { totalReturn: totalReturn || 0, currentValue, totalCost };
+  }, [user, users, stocks]);
+
+  const generateAchievement = useCallback((type, data) => {
+    const achievementTypes = {
+      firstTrade: { title: 'First Trade', description: 'Made your first trade!', icon: '🎯' },
+      bigGainer: { title: 'Big Winner', description: 'Stock gained over 10%!', icon: '🚀' },
+      diversified: { title: 'Diversified', description: 'Own 5+ different stocks', icon: '📊' },
+      millionaire: { title: 'Millionaire', description: 'Portfolio worth $1M+', icon: '💎' },
+      dayTrader: { title: 'Day Trader', description: '10+ trades in one day', icon: '⚡' }
+    };
+
+    const achievement = achievementTypes[type];
+    if (achievement) {
+      setAchievements(prev => [...prev, { ...achievement, timestamp: Date.now(), data }]);
+      setNotifications(prev => [...prev, `🏆 Achievement Unlocked: ${achievement.title}`]);
+    }
+  }, []);
+
+  const exportPortfolio = useCallback(() => {
+    if (!user || !users[user]) return;
+
+    const portfolioData = {
+      user,
+      timestamp: new Date().toISOString(),
+      balance: users[user].balance,
+      portfolio: users[user].portfolio,
+      totalValue: users[user].balance + userPortfolioValue,
+      level: userLevel.name,
+      stocks: stocks.map(s => ({ ticker: s.ticker, price: s.price, change: ((s.price - s.open) / s.open) * 100 }))
+    };
+
+    const dataStr = JSON.stringify(portfolioData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `portfolio-${user}-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    setNotifications(prev => [...prev, '📥 Portfolio exported successfully']);
+  }, [user, users, userPortfolioValue, userLevel, stocks]);
+
+  const sharePortfolio = useCallback(() => {
+    if (!user || !users[user]) return;
+
+    const totalValue = users[user].balance + userPortfolioValue;
+    const shareText = `Check out my portfolio on Atlanta Stock Exchange! 💼\n\nTotal Value: ${formatCurrency(totalValue)}\nLevel: ${userLevel.name}\nTop Holdings: ${Object.keys(users[user].portfolio || {}).slice(0, 3).join(', ')}\n\n#StockTrading #ASE`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: 'My ASE Portfolio',
+        text: shareText,
+        url: window.location.href
+      });
+    } else {
+      navigator.clipboard.writeText(shareText);
+      setNotifications(prev => [...prev, '📋 Portfolio details copied to clipboard']);
+    }
+  }, [user, users, userPortfolioValue, userLevel]);
+
   const createPriceAlert = () => {
     if (!alertStock || !alertPrice) return;
 
@@ -1200,7 +1799,7 @@ const ATLStockExchange = () => {
     return filtered.slice(0, 10);
   };
 
-  const filteredStocks = getFilteredStocks();
+
 
   const getChartDomain = (data) => {
     if (!data || data.length === 0) return [0, 100];
@@ -1227,6 +1826,40 @@ const ATLStockExchange = () => {
   const bgClass = darkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900';
   const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
   const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold mb-2">Loading Atlanta Stock Exchange</h2>
+          <p className="text-gray-600 dark:text-gray-400">Initializing market data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
+        <div className="text-center max-w-md">
+          <div className="text-red-500 mb-4">
+            <AlertCircle className="w-16 h-16 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-red-600">Connection Error</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
@@ -1368,11 +2001,30 @@ const ATLStockExchange = () => {
           <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
             <span className="text-blue-600 font-bold text-sm">ASE</span>
           </div>
-          <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
+          <div className="flex flex-col">
+            <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
+            <div className="flex items-center gap-2 text-xs opacity-75">
+              <span className="flex items-center gap-1">
+                <TrendingUp className="w-3 h-3" />
+                {marketStats.gainers}
+              </span>
+              <span className="flex items-center gap-1">
+                <TrendingDown className="w-3 h-3" />
+                {marketStats.losers}
+              </span>
+              <span className="flex items-center gap-1">
+                <DollarSign className="w-3 h-3" />
+                {formatNumber(totalMarketCap)}
+              </span>
+            </div>
+          </div>
           {notifications.length > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
-              {notifications.length}
-            </span>
+            <div className="relative">
+              <AlertCircle className="w-6 h-6 text-yellow-300 animate-pulse" />
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full min-w-[16px] h-4 flex items-center justify-center">
+                {notifications.length}
+              </span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2 md:gap-4">
@@ -1394,8 +2046,23 @@ const ATLStockExchange = () => {
             )}
           </div>
           {user && users[user] && (
-            <div className="bg-green-600 px-3 py-1 rounded-lg">
-              <span className="text-sm font-bold">${(users[user].balance).toFixed(2)}</span>
+            <div className="flex items-center gap-2">
+              <div className={`px-3 py-1 rounded-lg text-sm font-bold ${userLevel.level === 'DIAMOND' ? 'bg-gradient-to-r from-blue-400 to-purple-500' : userLevel.level === 'PLATINUM' ? 'bg-gray-300 text-gray-800' : userLevel.level === 'GOLD' ? 'bg-yellow-500 text-yellow-900' : userLevel.level === 'SILVER' ? 'bg-gray-400 text-gray-900' : 'bg-orange-600'} text-white`}>
+                {userLevel.level === 'DIAMOND' ? <Crown className="w-4 h-4 inline mr-1" /> :
+                  userLevel.level === 'PLATINUM' ? <Award className="w-4 h-4 inline mr-1" /> :
+                    userLevel.level === 'GOLD' ? <Trophy className="w-4 h-4 inline mr-1" /> :
+                      userLevel.level === 'SILVER' ? <Star className="w-4 h-4 inline mr-1" /> :
+                        <Target className="w-4 h-4 inline mr-1" />}
+                {userLevel.name}
+              </div>
+              <div className="bg-green-600 px-3 py-1 rounded-lg">
+                <span className="text-sm font-bold">{formatCurrency(users[user].balance)}</span>
+              </div>
+              {connectionStatus === 'disconnected' && (
+                <div className="bg-red-500 px-2 py-1 rounded-lg">
+                  <WifiOff className="w-4 h-4" />
+                </div>
+              )}
             </div>
           )}
           <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
@@ -2271,20 +2938,40 @@ const ATLStockExchange = () => {
       )}
 
       {notifications.length > 0 && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className="mb-4 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
-            <h4 className="font-bold text-yellow-800 mb-2">Notifications</h4>
-            {notifications.slice(-3).map((notification, idx) => (
-              <div key={idx} className="text-yellow-700 text-sm mb-1">
-                • {notification}
-              </div>
-            ))}
-            <button
-              onClick={() => setNotifications([])}
-              className="text-yellow-600 hover:text-yellow-800 text-xs underline mt-2"
-            >
-              Clear all
-            </button>
+        <div className="fixed top-20 right-4 z-50 max-w-sm">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Live Updates
+              </h4>
+              <button
+                onClick={() => setNotifications([])}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {notifications.slice(-5).reverse().map((notification, idx) => {
+                const isSuccess = notification.includes('✅');
+                const isWarning = notification.includes('⚠️');
+                const isError = notification.includes('❌');
+
+                return (
+                  <div
+                    key={idx}
+                    className={`text-sm p-2 rounded ${isSuccess ? 'bg-green-50 text-green-800 border border-green-200' :
+                      isWarning ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' :
+                        isError ? 'bg-red-50 text-red-800 border border-red-200' :
+                          'bg-blue-50 text-blue-800 border border-blue-200'
+                      }`}
+                  >
+                    {notification}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -2318,7 +3005,35 @@ const ATLStockExchange = () => {
 
         {user && adminTab === 'portfolio' && (
           <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
-            <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <PieChart className="w-6 h-6" />
+                My Portfolio
+              </h2>
+              <div className="flex items-center gap-2">
+                <button onClick={exportPortfolio} className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+                <button onClick={sharePortfolio} className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1">
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </button>
+              </div>
+            </div>
+
+            {/* User Level Badge */}
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6 ${userLevel.level === 'DIAMOND' ? 'bg-gradient-to-r from-blue-400 to-purple-500' : userLevel.level === 'PLATINUM' ? 'bg-gray-300 text-gray-800' : userLevel.level === 'GOLD' ? 'bg-yellow-500 text-yellow-900' : userLevel.level === 'SILVER' ? 'bg-gray-400 text-gray-900' : 'bg-orange-600'} text-white font-bold`}>
+              {userLevel.level === 'DIAMOND' ? <Crown className="w-5 h-5" /> :
+                userLevel.level === 'PLATINUM' ? <Award className="w-5 h-5" /> :
+                  userLevel.level === 'GOLD' ? <Trophy className="w-5 h-5" /> :
+                    userLevel.level === 'SILVER' ? <Star className="w-5 h-5" /> :
+                      <Target className="w-5 h-5" />}
+              {userLevel.name}
+              <span className="text-xs opacity-75">
+                ({formatCurrency(userLevel.min)} - {userLevel.max === Infinity ? '∞' : formatCurrency(userLevel.max)})
+              </span>
+            </div>
 
             {/* Enhanced Portfolio Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -2469,6 +3184,78 @@ const ATLStockExchange = () => {
               </div>
             </div>
 
+            {/* Portfolio Allocation Chart */}
+            {portfolioAllocation.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <PieChart className="w-5 h-5" />
+                  Portfolio Allocation
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={portfolioAllocation}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="percentage"
+                          label={({ ticker, percentage }) => `${ticker}: ${percentage.toFixed(1)}%`}
+                        >
+                          {portfolioAllocation.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-2">
+                    {portfolioAllocation.map((item, index) => (
+                      <div key={item.ticker} className="flex items-center justify-between p-2 rounded">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-4 h-4 rounded"
+                            style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                          ></div>
+                          <span className="font-medium">{item.ticker}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">{item.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold">{item.percentage.toFixed(1)}%</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">{formatCurrency(item.value)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Achievements */}
+            {achievements.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Trophy className="w-5 h-5" />
+                  Recent Achievements
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {achievements.slice(-6).reverse().map((achievement, index) => (
+                    <div key={index} className={`p-4 rounded-lg border-2 ${cardClass} hover:shadow-md transition-shadow`}>
+                      <div className="text-2xl mb-2">{achievement.icon}</div>
+                      <div className="font-bold">{achievement.title}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">{achievement.description}</div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        {new Date(achievement.timestamp).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <h3 className="text-xl font-bold mb-4">Holdings</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -2612,15 +3399,167 @@ const ATLStockExchange = () => {
           </div>
         )}
 
+        {/* Market Overview Dashboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+          {/* Market Stats */}
+          <div className={`lg:col-span-3 p-6 rounded-xl ${cardClass} border-2`}>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Market Overview
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{topMovers.gainers.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Gainers</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">{topMovers.losers.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Losers</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{formatNumber(totalMarketCap)}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Total Market Cap</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{formatCurrency(marketStats.avgPrice)}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Avg Price</div>
+              </div>
+            </div>
+
+            {/* Top Movers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-semibold mb-2 text-green-600 flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4" />
+                  Top Gainers
+                </h4>
+                <div className="space-y-2">
+                  {topMovers.gainers.slice(0, 3).map(stock => (
+                    <div key={stock.ticker} className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                      <span className="font-medium">{stock.ticker}</span>
+                      <span className="text-green-600 font-bold">+{stock.change.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-2 text-red-600 flex items-center gap-1">
+                  <TrendingDown className="w-4 h-4" />
+                  Top Losers
+                </h4>
+                <div className="space-y-2">
+                  {topMovers.losers.slice(0, 3).map(stock => (
+                    <div key={stock.ticker} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                      <span className="font-medium">{stock.ticker}</span>
+                      <span className="text-red-600 font-bold">{stock.change.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* News & Alerts */}
+          <div className={`p-6 rounded-xl ${cardClass} border-2`}>
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Bell className="w-4 h-4" />
+              Market News
+            </h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {newsItems.slice(0, 5).map(news => (
+                <div key={news.id} className={`p-3 rounded-lg text-sm ${news.type === 'positive' ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500' : 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500'}`}>
+                  <div className="font-medium mb-1">{news.ticker}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">{news.headline}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(news.timestamp).toLocaleTimeString()}
+                  </div>
+                </div>
+              ))}
+              {newsItems.length === 0 && (
+                <div className="text-center text-gray-500 py-4">
+                  <Globe className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No recent news</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Watchlist Section */}
+        {watchlist.length > 0 && (
+          <div className={`p-6 rounded-xl ${cardClass} border-2 mb-6`}>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Bookmark className="w-5 h-5" />
+              My Watchlist ({watchlist.length})
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {watchlist.map(ticker => {
+                const stock = stocks.find(s => s.ticker === ticker);
+                if (!stock) return null;
+                const change = ((stock.price - stock.open) / stock.open) * 100;
+                return (
+                  <div key={ticker} onClick={() => setSelectedStock(stock)} className={`p-3 rounded-lg cursor-pointer hover:shadow-md transition-shadow ${cardClass} border`}>
+                    <div className="font-bold text-sm">{ticker}</div>
+                    <div className="text-lg font-bold">{formatCurrency(stock.price)}</div>
+                    <div className={`text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
-        <div className="mb-4 flex gap-2 flex-wrap">
-          <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
-          <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
-          <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
-          <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
-          <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
-          <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
-          <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
+        <div className="mb-6 space-y-4">
+          {/* Advanced Controls */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-medium">Filters:</span>
+            </div>
+            <button onClick={() => setShowOnlyWatchlist(!showOnlyWatchlist)} className={`px-3 py-1 rounded flex items-center gap-1 ${showOnlyWatchlist ? 'bg-yellow-500 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
+              <Bookmark className="w-3 h-3" />
+              Watchlist Only
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Sort:</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={`px-2 py-1 rounded text-sm ${inputClass}`}>
+                <option value="marketCap">Market Cap</option>
+                <option value="price">Price</option>
+                <option value="change">% Change</option>
+                <option value="volume">Volume</option>
+                <option value="name">Name</option>
+              </select>
+              <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className={`p-1 rounded ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'}`}>
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setStockFilter('')} className={`px-3 py-1 rounded ${stockFilter === '' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>All</button>
+            <button onClick={() => setStockFilter('gainers')} className={`px-3 py-1 rounded flex items-center gap-1 ${stockFilter === 'gainers' ? 'bg-green-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
+              <TrendingUp className="w-3 h-3" />
+              Gainers
+            </button>
+            <button onClick={() => setStockFilter('losers')} className={`px-3 py-1 rounded flex items-center gap-1 ${stockFilter === 'losers' ? 'bg-red-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
+              <TrendingDown className="w-3 h-3" />
+              Losers
+            </button>
+            <button onClick={() => setStockFilter('active')} className={`px-3 py-1 rounded flex items-center gap-1 ${stockFilter === 'active' ? 'bg-purple-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
+              <Activity className="w-3 h-3" />
+              Most Active
+            </button>
+            <button onClick={() => setStockFilter('under100')} className={`px-3 py-1 rounded ${stockFilter === 'under100' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Under $100</button>
+            <button onClick={() => setStockFilter('100to500')} className={`px-3 py-1 rounded ${stockFilter === '100to500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>$100-$500</button>
+            <button onClick={() => setStockFilter('over500')} className={`px-3 py-1 rounded ${stockFilter === 'over500' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Over $500</button>
+            <button onClick={() => setStockFilter('largecap')} className={`px-3 py-1 rounded ${stockFilter === 'largecap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Large Cap</button>
+            <button onClick={() => setStockFilter('midcap')} className={`px-3 py-1 rounded ${stockFilter === 'midcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Mid Cap</button>
+            <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
+          </div>
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
 
@@ -2631,35 +3570,78 @@ const ATLStockExchange = () => {
 
 
             return (
-              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold">{stock.name}</h3>
-                    <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      <span className={`mr-1 ${percentChange >= 0 ? '↗' : '↘'}`}></span>
-                      {percentChange >= 0 ? '+' : ''}{percentChange}%
+              <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'} ${watchlist.includes(stock.ticker) ? 'ring-2 ring-yellow-400' : ''}`}>
+                {/* Watchlist Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleWatchlist(stock.ticker);
+                  }}
+                  className={`absolute top-2 right-2 p-2 rounded-full transition-colors ${watchlist.includes(stock.ticker) ? 'bg-yellow-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'}`}
+                >
+                  {watchlist.includes(stock.ticker) ? <Heart className="w-4 h-4 fill-current" /> : <Heart className="w-4 h-4" />}
+                </button>
+
+                <div onClick={() => setSelectedStock(stock)}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-bold">{stock.name}</h3>
+                        {isMarketOpen() && (
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                        <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                          Vol: {formatNumber(stock.marketCap / stock.price)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                        {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                        {percentChange >= 0 ? '+' : ''}{percentChange}%
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                  <LineChart data={generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker).length / 10))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
+                    <LineChart data={generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                      <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker).length / 10))} />
+                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                      <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
 
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="opacity-75">High:</span> <span className="font-bold">${stock.high.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Low:</span> <span className="font-bold">${stock.low.toFixed(2)}</span></div>
-                  <div><span className="opacity-75">Market Cap:</span> <span className="font-bold">${(stock.marketCap / 1000000000).toFixed(2)}B</span></div>
-                  <div><span className="opacity-75">P/E:</span> <span className="font-bold">{stock.pe.toFixed(2)}</span></div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">High:</span>
+                      <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Low:</span>
+                      <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
+                      <span className="font-bold">{formatNumber(stock.marketCap)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">P/E:</span>
+                      <span className="font-bold">{stock.pe.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
+                      <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
+                      <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
