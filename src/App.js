@@ -59,8 +59,7 @@ const isMarketOpen = () => {
 
 
 
-// Store static chart data to prevent regeneration - moved outside component
-let staticChartData = {};
+
 
 
 
@@ -148,10 +147,7 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 }
 
 const ATLStockExchange = () => {
-  // Performance optimization: Clear chart cache on component mount
-  React.useEffect(() => {
-    staticChartData = {};
-  }, []);
+
 
   // Enhanced state management with better organization
 
