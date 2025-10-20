@@ -7,8 +7,26 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
 
-// Advanced Constants
-const MARKET_HOURS = { open: 9, close: 16, preMarket: 4, afterHours: 20 };
+// Advanced Constants - Professional Stock Exchange Settings
+const MARKET_HOURS = {
+  preMarket: 4,
+  open: 9,
+  close: 16,
+  afterHours: 20,
+  lunchBreak: { start: 12, end: 13 } // Optional lunch break
+};
+
+const TRADING_FEES = {
+  commission: 0.005, // 0.5% commission
+  spread: 0.001, // 0.1% bid-ask spread
+  minimumFee: 1.00 // Minimum $1 fee
+};
+
+const CIRCUIT_BREAKERS = {
+  level1: 0.07, // 7% drop triggers 15-minute halt
+  level2: 0.13, // 13% drop triggers 15-minute halt
+  level3: 0.20  // 20% drop triggers market close
+};
 
 
 
@@ -41,12 +59,36 @@ const formatNumber = (num) => {
 const isMarketOpen = () => {
   const now = getEasternTime();
   const hour = now.getHours();
+  const minute = now.getMinutes();
   const day = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const currentTime = hour + minute / 60;
 
   // Market closed on weekends
   if (day === 0 || day === 6) return false;
 
-  return hour >= MARKET_HOURS.open && hour <= MARKET_HOURS.close;
+  // Check for market holidays (simplified)
+  const holidays = ['2024-01-01', '2024-07-04', '2024-12-25']; // Add more as needed
+  const today = now.toISOString().split('T')[0];
+  if (holidays.includes(today)) return false;
+
+  // Regular trading hours
+  return currentTime >= MARKET_HOURS.open && currentTime <= MARKET_HOURS.close;
+};
+
+const getMarketStatus = () => {
+  const now = getEasternTime();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const day = now.getDay();
+  const currentTime = hour + minute / 60;
+
+  if (day === 0 || day === 6) return 'WEEKEND';
+
+  if (currentTime < MARKET_HOURS.preMarket) return 'CLOSED';
+  if (currentTime < MARKET_HOURS.open) return 'PRE_MARKET';
+  if (currentTime <= MARKET_HOURS.close) return 'OPEN';
+  if (currentTime <= MARKET_HOURS.afterHours) return 'AFTER_HOURS';
+  return 'CLOSED';
 };
 
 
@@ -138,7 +180,10 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 
     data.push({
       time: timeLabel,
-      price: parseFloat(price.toFixed(2))
+      price: parseFloat(price.toFixed(2)),
+      volume: Math.floor((0.5 + seededRandom()) * 1000000), // Add volume data
+      bid: parseFloat((price - 0.01).toFixed(2)), // Bid price
+      ask: parseFloat((price + 0.01).toFixed(2))  // Ask price
     });
   }
 
@@ -202,6 +247,14 @@ const ATLStockExchange = () => {
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
+  const [marketSentiment, setMarketSentiment] = useState('neutral'); // bull, bear, neutral
+  const [volatilityMode, setVolatilityMode] = useState('normal'); // low, normal, high, extreme
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showOrderBook, setShowOrderBook] = useState(false);
+  const [marketEvents, setMarketEvents] = useState([]);
+  const [orderBook, setOrderBook] = useState({});
+  const [level2Data, setLevel2Data] = useState({});
+  const [marketDepth, setMarketDepth] = useState(5); // Show top 5 levels
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
   const [alertStock, setAlertStock] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
@@ -223,11 +276,31 @@ const ATLStockExchange = () => {
   }, [stocks]);
 
   const marketStats = useMemo(() => {
-    if (stocks.length === 0) return { avgPrice: 0, totalVolume: 0, gainers: 0, losers: 0 };
+    if (stocks.length === 0) return {
+      avgPrice: 0, totalVolume: 0, gainers: 0, losers: 0, unchanged: 0,
+      totalMarketCap: 0, avgPE: 0, totalDividendYield: 0, vix: 0,
+      advanceDeclineRatio: 0, newHighs: 0, newLows: 0
+    };
 
     const avgPrice = stocks.reduce((sum, stock) => sum + stock.price, 0) / stocks.length;
     const gainers = stocks.filter(stock => stock.price > stock.open).length;
     const losers = stocks.filter(stock => stock.price < stock.open).length;
+    const unchanged = stocks.filter(stock => stock.price === stock.open).length;
+
+    const totalMarketCap = stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
+    const avgPE = stocks.reduce((sum, stock) => sum + (stock.pe || 0), 0) / stocks.length;
+    const totalDividendYield = stocks.reduce((sum, stock) => sum + (stock.dividend || 0), 0) / stocks.length;
+
+    // Calculate VIX-like volatility index
+    const volatilities = stocks.map(stock => {
+      const dayChange = Math.abs((stock.price - stock.open) / stock.open);
+      return dayChange;
+    });
+    const vix = (volatilities.reduce((sum, vol) => sum + vol, 0) / volatilities.length) * 100;
+
+    const advanceDeclineRatio = losers > 0 ? gainers / losers : gainers;
+    const newHighs = stocks.filter(stock => stock.price >= stock.high52w * 0.98).length;
+    const newLows = stocks.filter(stock => stock.price <= stock.low52w * 1.02).length;
 
     return {
       avgPrice,
@@ -235,7 +308,15 @@ const ATLStockExchange = () => {
         return sum + Object.values(user.portfolio || {}).reduce((userSum, qty) => userSum + qty, 0);
       }, 0),
       gainers,
-      losers
+      losers,
+      unchanged,
+      totalMarketCap,
+      avgPE,
+      totalDividendYield,
+      vix,
+      advanceDeclineRatio,
+      newHighs,
+      newLows
     };
   }, [stocks, users]);
 
@@ -579,15 +660,44 @@ const ATLStockExchange = () => {
           return seed / 4294967296;
         };
 
-        // Very small, realistic price movements
-        const randomChange = (simpleRandom() - 0.5) * 0.0008; // Much smaller movements
-        const newPrice = stock.price * (1 + randomChange);
+        // Enhanced price movements with volatility modes
+        const volatilityMultiplier =
+          volatilityMode === 'extreme' ? 5.0 :
+            volatilityMode === 'high' ? 2.0 :
+              volatilityMode === 'low' ? 0.3 : 1.0;
 
-        // Very tight bounds to prevent sudden jumps
-        const minPrice = stock.price * 0.9998; // 0.02% down limit per update
-        const maxPrice = stock.price * 1.0002; // 0.02% up limit per update
-        const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
-        const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2))); // Prevent negative prices
+        const marketSentimentMultiplier =
+          marketSentiment === 'bull' ? 1.2 :
+            marketSentiment === 'bear' ? 0.8 : 1.0;
+
+        const baseChange = (simpleRandom() - 0.5) * 0.0008 * volatilityMultiplier;
+        const sentimentBias = marketSentiment === 'bull' ? 0.0001 : marketSentiment === 'bear' ? -0.0001 : 0;
+        const totalChange = baseChange + sentimentBias;
+
+        const newPrice = stock.price * (1 + totalChange);
+
+        // Circuit breaker check
+        const dayStartPrice = stock.open || stock.price;
+        const priceChangePercent = Math.abs((newPrice - dayStartPrice) / dayStartPrice);
+
+        let circuitBreakerTriggered = false;
+        if (priceChangePercent >= CIRCUIT_BREAKERS.level3) {
+          circuitBreakerTriggered = true;
+          setMarketEvents(prev => [...prev.slice(-2), `🚨 CIRCUIT BREAKER: ${stock.ticker} trading halted - 20% limit reached`]);
+        } else if (priceChangePercent >= CIRCUIT_BREAKERS.level2) {
+          circuitBreakerTriggered = true;
+          setMarketEvents(prev => [...prev.slice(-2), `⚠️ CIRCUIT BREAKER: ${stock.ticker} trading halted - 13% limit reached`]);
+        } else if (priceChangePercent >= CIRCUIT_BREAKERS.level1) {
+          circuitBreakerTriggered = true;
+          setMarketEvents(prev => [...prev.slice(-2), `⚡ CIRCUIT BREAKER: ${stock.ticker} trading halted - 7% limit reached`]);
+        }
+
+        // Apply bounds (tighter during circuit breaker)
+        const boundMultiplier = circuitBreakerTriggered ? 0.9999 : 0.9998;
+        const minPrice = stock.price * boundMultiplier;
+        const maxPrice = stock.price * (2 - boundMultiplier);
+        const boundedPrice = circuitBreakerTriggered ? stock.price : Math.max(minPrice, Math.min(maxPrice, newPrice));
+        const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
@@ -608,9 +718,9 @@ const ATLStockExchange = () => {
           }
         }
 
-        // Rolling update system: update last point every 5 seconds, add new point every 2 minutes
-        const elapsed2Min = Math.floor(elapsedMs / 120000);
-        const expectedPoints2Min = elapsed2Min + 1;
+        // Continuous update system: add new point every minute, update current point every few seconds
+        const elapsedMinutes = Math.floor(elapsedMs / 60000);
+        const expectedPoints = elapsedMinutes + 1;
 
         const hour = now.getHours();
         const min = now.getMinutes();
@@ -631,13 +741,10 @@ const ATLStockExchange = () => {
           ampm = 'PM';
         }
 
-        // Round minutes to nearest 5 for cleaner display
-        const roundedMin = Math.floor(min / 5) * 5;
-        const displayMin = roundedMin.toString().padStart(2, '0');
-        const timeLabel = `${displayHour}:${displayMin} ${ampm}`;
+        const timeLabel = `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`;
 
-        if (newHistory.length < expectedPoints2Min) {
-          // Add new data point every 2 minutes
+        if (newHistory.length < expectedPoints) {
+          // Add new data point every minute
           newHistory.push({ time: timeLabel, price: newPrice2 });
         } else {
           // Update the last point with current price every update cycle
@@ -1118,17 +1225,35 @@ const ATLStockExchange = () => {
       return;
     }
 
-    const cost = selectedStock.price * quantity;
+    // Professional trading cost calculation with fees
+    const baseCost = selectedStock.price * quantity;
+    const commission = Math.max(TRADING_FEES.minimumFee, baseCost * TRADING_FEES.commission);
+    const spread = baseCost * TRADING_FEES.spread;
+    const totalCost = baseCost + commission + spread;
 
-    if (users[user].balance < cost) {
-      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(cost - users[user].balance)} more`]);
+    // Market hours validation
+    const marketStatus = getMarketStatus();
+    if (marketStatus === 'CLOSED' || marketStatus === 'WEEKEND') {
+      setNotifications(prev => [...prev, `🕐 Market is ${marketStatus}. Trading unavailable.`]);
+      return;
+    }
+
+    // Position size validation (max 10% of available shares per trade)
+    const maxTradeSize = Math.floor(availableShares * 0.1);
+    if (sharesBought > maxTradeSize) {
+      setNotifications(prev => [...prev, `⚠️ Maximum trade size: ${maxTradeSize} shares (10% of available)`]);
+      return;
+    }
+
+    if (users[user].balance < totalCost) {
+      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(totalCost - users[user].balance)} more (includes fees: ${formatCurrency(commission + spread)})`]);
       return;
     }
 
     try {
       // Update user portfolio and balance first
       const userRef = ref(database, `users/${user}`);
-      const newBalance = users[user].balance - cost;
+      const newBalance = users[user].balance - totalCost;
       const currentPortfolio = users[user].portfolio || {};
       const newPortfolio = {
         ...currentPortfolio,
@@ -1158,20 +1283,26 @@ const ATLStockExchange = () => {
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
 
-      // Success notification
-      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(cost)} - Price impact: ${priceImpact > 0 ? '+' : ''}${((priceImpact / selectedStock.price) * 100).toFixed(2)}%`]);
+      // Success notification with detailed breakdown
+      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(baseCost)} + ${formatCurrency(commission + spread)} fees = ${formatCurrency(totalCost)} - Price impact: ${priceImpact > 0 ? '+' : ''}${((priceImpact / selectedStock.price) * 100).toFixed(2)}%`]);
       setBuyQuantity('');
 
-      // Record trade in history
+      // Record professional trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
         ticker: selectedStock.ticker,
         quantity: quantity,
         price: selectedStock.price,
-        total: cost,
+        baseCost: baseCost,
+        commission: commission,
+        spread: spread,
+        total: totalCost,
         newPrice: newPrice,
-        priceImpact: priceImpact
+        priceImpact: priceImpact,
+        marketStatus: getMarketStatus(),
+        volatilityMode: volatilityMode,
+        marketSentiment: marketSentiment
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
@@ -1452,6 +1583,33 @@ const ATLStockExchange = () => {
       setNotifications(prev => [...prev, '📋 Portfolio details copied to clipboard']);
     }
   }, [user, users, userPortfolioValue]);
+
+  // Market events system
+  useEffect(() => {
+    const generateMarketEvent = () => {
+      const events = [
+        "📈 Major institutional investor increases position in tech stocks",
+        "🏦 Federal Reserve hints at interest rate changes",
+        "💰 Record trading volume detected in energy sector",
+        "🌍 Global market volatility affects local trading",
+        "📊 Algorithmic trading surge detected",
+        "🚀 Breakthrough technology announcement impacts market",
+        "⚡ Flash crash recovery in progress",
+        "🎯 Market makers adjusting positions",
+        "📱 Social media sentiment driving retail trading",
+        "🔥 Meme stock phenomenon spreading"
+      ];
+
+      // Generate events based on market conditions
+      if (Math.random() < 0.1) { // 10% chance every interval
+        const event = events[Math.floor(Math.random() * events.length)];
+        setMarketEvents(prev => [...prev.slice(-2), event]); // Keep last 3 events
+      }
+    };
+
+    const eventInterval = setInterval(generateMarketEvent, 30000); // Every 30 seconds
+    return () => clearInterval(eventInterval);
+  }, []);
 
   const createPriceAlert = () => {
     if (!alertStock || !alertPrice) return;
@@ -1780,6 +1938,18 @@ const ATLStockExchange = () => {
               <div className={`w-2 h-2 rounded-full ${marketRunning ? 'bg-green-200 animate-pulse' : 'bg-red-200'}`}></div>
               MARKET {marketRunning ? 'LIVE' : 'CLOSED'}
             </div>
+          </div>
+          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${marketSentiment === 'bull' ? 'bg-green-600' :
+            marketSentiment === 'bear' ? 'bg-red-600' : 'bg-yellow-600'
+            }`}>
+            {marketSentiment === 'bull' ? '🐂 BULLISH' :
+              marketSentiment === 'bear' ? '🐻 BEARISH' : '😐 NEUTRAL'}
+          </div>
+          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${volatilityMode === 'extreme' ? 'bg-red-600 animate-pulse' :
+            volatilityMode === 'high' ? 'bg-orange-600' :
+              volatilityMode === 'low' ? 'bg-blue-600' : 'bg-gray-600'
+            }`}>
+            📊 {volatilityMode.toUpperCase()} VOL
           </div>
           <div className="bg-blue-700 px-3 py-1 rounded-lg text-xs font-bold hidden md:inline">
             {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
@@ -3073,6 +3243,19 @@ const ATLStockExchange = () => {
           </div>
         )}
 
+        {/* Market Events Ticker */}
+        {marketEvents.length > 0 && (
+          <div className={`mb-6 p-4 rounded-xl ${cardClass} border-2 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
+              <span className="font-bold text-yellow-800 dark:text-yellow-200">🚨 BREAKING MARKET NEWS</span>
+            </div>
+            <div className="text-sm text-yellow-700 dark:text-yellow-300">
+              {marketEvents[marketEvents.length - 1]}
+            </div>
+          </div>
+        )}
+
         {/* Market Overview Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
           {/* Market Stats */}
@@ -3081,22 +3264,48 @@ const ATLStockExchange = () => {
               <BarChart3 className="w-5 h-5" />
               Market Overview
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{topMovers.gainers.length}</div>
+                <div className="text-2xl font-bold text-green-600">{marketStats.gainers}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">Gainers</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">{topMovers.losers.length}</div>
+                <div className="text-2xl font-bold text-red-600">{marketStats.losers}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">Losers</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{formatNumber(totalMarketCap)}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Total Market Cap</div>
+                <div className="text-2xl font-bold text-blue-600">{formatNumber(marketStats.totalMarketCap)}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Market Cap</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{formatCurrency(marketStats.avgPrice)}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Avg Price</div>
+                <div className={`text-2xl font-bold ${marketStats.vix > 30 ? 'text-red-600' : marketStats.vix > 20 ? 'text-yellow-600' : 'text-green-600'}`}>
+                  {marketStats.vix.toFixed(1)}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">VIX</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{marketStats.avgPE.toFixed(1)}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Avg P/E</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-indigo-600">{marketStats.totalDividendYield.toFixed(2)}%</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Avg Yield</div>
+              </div>
+            </div>
+
+            {/* Professional Market Indicators */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="text-center">
+                <div className="text-lg font-bold">{marketStats.advanceDeclineRatio.toFixed(2)}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">A/D Ratio</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-600">{marketStats.newHighs}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">New Highs</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-red-600">{marketStats.newLows}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">New Lows</div>
               </div>
             </div>
 
@@ -3140,6 +3349,48 @@ const ATLStockExchange = () => {
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
+          {/* Market Controls */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <button
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${showHeatmap ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                }`}
+            >
+              🔥 Heatmap View
+            </button>
+            <button
+              onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : marketSentiment === 'bear' ? 'neutral' : 'bull')}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
+                marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-white'
+                }`}
+            >
+              {marketSentiment === 'bull' ? '🐂 Bull Market' :
+                marketSentiment === 'bear' ? '🐻 Bear Market' : '😐 Neutral Market'}
+            </button>
+            <button
+              onClick={() => setVolatilityMode(volatilityMode === 'low' ? 'normal' : volatilityMode === 'normal' ? 'high' : volatilityMode === 'high' ? 'extreme' : 'low')}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
+                volatilityMode === 'high' ? 'bg-orange-600 text-white' :
+                  volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+                }`}
+            >
+              📊 {volatilityMode.charAt(0).toUpperCase() + volatilityMode.slice(1)} Volatility
+            </button>
+            <button
+              onClick={() => setShowOrderBook(!showOrderBook)}
+              className={`px-4 py-2 rounded-lg font-bold transition-colors ${showOrderBook ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                }`}
+            >
+              📈 Level II Data
+            </button>
+            <div className={`px-3 py-1 rounded-lg text-xs font-bold ${getMarketStatus() === 'OPEN' ? 'bg-green-600 text-white' :
+                getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-600 text-white' :
+                  getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-600 text-white' : 'bg-red-600 text-white'
+              }`}>
+              🕐 {getMarketStatus().replace('_', ' ')}
+            </div>
+          </div>
+
           {/* Advanced Controls */}
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -3187,79 +3438,110 @@ const ATLStockExchange = () => {
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredStocks.map(stock => {
-            const priceChange = stock.price - stock.open;
-            const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
+        {showHeatmap ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-8">
+            {filteredStocks.map(stock => {
+              const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
+              const priceChange = stock.price - dayStartPrice;
+              const percentChange = ((priceChange / dayStartPrice) * 100);
 
-
-            return (
-              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
-                <div>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-xl font-bold">{stock.name}</h3>
-                        {isMarketOpen() && (
-                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                        <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
-                          Vol: {formatNumber((stock.marketCap / stock.price) * (stock.volumeMultiplier || (0.1 + Math.random() * 2)))}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
-                        {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                        {percentChange >= 0 ? '+' : ''}{percentChange}%
-                      </div>
-                    </div>
+              return (
+                <div
+                  key={stock.ticker}
+                  onClick={() => setSelectedStock(stock)}
+                  className={`p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${percentChange >= 5 ? 'bg-green-600 text-white' :
+                    percentChange >= 2 ? 'bg-green-400 text-white' :
+                      percentChange >= 0 ? 'bg-green-200 text-green-800' :
+                        percentChange >= -2 ? 'bg-red-200 text-red-800' :
+                          percentChange >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
+                    }`}
+                >
+                  <div className="font-bold text-sm">{stock.ticker}</div>
+                  <div className="text-xs opacity-90">{formatCurrency(stock.price)}</div>
+                  <div className="font-bold text-sm">
+                    {percentChange >= 0 ? '+' : ''}{percentChange.toFixed(1)}%
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filteredStocks.map(stock => {
+              // Calculate percentage from first price of the day (12:00 AM)
+              const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
+              const priceChange = stock.price - dayStartPrice;
+              const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
 
-                  <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                    <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
-                      <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
-                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
-                      <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">High:</span>
-                      <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+              return (
+                <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
+                  <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-xl font-bold">{stock.name}</h3>
+                          {isMarketOpen() && (
+                            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                          <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
+                            Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
+                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
+                          {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                          {percentChange >= 0 ? '+' : ''}{percentChange}%
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Low:</span>
-                      <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
-                      <span className="font-bold">{formatNumber(stock.marketCap)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">P/E:</span>
-                      <span className="font-bold">{stock.pe.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
-                      <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
-                      <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+
+                    <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
+                      <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                        <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                        <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
+                        <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                        <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">High:</span>
+                        <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Low:</span>
+                        <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
+                        <span className="font-bold">{formatNumber(stock.marketCap)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">P/E:</span>
+                        <span className="font-bold">{stock.pe.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
+                        <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
+                        <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
