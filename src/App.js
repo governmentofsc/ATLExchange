@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, PieChart, Target, Crown, Star, Award, Trophy,
-  Download, Filter, Share2, WifiOff
+  BarChart3, PieChart, Download, Filter, Share2, WifiOff
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
@@ -12,13 +11,7 @@ import { ref, set, onValue, update } from 'firebase/database';
 const MARKET_HOURS = { open: 9, close: 16, preMarket: 4, afterHours: 20 };
 
 
-const USER_LEVELS = {
-  BRONZE: { min: 0, max: 50000, name: 'Bronze Trader', color: '#CD7F32' },
-  SILVER: { min: 50000, max: 250000, name: 'Silver Trader', color: '#C0C0C0' },
-  GOLD: { min: 250000, max: 1000000, name: 'Gold Trader', color: '#FFD700' },
-  PLATINUM: { min: 1000000, max: 5000000, name: 'Platinum Trader', color: '#E5E4E2' },
-  DIAMOND: { min: 5000000, max: Infinity, name: 'Diamond Trader', color: '#B9F2FF' }
-};
+
 const CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff0000'];
 
 // Utility functions
@@ -58,14 +51,7 @@ const isMarketOpen = () => {
 
 
 
-const getUserLevel = (totalValue) => {
-  for (const [level, config] of Object.entries(USER_LEVELS)) {
-    if (totalValue >= config.min && totalValue < config.max) {
-      return { level, ...config };
-    }
-  }
-  return USER_LEVELS.BRONZE;
-};
+
 
 
 
@@ -393,11 +379,7 @@ const ATLStockExchange = () => {
     return filtered.slice(0, 50); // Increased limit for better browsing
   }, [stocks, searchQuery, stockFilter, sortBy, sortOrder]);
 
-  const userLevel = useMemo(() => {
-    if (!user || !users[user]) return USER_LEVELS.BRONZE;
-    const totalValue = users[user].balance + userPortfolioValue;
-    return getUserLevel(totalValue);
-  }, [user, users, userPortfolioValue]);
+
 
   const portfolioAllocation = useMemo(() => {
     if (!user || !users[user]) return [];
@@ -1478,7 +1460,7 @@ const ATLStockExchange = () => {
       balance: users[user].balance,
       portfolio: users[user].portfolio,
       totalValue: users[user].balance + userPortfolioValue,
-      level: userLevel.name,
+
       stocks: stocks.map(s => ({ ticker: s.ticker, price: s.price, change: ((s.price - s.open) / s.open) * 100 }))
     };
 
@@ -1492,13 +1474,13 @@ const ATLStockExchange = () => {
     URL.revokeObjectURL(url);
 
     setNotifications(prev => [...prev, '📥 Portfolio exported successfully']);
-  }, [user, users, userPortfolioValue, userLevel, stocks]);
+  }, [user, users, userPortfolioValue, stocks]);
 
   const sharePortfolio = useCallback(() => {
     if (!user || !users[user]) return;
 
     const totalValue = users[user].balance + userPortfolioValue;
-    const shareText = `Check out my portfolio on Atlanta Stock Exchange! 💼\n\nTotal Value: ${formatCurrency(totalValue)}\nLevel: ${userLevel.name}\nTop Holdings: ${Object.keys(users[user].portfolio || {}).slice(0, 3).join(', ')}\n\n#StockTrading #ASE`;
+    const shareText = `Check out my portfolio on Atlanta Stock Exchange! 💼\n\nTotal Value: ${formatCurrency(totalValue)}\nTop Holdings: ${Object.keys(users[user].portfolio || {}).slice(0, 3).join(', ')}\n\n#StockTrading #ASE`;
 
     if (navigator.share) {
       navigator.share({
@@ -1510,7 +1492,7 @@ const ATLStockExchange = () => {
       navigator.clipboard.writeText(shareText);
       setNotifications(prev => [...prev, '📋 Portfolio details copied to clipboard']);
     }
-  }, [user, users, userPortfolioValue, userLevel]);
+  }, [user, users, userPortfolioValue]);
 
   const createPriceAlert = () => {
     if (!alertStock || !alertPrice) return;
@@ -1819,14 +1801,6 @@ const ATLStockExchange = () => {
           </div>
           {user && users[user] && (
             <div className="flex items-center gap-2">
-              <div className={`px-3 py-1 rounded-lg text-sm font-bold ${userLevel.level === 'DIAMOND' ? 'bg-gradient-to-r from-blue-400 to-purple-500' : userLevel.level === 'PLATINUM' ? 'bg-gray-300 text-gray-800' : userLevel.level === 'GOLD' ? 'bg-yellow-500 text-yellow-900' : userLevel.level === 'SILVER' ? 'bg-gray-400 text-gray-900' : 'bg-orange-600'} text-white`}>
-                {userLevel.level === 'DIAMOND' ? <Crown className="w-4 h-4 inline mr-1" /> :
-                  userLevel.level === 'PLATINUM' ? <Award className="w-4 h-4 inline mr-1" /> :
-                    userLevel.level === 'GOLD' ? <Trophy className="w-4 h-4 inline mr-1" /> :
-                      userLevel.level === 'SILVER' ? <Star className="w-4 h-4 inline mr-1" /> :
-                        <Target className="w-4 h-4 inline mr-1" />}
-                {userLevel.name}
-              </div>
               <div className="bg-green-600 px-3 py-1 rounded-lg">
                 <span className="text-sm font-bold">{formatCurrency(users[user].balance)}</span>
               </div>
@@ -2794,18 +2768,7 @@ const ATLStockExchange = () => {
               </div>
             </div>
 
-            {/* User Level Badge */}
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6 ${userLevel.level === 'DIAMOND' ? 'bg-gradient-to-r from-blue-400 to-purple-500' : userLevel.level === 'PLATINUM' ? 'bg-gray-300 text-gray-800' : userLevel.level === 'GOLD' ? 'bg-yellow-500 text-yellow-900' : userLevel.level === 'SILVER' ? 'bg-gray-400 text-gray-900' : 'bg-orange-600'} text-white font-bold`}>
-              {userLevel.level === 'DIAMOND' ? <Crown className="w-5 h-5" /> :
-                userLevel.level === 'PLATINUM' ? <Award className="w-5 h-5" /> :
-                  userLevel.level === 'GOLD' ? <Trophy className="w-5 h-5" /> :
-                    userLevel.level === 'SILVER' ? <Star className="w-5 h-5" /> :
-                      <Target className="w-5 h-5" />}
-              {userLevel.name}
-              <span className="text-xs opacity-75">
-                ({formatCurrency(userLevel.min)} - {userLevel.max === Infinity ? '∞' : formatCurrency(userLevel.max)})
-              </span>
-            </div>
+
 
             {/* Enhanced Portfolio Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -3284,14 +3247,14 @@ const ATLStockExchange = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                        <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
+                        <span className="text-xs bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded border border-gray-200 dark:border-gray-600">
                           Vol: {formatNumber(stock.marketCap / stock.price)}
                         </span>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-white text-green-700 border border-green-200 dark:bg-green-900 dark:text-green-200 dark:border-green-700' : 'bg-white text-red-700 border border-red-200 dark:bg-red-900 dark:text-red-200 dark:border-red-700'}`}>
                         {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
                         {percentChange >= 0 ? '+' : ''}{percentChange}%
                       </div>
