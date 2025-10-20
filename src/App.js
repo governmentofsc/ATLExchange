@@ -291,7 +291,7 @@ const ATLStockExchange = () => {
     if (selectedStock && stocks.length > 0) {
       const liveStockData = stocks.find(s => s.ticker === selectedStock.ticker);
       if (liveStockData && liveStockData.price !== selectedStock.price) {
-        console.log('Updating selectedStock with live data:', liveStockData.ticker, 'old price:', selectedStock.price, 'new price:', liveStockData.price);
+        // console.log('Updating selectedStock with live data:', liveStockData.ticker, 'old price:', selectedStock.price, 'new price:', liveStockData.price);
         setSelectedStock(liveStockData);
       }
     }
@@ -767,7 +767,7 @@ const ATLStockExchange = () => {
     if (loginUsername === 'admin' && loginPassword === 'admin') {
       // Ensure admin has proper data structure
       if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
-        console.log('Initializing admin data');
+        // console.log('Initializing admin data');
         const usersRef = ref(database, `users/admin`);
         set(usersRef, {
           password: 'admin',
@@ -785,7 +785,7 @@ const ATLStockExchange = () => {
       // Ensure user has proper data structure
       const userData = users[loginUsername];
       if (!userData.balance || !userData.portfolio) {
-        console.log('Initializing user data for:', loginUsername);
+        // console.log('Initializing user data for:', loginUsername);
         const usersRef = ref(database, `users/${loginUsername}`);
         set(usersRef, {
           password: userData.password || loginPassword,
@@ -843,7 +843,7 @@ const ATLStockExchange = () => {
 
     // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
-      console.error('User data incomplete:', users[user]);
+      // console.error('User data incomplete:', users[user]);
       return;
     }
 
@@ -915,7 +915,7 @@ const ATLStockExchange = () => {
 
     // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
-      console.error('User data incomplete:', users[user]);
+      // console.error('User data incomplete:', users[user]);
       return;
     }
 
@@ -1121,13 +1121,7 @@ const ATLStockExchange = () => {
   const createPriceAlert = () => {
     if (!alertStock || !alertPrice) return;
 
-    const newAlert = {
-      id: Date.now(),
-      stock: alertStock,
-      price: parseFloat(alertPrice),
-      type: alertType,
-      created: Date.now()
-    };
+
 
     // In a real app, this would be stored in the database
     setNotifications(prev => [...prev, `Alert created for ${alertStock} at $${alertPrice}`]);
@@ -1238,9 +1232,9 @@ const ATLStockExchange = () => {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
 
     // Debug logging
-    if (stockData && selectedStock) {
-      console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
-    }
+    // if (stockData && selectedStock) {
+    //   console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
+    // }
 
     // Show loading screen if data isn't ready yet
     if (!stockData || stocks.length === 0) {
@@ -2634,7 +2628,6 @@ const ATLStockExchange = () => {
           {filteredStocks.map(stock => {
             const priceChange = stock.price - stock.open;
             const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
-            const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
 
 
             return (
