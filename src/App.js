@@ -87,8 +87,8 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   let momentum = 0;
   let volatility = 0.0008;
 
-  // Add new data points every 5 minutes for smoother, more realistic charts
-  for (let minutes = Math.max(lastExistingMinutes + 5, 5); minutes <= totalMinutes; minutes += 5) {
+  // Add new data points every 1 minute for proper time intervals
+  for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
     const time = new Date(startOfDay.getTime() + minutes * 60000);
     const hour = time.getHours();
     const minute = time.getMinutes();
@@ -131,13 +131,27 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     });
   }
 
-  // Update the last point with current live price
-  if (newData.length > 0) {
+  // Smoothly adjust the last point toward current live price to avoid jumps
+  if (newData.length > 0 && currentPrice !== openPrice) {
+    const lastPoint = newData[newData.length - 1];
+    const priceDiff = currentPrice - lastPoint.price;
+
+    // Only adjust if the difference is significant, and do it gradually
+    if (Math.abs(priceDiff) > 0.01) {
+      const adjustment = priceDiff * 0.1; // Gradual adjustment (10% of difference)
+      const adjustedPrice = lastPoint.price + adjustment;
+
+      // Keep within reasonable bounds
+      const minPrice = openPrice * 0.96;
+      const maxPrice = openPrice * 1.04;
+      const boundedAdjustedPrice = Math.max(minPrice, Math.min(maxPrice, adjustedPrice));
+
+      newData[newData.length - 1].price = parseFloat(boundedAdjustedPrice.toFixed(2));
+    }
+
+    // Update time to current time
     const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-    newData[newData.length - 1] = {
-      time: currentTime,
-      price: parseFloat(currentPrice.toFixed(2))
-    };
+    newData[newData.length - 1].time = currentTime;
   }
 
   // Cache the updated data
@@ -149,7 +163,7 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 const ATLStockExchange = () => {
   // Clear chart cache on component mount to show new randomization
   React.useEffect(() => {
-    staticChartData = {};
+    staticChartData = {}; // Clear cache for new algorithm
   }, []);
 
   const [darkMode, setDarkMode] = useState(false);
@@ -323,24 +337,23 @@ const ATLStockExchange = () => {
       dayStartTime.setHours(0, 0, 0, 0);
 
       const updatedStocks = stocks.map(stock => {
-        // Enhanced real-time price movement with more realistic behavior
+        // Simple realistic price movement for live updates
         const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
-        const random1 = Math.sin(timeSeed * 0.001) * 0.5 + 0.5;
-        const random2 = Math.sin(timeSeed * 0.002) * 0.5 + 0.5;
-        const random3 = Math.sin(timeSeed * 0.003) * 0.5 + 0.5;
 
-        // Market momentum and volatility
-        const marketMomentum = (random1 - 0.5) * 0.002;
-        const volatility = 0.001 + Math.abs(random2 - 0.5) * 0.002;
-        const noise = (random3 - 0.5) * 2;
+        // Create a simple seeded random for this update
+        let seed = timeSeed % 1000000;
+        const simpleRandom = () => {
+          seed = (seed * 1664525 + 1013904223) % 4294967296;
+          return seed / 4294967296;
+        };
 
-        // Combine factors for more realistic movement
-        const change = marketMomentum + volatility * noise;
-        const newPrice = stock.price * (1 + change);
+        // Very small, realistic price movements
+        const randomChange = (simpleRandom() - 0.5) * 0.0008; // Much smaller movements
+        const newPrice = stock.price * (1 + randomChange);
 
-        // More reasonable bounds that allow for meaningful movement
-        const minPrice = stock.price * 0.9985; // 0.15% down limit per update
-        const maxPrice = stock.price * 1.0015; // 0.15% up limit per update
+        // Very tight bounds to prevent sudden jumps
+        const minPrice = stock.price * 0.9998; // 0.02% down limit per update
+        const maxPrice = stock.price * 1.0002; // 0.02% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = parseFloat(boundedPrice.toFixed(2));
 
