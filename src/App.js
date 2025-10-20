@@ -631,10 +631,16 @@ const ATLStockExchange = () => {
       dayStartTime.setHours(0, 0, 0, 0);
 
       const updatedStocks = stocks.map(stock => {
-        // Skip live updates for stocks that were recently traded (within 10 seconds)
+        // Skip live updates for stocks that were recently traded (within 60 seconds)
         const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
-        if (timeSinceLastTrade < 10000) {
+        if (timeSinceLastTrade < 60000) {
+          // console.log(`Skipping live update for ${stock.ticker} - traded ${timeSinceLastTrade}ms ago`);
           return stock; // Don't update price if recently traded
+        }
+
+        // Clear manual trade flag after protection period
+        if (stock.manualTrade && timeSinceLastTrade >= 60000) {
+          stock = { ...stock, manualTrade: false };
         }
 
         // Simple realistic price movement for live updates
@@ -1203,7 +1209,7 @@ const ATLStockExchange = () => {
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now() };
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now(), manualTrade: true };
         }
         return s;
       });
@@ -1305,7 +1311,7 @@ const ATLStockExchange = () => {
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now() };
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now(), manualTrade: true };
         }
         return s;
       });
