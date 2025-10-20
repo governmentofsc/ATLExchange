@@ -6,7 +6,7 @@ import { ref, set, onValue, update } from 'firebase/database';
 
 // Utility function to get Eastern Time
 const getEasternTime = (date = new Date()) => {
-  return new Date(date.toLocaleString("en-US", {timeZone: "America/New_York"}));
+  return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
 };
 
 // Store static chart data to prevent regeneration - moved outside component
@@ -26,7 +26,7 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     seedKey = currentOrSeed;
   }
 
-  // Simple string hash for stable seeding per ticker
+  // Enhanced seeding with more randomness
   const hashString = (str) => {
     if (!str) return Math.floor(openPrice * 1000);
     let h = 0;
@@ -37,12 +37,12 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   };
 
   const dateKey = now.toDateString();
-  const dataKey = `${seedKey || Math.floor(openPrice)}-${dateKey}`; // cache per day per ticker
-  
+  const dataKey = `${seedKey || Math.floor(openPrice)}-${dateKey}`;
+
   // Get existing data or create new
   let existingData = staticChartData[dataKey] || [];
   const lastExistingTime = existingData.length > 0 ? existingData[existingData.length - 1].time : null;
-  
+
   // Parse last existing time to minutes since midnight
   const parseTime = (timeStr) => {
     if (!timeStr) return 0;
@@ -53,54 +53,83 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
     return totalMinutes;
   };
-  
+
   const lastExistingMinutes = parseTime(lastExistingTime);
-  
+
   // If we already have data up to current time, return it
   if (lastExistingMinutes >= totalMinutes) {
     return existingData;
   }
-  
+
   // Generate new data points from last existing time to current time
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
-  
+
   const newData = [...existingData];
-  
+
   // Start from last known price (or open)
   let prevPrice = newData.length > 0 ? newData[newData.length - 1].price : openPrice;
-  
+
+  // Enhanced randomization with more realistic market behavior
+  const baseSeed = hashString(seedKey);
+  let trendDirection = Math.sin(baseSeed * 0.001) > 0 ? 1 : -1; // Overall trend for the day
+  let momentum = 0; // Momentum factor for more realistic price movement
+
   // Add new data points every 1 minute from last existing time to now
   for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
     const time = new Date(startOfDay.getTime() + minutes * 60000);
     const hour = time.getHours();
     const minute = time.getMinutes();
-    
+
     // Format time as 12-hour format
     const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
     const period = hour >= 12 ? 'PM' : 'AM';
     const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
-    
-    // Random-walk style movement with tiny drift and bounded volatility
+
+    // Enhanced random movement with momentum and trend
     const timeOfDay = minutes / 1440; // 0..1
-    const seed = hashString(seedKey) + minutes;
-    const deterministicRandom = (s) => { let x = Math.sin(s) * 10000; return x - Math.floor(x); };
-    const drift = Math.sin(timeOfDay * Math.PI * 2) * 0.00015; // ~0.015% drift
-    const volatility = 0.0008; // ~0.08% per minute
-    const noise = (deterministicRandom(seed) - 0.5) * 2; // -1..1
-    const step = drift + volatility * noise;
+    const seed = baseSeed + minutes;
+
+    // Multiple random sources for more realistic movement
+    const random1 = Math.sin(seed * 0.1234) * 0.5 + 0.5;
+    const random2 = Math.sin(seed * 0.5678) * 0.5 + 0.5;
+    const random3 = Math.sin(seed * 0.9012) * 0.5 + 0.5;
+
+    // Market opening/closing effects
+    const marketHourEffect = Math.sin(timeOfDay * Math.PI) * 0.0002;
+
+    // Trend component (stronger than before)
+    const trendStrength = 0.0003 * trendDirection;
+
+    // Momentum (price tends to continue in same direction)
+    momentum = momentum * 0.8 + (random1 - 0.5) * 0.4;
+
+    // Volatility with some clustering
+    const volatilityBase = 0.0015; // Increased base volatility
+    const volatilityCluster = Math.abs(Math.sin(seed * 0.01)) * 0.001;
+    const totalVolatility = volatilityBase + volatilityCluster;
+
+    // Combine all factors
+    const noise = (random2 - 0.5) * 2; // -1..1
+    const step = marketHourEffect + trendStrength + momentum * 0.3 + totalVolatility * noise;
+
+    // Occasional trend reversals for realism
+    if (Math.abs(random3 - 0.5) > 0.48) {
+      trendDirection *= -1;
+    }
+
     const unclamped = prevPrice * (1 + step);
-    const minP = openPrice * 0.92;
-    const maxP = openPrice * 1.08;
+    const minP = openPrice * 0.88; // Wider bounds for more movement
+    const maxP = openPrice * 1.12;
     const price = Math.max(minP, Math.min(maxP, unclamped));
     prevPrice = price;
-    
+
     newData.push({
       time: timeStr,
       price: parseFloat(price.toFixed(2))
     });
   }
-  
+
   // Update the last point with current live price
   if (newData.length > 0) {
     const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
@@ -109,10 +138,10 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
       price: parseFloat(currentPrice.toFixed(2))
     };
   }
-  
+
   // Cache the updated data
   staticChartData[dataKey] = newData;
-  
+
   return newData;
 }
 
@@ -176,14 +205,14 @@ const ATLStockExchange = () => {
         setStocks(data);
       } else if (!initialized) {
         const initialStocks = [
-          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
-          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
-          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
-          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
-          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
-          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
-          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
-          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
+          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
+          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
+          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
+          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
+          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
+          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
+          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
         ];
         set(stocksRef, initialStocks);
       }
@@ -219,7 +248,7 @@ const ATLStockExchange = () => {
   // Listen for trading history
   useEffect(() => {
     if (!user) return;
-    
+
     const historyRef = ref(database, `tradingHistory/${user}`);
     onValue(historyRef, (snapshot) => {
       const data = snapshot.val();
@@ -250,25 +279,25 @@ const ATLStockExchange = () => {
   useEffect(() => {
     const controllerRef = ref(database, 'marketController');
     const sessionId = Date.now() + Math.random();
-    
+
     // Become the market controller immediately
-    set(controllerRef, { 
-      sessionId, 
+    set(controllerRef, {
+      sessionId,
       timestamp: Date.now(),
       user: user || 'anonymous'
     });
-    
+
     setIsMarketController(true);
-    
+
     // Heartbeat to maintain control
     const heartbeat = setInterval(() => {
-      update(controllerRef, { 
-        sessionId, 
+      update(controllerRef, {
+        sessionId,
         timestamp: Date.now(),
         user: user || 'anonymous'
       });
     }, 5000);
-    
+
     return () => {
       clearInterval(heartbeat);
     };
@@ -276,39 +305,54 @@ const ATLStockExchange = () => {
 
   useEffect(() => {
     if (stocks.length === 0) return;
-    
+
     // Only run price updates if this tab is the market controller AND market is running
     if (!isMarketController || !marketRunning) {
       return;
     }
-    
+
     const interval = setInterval(() => {
       const now = getEasternTime();
       const dayStartTime = getEasternTime();
       dayStartTime.setHours(0, 0, 0, 0);
-      
+
       const updatedStocks = stocks.map(stock => {
-        const change = (Math.random() - 0.5) * 0.3;
-        // Allow price to move more freely from current price, not just bounded by opening price
-        // This prevents purchase-induced price changes from being immediately reverted
-        const newPrice = Math.max(stock.price * 0.995, Math.min(stock.price * 1.005, stock.price + change));
-        const newPrice2 = parseFloat(newPrice.toFixed(2));
-        
+        // Enhanced real-time price movement with more realistic behavior
+        const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
+        const random1 = Math.sin(timeSeed * 0.001) * 0.5 + 0.5;
+        const random2 = Math.sin(timeSeed * 0.002) * 0.5 + 0.5;
+        const random3 = Math.sin(timeSeed * 0.003) * 0.5 + 0.5;
+
+        // Market momentum and volatility
+        const marketMomentum = (random1 - 0.5) * 0.002;
+        const volatility = 0.001 + Math.abs(random2 - 0.5) * 0.002;
+        const noise = (random3 - 0.5) * 2;
+
+        // Combine factors for more realistic movement
+        const change = marketMomentum + volatility * noise;
+        const newPrice = stock.price * (1 + change);
+
+        // More reasonable bounds that allow for meaningful movement
+        const minPrice = stock.price * 0.9985; // 0.15% down limit per update
+        const maxPrice = stock.price * 1.0015; // 0.15% up limit per update
+        const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
+        const newPrice2 = parseFloat(boundedPrice.toFixed(2));
+
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
-        
+
         const newHistory = [...stock.history];
         const elapsedMs = now - dayStartTime;
-        
+
         // Rolling update system: update last point every 5 seconds, add new point every 2 minutes
         const elapsed2Min = Math.floor(elapsedMs / 120000);
         const expectedPoints2Min = elapsed2Min + 1;
-        
+
         const hour = now.getHours();
         const min = now.getMinutes();
         let displayHour = hour;
         let ampm = 'AM';
-        
+
         if (hour === 0) {
           displayHour = 12;
           ampm = 'AM';
@@ -322,12 +366,12 @@ const ATLStockExchange = () => {
           displayHour = hour - 12;
           ampm = 'PM';
         }
-        
+
         // Round minutes to nearest 5 for cleaner display
         const roundedMin = Math.floor(min / 5) * 5;
         const displayMin = roundedMin.toString().padStart(2, '0');
         const timeLabel = `${displayHour}:${displayMin} ${ampm}`;
-        
+
         if (newHistory.length < expectedPoints2Min) {
           // Add new data point every 2 minutes
           newHistory.push({ time: timeLabel, price: newPrice2 });
@@ -337,100 +381,228 @@ const ATLStockExchange = () => {
             newHistory[newHistory.length - 1] = { time: timeLabel, price: newPrice2 };
           }
         }
-        
+
         const sharesOutstanding = stock.marketCap / stock.price;
         const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
-        
+
         return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
       });
-      
+
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
       setStocks(updatedStocks); // Update local state immediately
     }, updateSpeed); // Use configurable update speed
-    
+
     return () => clearInterval(interval);
   }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
 
-  function generateExtendedHistory(basePrice) {
+  function generateExtendedHistory(basePrice, seedKey = '') {
     const data = [];
-    let price = basePrice * (0.95 + Math.random() * 0.10); // Start closer to base price
-    
-    // Generate 7 days of data with 4-hour intervals
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let price = basePrice * (0.92 + seededRandom() * 0.16); // More variation in starting price
+    let trend = (seededRandom() - 0.5) * 0.02; // Overall trend for the week
+    let momentum = 0;
+
+    // Generate 7 days of data with hourly intervals for better resolution
     for (let day = 0; day < 7; day++) {
-      for (let period = 0; period < 6; period++) {
-        // More realistic price movement with trend
-        const trend = (Math.random() - 0.5) * 0.02; // Small trend component
-        const volatility = (Math.random() - 0.5) * 0.04; // 4% volatility
-        const change = trend + volatility;
+      for (let hour = 0; hour < 24; hour += 2) { // Every 2 hours for better detail
+        // Market behavior changes throughout the day
+        const timeOfDay = hour / 24;
+        const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
+
+        // Enhanced randomization
+        const random1 = seededRandom();
+        const random2 = seededRandom();
+        const random3 = seededRandom();
+
+        // Momentum carries forward
+        momentum = momentum * 0.7 + (random1 - 0.5) * 0.6;
+
+        // Volatility clustering
+        const baseVolatility = 0.008 + marketActivity * 0.004; // Higher volatility during active hours
+        const volatilityCluster = Math.abs(random2 - 0.5) * 0.006;
+        const totalVolatility = baseVolatility + volatilityCluster;
+
+        // Trend can shift
+        if (random3 > 0.95) {
+          trend = (seededRandom() - 0.5) * 0.02;
+        }
+
+        // Combine factors
+        const noise = (seededRandom() - 0.5) * 2;
+        const change = trend + momentum * 0.4 + totalVolatility * noise;
+
         price = price * (1 + change);
-        
-        // Keep price within reasonable bounds
-        price = Math.max(basePrice * 0.85, Math.min(basePrice * 1.15, price));
-        
+
+        // Keep within reasonable bounds but allow more movement
+        price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.35, price));
+
         const date = getEasternTime();
         date.setDate(date.getDate() - (7 - day));
-        date.setHours(9 + period * 4); // Market hours: 9 AM to 9 PM ET
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${(9 + period * 4).toString().padStart(2,'0')}:00`;
-        
+        date.setHours(hour);
+
+        let displayHour = hour;
+        let ampm = 'AM';
+        if (hour === 0) {
+          displayHour = 12;
+          ampm = 'AM';
+        } else if (hour < 12) {
+          displayHour = hour;
+          ampm = 'AM';
+        } else if (hour === 12) {
+          displayHour = 12;
+          ampm = 'PM';
+        } else {
+          displayHour = hour - 12;
+          ampm = 'PM';
+        }
+
+        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${displayHour}:00 ${ampm}`;
+
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
     return data;
   }
 
-  function generateYearHistory(basePrice) {
+  function generateYearHistory(basePrice, seedKey = '') {
     const data = [];
-    let price = basePrice * (0.90 + Math.random() * 0.20); // Start closer to base price
-    
-    // Generate 12 months of data with weekly intervals
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let price = basePrice * (0.80 + seededRandom() * 0.40); // More variation in starting price
+    let longTermTrend = (seededRandom() - 0.5) * 0.03; // Overall yearly trend
+    let momentum = 0;
+
+    // Generate 12 months of data with more frequent intervals
     for (let month = 0; month < 12; month++) {
       for (let week = 0; week < 4; week++) {
-        // Add seasonal trends and realistic volatility
-        const seasonalTrend = Math.sin((month * 4 + week) * Math.PI / 24) * 0.01; // Small seasonal component
-        const randomChange = (Math.random() - 0.5) * 0.06; // 6% volatility
-        const change = seasonalTrend + randomChange;
+        // Seasonal effects (stronger in certain months)
+        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.015;
+
+        // Market cycles and events
+        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.008;
+
+        // Enhanced randomization
+        const random1 = seededRandom();
+        const random2 = seededRandom();
+        const random3 = seededRandom();
+
+        // Momentum over longer periods
+        momentum = momentum * 0.85 + (random1 - 0.5) * 0.8;
+
+        // Volatility varies by month (higher in certain periods)
+        const baseVolatility = 0.015 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.01;
+        const volatilityCluster = Math.abs(random2 - 0.5) * 0.012;
+        const totalVolatility = baseVolatility + volatilityCluster;
+
+        // Trend can shift quarterly
+        if (week === 0 && month % 3 === 0 && random3 > 0.7) {
+          longTermTrend = (seededRandom() - 0.5) * 0.03;
+        }
+
+        // Major market events (rare but impactful)
+        let eventImpact = 0;
+        if (random3 > 0.98) {
+          eventImpact = (seededRandom() - 0.5) * 0.15; // Major event
+        } else if (random3 > 0.95) {
+          eventImpact = (seededRandom() - 0.5) * 0.08; // Minor event
+        }
+
+        // Combine all factors
+        const noise = (seededRandom() - 0.5) * 2;
+        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.3 + totalVolatility * noise + eventImpact;
+
         price = price * (1 + change);
-        
-        // Keep within reasonable bounds
-        price = Math.max(basePrice * 0.60, Math.min(basePrice * 1.60, price));
-        
+
+        // Keep within reasonable bounds but allow significant movement over a year
+        price = Math.max(basePrice * 0.40, Math.min(basePrice * 2.50, price));
+
         const date = getEasternTime();
         date.setMonth(date.getMonth() - (12 - month));
         date.setDate(1 + week * 7);
-        const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-        
+
+        // Ensure valid date
+        if (date.getDate() > 28) {
+          date.setDate(28);
+        }
+
+        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
     return data;
   }
 
-  // New function to generate minute-by-minute data for short timeframes
-  function generateMinuteHistory(basePrice, minutes) {
+  // Enhanced function to generate minute-by-minute data for short timeframes
+  function generateMinuteHistory(basePrice, minutes, seedKey = '') {
     const data = [];
     let price = basePrice;
     const now = getEasternTime();
     const startTime = new Date(now.getTime() - minutes * 60 * 1000);
-    
-    // Use a seeded random number generator for consistent data
-    let seed = Math.floor(basePrice * 1000 + minutes) % 10000;
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 1000);
+    let seedCounter = 0;
     const seededRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter + minutes) * 10000;
+      return x - Math.floor(x);
     };
-    
-    for (let i = 0; i <= minutes; i += 1) { // Every 1 minute for more detail
-      const change = (seededRandom() - 0.5) * 0.02; // Smaller changes for minute data
-      price = Math.max(basePrice * 0.99, Math.min(basePrice * 1.01, price + change));
-      
+
+    let momentum = 0;
+    let microTrend = (seededRandom() - 0.5) * 0.002;
+
+    for (let i = 0; i <= minutes; i += 1) {
+      // Enhanced short-term movement
+      const random1 = seededRandom();
+      const random2 = seededRandom();
+
+      // Momentum for smoother movement
+      momentum = momentum * 0.6 + (random1 - 0.5) * 0.8;
+
+      // Micro volatility with clustering
+      const baseVolatility = 0.003;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.002;
+      const totalVolatility = baseVolatility + volatilityCluster;
+
+      // Occasional micro trend shifts
+      if (seededRandom() > 0.97) {
+        microTrend = (seededRandom() - 0.5) * 0.002;
+      }
+
+      const noise = (seededRandom() - 0.5) * 2;
+      const change = microTrend + momentum * 0.4 + totalVolatility * noise;
+
+      price = price * (1 + change);
+
+      // Tighter bounds for short timeframes
+      price = Math.max(basePrice * 0.985, Math.min(basePrice * 1.015, price));
+
       const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
-      const min = pointTime.getMinutes().toString().padStart(2,'0');
+      const min = pointTime.getMinutes().toString().padStart(2, '0');
       let displayHour = hour;
       let ampm = 'AM';
-      
+
       if (hour === 0) {
         displayHour = 12;
         ampm = 'AM';
@@ -444,8 +616,66 @@ const ATLStockExchange = () => {
         displayHour = hour - 12;
         ampm = 'PM';
       }
-      
+
       data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  // New function to generate monthly data (30 days)
+  function generateMonthHistory(basePrice, seedKey = '') {
+    const data = [];
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let price = basePrice * (0.90 + seededRandom() * 0.20);
+    let trend = (seededRandom() - 0.5) * 0.025; // Monthly trend
+    let momentum = 0;
+
+    // Generate 30 days of data with daily intervals
+    for (let day = 0; day < 30; day++) {
+      // Enhanced randomization
+      const random1 = seededRandom();
+      const random2 = seededRandom();
+      const random3 = seededRandom();
+
+      // Weekly cycles
+      const weeklyEffect = Math.sin((day / 7) * Math.PI * 2) * 0.005;
+
+      // Momentum carries forward
+      momentum = momentum * 0.75 + (random1 - 0.5) * 0.7;
+
+      // Volatility with clustering
+      const baseVolatility = 0.012;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.008;
+      const totalVolatility = baseVolatility + volatilityCluster;
+
+      // Trend can shift weekly
+      if (day % 7 === 0 && random3 > 0.8) {
+        trend = (seededRandom() - 0.5) * 0.025;
+      }
+
+      // Combine factors
+      const noise = (seededRandom() - 0.5) * 2;
+      const change = trend + weeklyEffect + momentum * 0.35 + totalVolatility * noise;
+
+      price = price * (1 + change);
+
+      // Keep within reasonable bounds
+      price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.45, price));
+
+      const date = getEasternTime();
+      date.setDate(date.getDate() - (30 - day));
+      const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+
+      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
     }
     return data;
   }
@@ -453,34 +683,37 @@ const ATLStockExchange = () => {
   // Function to filter data based on timeframe
   function getFilteredChartData(stockData, period) {
     let data = [];
-    
-    switch(period) {
+
+    switch (period) {
       case '10m':
-        data = generateMinuteHistory(stockData.price, 10);
+        data = generateMinuteHistory(stockData.price, 10, stockData.ticker);
         break;
       case '30m':
-        data = generateMinuteHistory(stockData.price, 30);
+        data = generateMinuteHistory(stockData.price, 30, stockData.ticker);
         break;
       case '1h':
-        data = generateMinuteHistory(stockData.price, 60);
+        data = generateMinuteHistory(stockData.price, 60, stockData.ticker);
         break;
       case '1d':
         // Stable: generate from open to now, seeded by ticker so old points never change
         data = generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
         break;
       case '1w':
-        data = stockData.extendedHistory || [];
+        // Generate fresh weekly data with proper seeding
+        data = generateExtendedHistory(stockData.price, stockData.ticker);
         break;
       case '1m':
-        data = stockData.extendedHistory || [];
+        // Generate monthly data (30 days) with daily intervals
+        data = generateMonthHistory(stockData.price, stockData.ticker);
         break;
       case '1y':
-        data = stockData.yearHistory || [];
+        // Generate yearly data with proper seeding
+        data = generateYearHistory(stockData.price, stockData.ticker);
         break;
       default:
         data = stockData.history || [];
     }
-    
+
     return data;
   }
 
@@ -488,29 +721,29 @@ const ATLStockExchange = () => {
   // Generate portfolio performance history
   function generatePortfolioHistory() {
     if (!user || !users[user]) return [];
-    
+
     const data = [];
     const currentValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [ticker, qty]) => {
       const stock = stocks.find(s => s.ticker === ticker);
       return sum + (qty * (stock?.price || 0));
     }, 0);
-    
+
     // Generate 30 days of portfolio value history
     for (let day = 30; day >= 0; day--) {
       const date = getEasternTime();
       date.setDate(date.getDate() - day);
-      const dateStr = `${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')}`;
-      
+      const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+
       // Simulate portfolio value changes
       const change = (Math.random() - 0.5) * 0.05; // 5% daily volatility
       const simulatedValue = currentValue * (1 + change * (day / 30));
-      
-      data.push({ 
-        time: dateStr, 
+
+      data.push({
+        time: dateStr,
         value: parseFloat(simulatedValue.toFixed(2))
       });
     }
-    
+
     return data;
   }
 
@@ -520,13 +753,13 @@ const ATLStockExchange = () => {
       if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
         console.log('Initializing admin data');
         const usersRef = ref(database, `users/admin`);
-        set(usersRef, { 
-          password: 'admin', 
-          balance: 1000000, 
-          portfolio: {} 
+        set(usersRef, {
+          password: 'admin',
+          balance: 1000000,
+          portfolio: {}
         });
       }
-      
+
       setUser('admin');
       setIsAdmin(true);
       setShowLoginModal(false);
@@ -538,13 +771,13 @@ const ATLStockExchange = () => {
       if (!userData.balance || !userData.portfolio) {
         console.log('Initializing user data for:', loginUsername);
         const usersRef = ref(database, `users/${loginUsername}`);
-        set(usersRef, { 
-          password: userData.password || loginPassword, 
-          balance: userData.balance || 50000, 
-          portfolio: userData.portfolio || {} 
+        set(usersRef, {
+          password: userData.password || loginPassword,
+          balance: userData.balance || 50000,
+          portfolio: userData.portfolio || {}
         });
       }
-      
+
       setUser(loginUsername);
       setIsAdmin(false);
       setShowLoginModal(false);
@@ -569,10 +802,10 @@ const ATLStockExchange = () => {
       setSignupError('Username already exists');
       return;
     }
-    
+
     const usersRef = ref(database, `users/${signupUsername}`);
     set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
-    
+
     setUser(signupUsername);
     setIsAdmin(false);
     setShowSignupModal(false);
@@ -591,35 +824,35 @@ const ATLStockExchange = () => {
 
   const buyStock = () => {
     if (!selectedStock || !buyQuantity || !user) return;
-    
+
     // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
       console.error('User data incomplete:', users[user]);
       return;
     }
-    
+
     const quantity = parseInt(buyQuantity);
     const cost = selectedStock.price * quantity;
     if (users[user].balance >= cost) {
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const currentPortfolio = users[user].portfolio || {};
-      const newPortfolio = { 
-        ...currentPortfolio, 
+      const newPortfolio = {
+        ...currentPortfolio,
         [selectedStock.ticker]: (currentPortfolio[selectedStock.ticker] || 0) + quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
-      
+
       // Clear the input
       setBuyQuantity('');
-      
+
       // Calculate price impact based on market cap (real-world model)
       // Price impact = (purchase value / market cap) as percentage increase
       const purchaseValue = cost;
       const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
       const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
-      
+
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
@@ -631,10 +864,10 @@ const ATLStockExchange = () => {
         }
         return s;
       });
-      
+
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-      
+
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
@@ -648,41 +881,41 @@ const ATLStockExchange = () => {
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
-      
+
       setBuyQuantity('');
     }
   };
 
   const sellStock = () => {
     if (!selectedStock || !sellQuantity || !user) return;
-    
+
     // Check if user data exists and has required properties
     if (!users[user] || !users[user].balance) {
       console.error('User data incomplete:', users[user]);
       return;
     }
-    
+
     const quantity = parseInt(sellQuantity);
     const currentPortfolio = users[user].portfolio || {};
     if ((currentPortfolio[selectedStock.ticker] || 0) >= quantity) {
       const proceeds = selectedStock.price * quantity;
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance + proceeds;
-      const newPortfolio = { 
-        ...currentPortfolio, 
+      const newPortfolio = {
+        ...currentPortfolio,
         [selectedStock.ticker]: currentPortfolio[selectedStock.ticker] - quantity
       };
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
-      
+
       // Clear the input
       setSellQuantity('');
-      
+
       // Calculate price impact based on market cap
       const saleValue = proceeds;
       const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
       const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
       const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
-      
+
       // Record trade in history
       const tradeRecord = {
         timestamp: Date.now(),
@@ -696,7 +929,7 @@ const ATLStockExchange = () => {
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
-      
+
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -707,7 +940,7 @@ const ATLStockExchange = () => {
         }
         return s;
       });
-      
+
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
       setSellQuantity('');
@@ -716,13 +949,13 @@ const ATLStockExchange = () => {
 
   const createStock = () => {
     if (!newStockName || !newStockTicker || !newStockPrice) return;
-    
+
     const marketCap = parseFloat(newStockMarketCap) || 500000000000;
     const pe = parseFloat(newStockPE) || 25.0;
     const dividend = parseFloat(newStockDividend) || 0.5;
     const high52w = parseFloat(newStockHigh52w) || parseFloat(newStockPrice) * 1.2;
     const low52w = parseFloat(newStockLow52w) || parseFloat(newStockPrice) * 0.8;
-    
+
     const newStock = {
       ticker: newStockTicker.toUpperCase(),
       name: newStockName,
@@ -737,13 +970,13 @@ const ATLStockExchange = () => {
       dividend: dividend,
       qtrlyDiv: dividend / 4,
       history: generatePriceHistory(parseFloat(newStockPrice), parseFloat(newStockPrice), newStockTicker || ''),
-      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice)),
-      yearHistory: generateYearHistory(parseFloat(newStockPrice))
+      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice), newStockTicker || ''),
+      yearHistory: generateYearHistory(parseFloat(newStockPrice), newStockTicker || '')
     };
-    
+
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, [...stocks, newStock]);
-    
+
     setNewStockName('');
     setNewStockTicker('');
     setNewStockPrice('');
@@ -756,7 +989,7 @@ const ATLStockExchange = () => {
 
   const adjustPriceByAmount = () => {
     if (!selectedStockForAdmin || !priceAdjustment) return;
-    
+
     const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const newPrice = parseFloat((parseFloat(s.price) + parseFloat(priceAdjustment)).toFixed(2));
@@ -768,7 +1001,7 @@ const ATLStockExchange = () => {
       }
       return s;
     });
-    
+
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPriceAdjustment('');
@@ -777,7 +1010,7 @@ const ATLStockExchange = () => {
 
   const adjustPriceByPercentage = () => {
     if (!selectedStockForAdmin || !pricePercentage) return;
-    
+
     const updatedStocks = stocks.map(s => {
       if (s.ticker === selectedStockForAdmin) {
         const percentChange = parseFloat(pricePercentage) / 100;
@@ -790,7 +1023,7 @@ const ATLStockExchange = () => {
       }
       return s;
     });
-    
+
     const stocksRef = ref(database, 'stocks');
     set(stocksRef, updatedStocks);
     setPricePercentage('');
@@ -799,26 +1032,26 @@ const ATLStockExchange = () => {
 
   const adjustMoneySetter = () => {
     if (!targetUser || !adjustMoney) return;
-    
+
     const userRef = ref(database, `users/${targetUser}`);
     const newBalance = users[targetUser].balance + parseFloat(adjustMoney);
     update(userRef, { balance: newBalance });
-    
+
     setAdjustMoney('');
     setTargetUser('');
   };
 
   const adminGiveShares = () => {
     if (!adminSharesUser || !adminSharesStock || !adminSharesQuantity) return;
-    
+
     const quantity = parseInt(adminSharesQuantity);
     const userRef = ref(database, `users/${adminSharesUser}`);
-    const newPortfolio = { 
-      ...users[adminSharesUser].portfolio, 
-      [adminSharesStock]: (users[adminSharesUser].portfolio[adminSharesStock] || 0) + quantity 
+    const newPortfolio = {
+      ...users[adminSharesUser].portfolio,
+      [adminSharesStock]: (users[adminSharesUser].portfolio[adminSharesStock] || 0) + quantity
     };
     update(userRef, { portfolio: newPortfolio });
-    
+
     setAdminSharesUser('');
     setAdminSharesStock('');
     setAdminSharesQuantity('');
@@ -826,17 +1059,17 @@ const ATLStockExchange = () => {
 
   const adminRemoveShares = () => {
     if (!adminSharesUser || !adminSharesStock || !adminSharesQuantity) return;
-    
+
     const quantity = parseInt(adminSharesQuantity);
     if ((users[adminSharesUser].portfolio[adminSharesStock] || 0) < quantity) return;
-    
+
     const userRef = ref(database, `users/${adminSharesUser}`);
-    const newPortfolio = { 
-      ...users[adminSharesUser].portfolio, 
-      [adminSharesStock]: users[adminSharesUser].portfolio[adminSharesStock] - quantity 
+    const newPortfolio = {
+      ...users[adminSharesUser].portfolio,
+      [adminSharesStock]: users[adminSharesUser].portfolio[adminSharesStock] - quantity
     };
     update(userRef, { portfolio: newPortfolio });
-    
+
     setAdminSharesUser('');
     setAdminSharesStock('');
     setAdminSharesQuantity('');
@@ -854,10 +1087,10 @@ const ATLStockExchange = () => {
 
   const executeStockSplit = () => {
     if (!splitStock || !splitRatio) return;
-    
+
     const ratio = parseFloat(splitRatio);
     if (ratio <= 0) return;
-    
+
     const updatedStocks = stocks.map(s => {
       if (s.ticker === splitStock) {
         const newPrice = s.price / ratio;
@@ -866,9 +1099,9 @@ const ATLStockExchange = () => {
         const newLow = s.low / ratio;
         const newHigh52w = s.high52w / ratio;
         const newLow52w = s.low52w / ratio;
-        
-        return { 
-          ...s, 
+
+        return {
+          ...s,
           price: parseFloat(newPrice.toFixed(2)),
           open: parseFloat(newOpen.toFixed(2)),
           high: parseFloat(newHigh.toFixed(2)),
@@ -879,7 +1112,7 @@ const ATLStockExchange = () => {
       }
       return s;
     });
-    
+
     // Update all user portfolios to reflect the split
     const updatedUsers = { ...users };
     Object.keys(updatedUsers).forEach(username => {
@@ -887,27 +1120,27 @@ const ATLStockExchange = () => {
         updatedUsers[username].portfolio[splitStock] *= ratio;
       }
     });
-    
+
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
     set(stocksRef, updatedStocks);
     set(usersRef, updatedUsers);
-    
+
     setSplitStock('');
     setSplitRatio('');
   };
 
   const getFilteredStocks = () => {
     let filtered = stocks;
-    
+
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(s => 
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      filtered = filtered.filter(s =>
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.ticker.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     // Filter by stock filter (price range, market cap, etc)
     if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
     if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
@@ -915,10 +1148,10 @@ const ATLStockExchange = () => {
     if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
     if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
     if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
-    
+
     // Sort by market cap if no search
     if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
-    
+
     return filtered.slice(0, 10);
   };
 
@@ -952,12 +1185,12 @@ const ATLStockExchange = () => {
 
   if (selectedStock) {
     const stockData = stocks.find(s => s.ticker === selectedStock.ticker);
-    
+
     // Debug logging
     if (stockData && selectedStock) {
       console.log('Stock detail view - selectedStock price:', selectedStock.price, 'live price:', stockData.price);
     }
-    
+
     // Show loading screen if data isn't ready yet
     if (!stockData || stocks.length === 0) {
       return (
@@ -971,7 +1204,7 @@ const ATLStockExchange = () => {
         </div>
       );
     }
-    
+
     if (user && (!users || !users[user])) {
       return (
         <div className={`min-h-screen ${bgClass} flex items-center justify-center`}>
@@ -985,17 +1218,17 @@ const ATLStockExchange = () => {
         </div>
       );
     }
-    
+
     const userHolding = user && users && users[user] ? (users[user].portfolio?.[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
     const priceChange = stockData.price - stockData.open;
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
-    
+
     // Use the new filtered chart data function with live price
     const chartData = getFilteredChartData(stockData, chartPeriod);
-    
-    
+
+
     const chartDomain = getChartDomain(chartData);
 
     return (
@@ -1021,7 +1254,7 @@ const ATLStockExchange = () => {
                 <p className="text-3xl font-bold text-blue-600">${stockData.price.toFixed(2)}</p>
                 <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
               </div>
-              
+
               <div className="mb-4 flex gap-2 flex-wrap">
                 {['10m', '30m', '1h', '1d', '1w', '1m', '1y'].map(period => (
                   <button key={period} onClick={() => setChartPeriod(period)} className={`px-3 py-1 rounded text-sm ${chartPeriod === period ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>{period}</button>
@@ -1099,7 +1332,7 @@ const ATLStockExchange = () => {
             MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
           </span>
           <span className="px-2 py-1 rounded text-xs hidden md:inline bg-blue-600 text-white">
-            {getEasternTime().toLocaleTimeString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit'})} ET
+            {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
           </span>
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
@@ -1122,7 +1355,7 @@ const ATLStockExchange = () => {
             MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
           </span>
           <span className="block bg-blue-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">
-            {getEasternTime().toLocaleTimeString('en-US', {timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit'})} ET
+            {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
           </span>
           {user ? (
             <button onClick={handleLogout} className="text-red-600">Logout</button>
@@ -1208,7 +1441,7 @@ const ATLStockExchange = () => {
             </select>
             <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
-            
+
             <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
             <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
           </div>
@@ -1262,14 +1495,14 @@ const ATLStockExchange = () => {
                   {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker}) - ${s.price.toFixed(2)}</option>)}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-bold mb-2">Split Ratio</label>
-                <input 
-                  type="number" 
-                  placeholder="e.g., 2 for 2-for-1 split" 
-                  value={splitRatio} 
-                  onChange={(e) => setSplitRatio(e.target.value)} 
+                <input
+                  type="number"
+                  placeholder="e.g., 2 for 2-for-1 split"
+                  value={splitRatio}
+                  onChange={(e) => setSplitRatio(e.target.value)}
                   className={`w-full p-2 mb-4 border rounded ${inputClass}`}
                   min="0.1"
                   step="0.1"
@@ -1278,7 +1511,7 @@ const ATLStockExchange = () => {
                   Enter the split ratio (e.g., 2 for 2-for-1 split, 0.5 for reverse split)
                 </p>
               </div>
-              
+
               {splitStock && splitRatio && (
                 <div className="bg-blue-50 p-4 rounded mb-4">
                   <h3 className="font-bold mb-2">Split Preview:</h3>
@@ -1286,7 +1519,7 @@ const ATLStockExchange = () => {
                     <strong>{stocks.find(s => s.ticker === splitStock)?.name}</strong> will split {splitRatio}x-for-1
                   </p>
                   <p className="text-sm">
-                    Current price: <strong>${stocks.find(s => s.ticker === splitStock)?.price.toFixed(2)}</strong> → 
+                    Current price: <strong>${stocks.find(s => s.ticker === splitStock)?.price.toFixed(2)}</strong> →
                     New price: <strong>${(stocks.find(s => s.ticker === splitStock)?.price / parseFloat(splitRatio)).toFixed(2)}</strong>
                   </p>
                   <p className="text-sm">
@@ -1294,15 +1527,15 @@ const ATLStockExchange = () => {
                   </p>
                 </div>
               )}
-              
-              <button 
-                onClick={executeStockSplit} 
+
+              <button
+                onClick={executeStockSplit}
                 disabled={!splitStock || !splitRatio}
                 className={`w-full p-2 rounded font-bold ${!splitStock || !splitRatio ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
               >
                 Execute Stock Split
               </button>
-              
+
               <div className="bg-yellow-50 p-4 rounded">
                 <h3 className="font-bold mb-2">⚠️ Important:</h3>
                 <ul className="text-sm space-y-1">
@@ -1325,51 +1558,51 @@ const ATLStockExchange = () => {
               <div>
                 <label className="block text-sm font-bold mb-2">Price Update Speed (milliseconds)</label>
                 <div className="flex gap-2">
-                  <input 
-                    type="number" 
-                    value={updateSpeed} 
-                    onChange={(e) => setUpdateSpeed(parseInt(e.target.value) || 1000)} 
-                    className={`flex-1 p-2 border rounded ${inputClass}`} 
-                    min="500" 
-                    max="10000" 
+                  <input
+                    type="number"
+                    value={updateSpeed}
+                    onChange={(e) => setUpdateSpeed(parseInt(e.target.value) || 1000)}
+                    className={`flex-1 p-2 border rounded ${inputClass}`}
+                    min="500"
+                    max="10000"
                     step="500"
                   />
-                  <button 
-                    onClick={() => setUpdateSpeed(1000)} 
+                  <button
+                    onClick={() => setUpdateSpeed(1000)}
                     className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     Reset (1s)
                   </button>
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
-                  Current: {updateSpeed}ms ({1000/updateSpeed}x speed)
+                  Current: {updateSpeed}ms ({1000 / updateSpeed}x speed)
                 </p>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-bold mb-2">Chart Update Speed (milliseconds)</label>
                 <div className="flex gap-2">
-                  <input 
-                    type="number" 
-                    value={chartUpdateSpeed} 
-                    onChange={(e) => setChartUpdateSpeed(parseInt(e.target.value) || 5000)} 
-                    className={`flex-1 p-2 border rounded ${inputClass}`} 
-                    min="1000" 
-                    max="30000" 
+                  <input
+                    type="number"
+                    value={chartUpdateSpeed}
+                    onChange={(e) => setChartUpdateSpeed(parseInt(e.target.value) || 5000)}
+                    className={`flex-1 p-2 border rounded ${inputClass}`}
+                    min="1000"
+                    max="30000"
                     step="1000"
                   />
-                  <button 
-                    onClick={() => setChartUpdateSpeed(5000)} 
+                  <button
+                    onClick={() => setChartUpdateSpeed(5000)}
                     className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     Reset (5s)
                   </button>
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
-                  Current: {chartUpdateSpeed}ms - Updates last chart point every {chartUpdateSpeed/1000}s
+                  Current: {chartUpdateSpeed}ms - Updates last chart point every {chartUpdateSpeed / 1000}s
                 </p>
               </div>
-              
+
               <div className="bg-blue-50 p-4 rounded">
                 <h3 className="font-bold mb-2">How it works:</h3>
                 <ul className="text-sm space-y-1">
@@ -1381,14 +1614,14 @@ const ATLStockExchange = () => {
                   <li>• <strong>Real-time Sync:</strong> All users see the same prices and updates across all tabs/devices</li>
                 </ul>
               </div>
-              
+
               {isAdmin && (
                 <div className={`p-4 rounded ${isMarketController ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
                   <h3 className="font-bold mb-2">
                     Market Controller Status: {isMarketController ? '✅ ACTIVE' : '⏳ WAITING'}
                   </h3>
                   <p className="text-sm">
-                    {isMarketController 
+                    {isMarketController
                       ? 'This tab is controlling market updates. All other tabs will sync to your changes.'
                       : 'Another admin tab is controlling market updates. This tab will sync to those changes.'
                     }
@@ -1410,21 +1643,21 @@ const ATLStockExchange = () => {
                   Market Status: {marketRunning ? '🟢 RUNNING' : '🔴 STOPPED'}
                 </h3>
                 <p className="text-sm mb-4">
-                  {marketRunning 
+                  {marketRunning
                     ? 'The market is currently active and prices are updating automatically.'
                     : 'The market is stopped. Prices will not update until you start it.'
                   }
                 </p>
                 <div className="flex gap-2">
-                  <button 
-                    onClick={startMarket} 
+                  <button
+                    onClick={startMarket}
                     disabled={marketRunning}
                     className={`px-4 py-2 rounded font-bold ${marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white`}
                   >
                     Start Market
                   </button>
-                  <button 
-                    onClick={stopMarket} 
+                  <button
+                    onClick={stopMarket}
                     disabled={!marketRunning}
                     className={`px-4 py-2 rounded font-bold ${!marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white`}
                   >
@@ -1432,7 +1665,7 @@ const ATLStockExchange = () => {
                   </button>
                 </div>
               </div>
-              
+
               <div className="bg-blue-50 p-4 rounded">
                 <h3 className="font-bold mb-2">How it works:</h3>
                 <ul className="text-sm space-y-1">
@@ -1472,7 +1705,7 @@ const ATLStockExchange = () => {
                     }, 0);
                     const totalValue = userData.balance + holdingsValue;
                     const userTrades = tradingHistory.filter(t => t.user === username).length;
-                    
+
                     return (
                       <tr key={username} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
                         <td className="p-2 font-bold">{username}</td>
@@ -1481,7 +1714,7 @@ const ATLStockExchange = () => {
                         <td className="p-2 text-right font-bold">${totalValue.toFixed(2)}</td>
                         <td className="p-2 text-right">{userTrades}</td>
                         <td className="p-2 text-center">
-                          <button 
+                          <button
                             onClick={() => {
                               setTargetUser(username);
                               setAdjustMoney('');
@@ -1490,7 +1723,7 @@ const ATLStockExchange = () => {
                           >
                             Adjust
                           </button>
-                          <button 
+                          <button
                             onClick={() => {
                               if (window.confirm(`Reset ${username}'s account? This will set balance to $50,000 and clear portfolio.`)) {
                                 const userRef = ref(database, `users/${username}`);
@@ -1538,7 +1771,7 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h4 className="font-bold mb-2">Trading Activity</h4>
                 <div className="space-y-2 text-sm">
@@ -1560,7 +1793,7 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h4 className="font-bold mb-2">System Health</h4>
                 <div className="space-y-2 text-sm">
@@ -1599,18 +1832,18 @@ const ATLStockExchange = () => {
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h3 className="font-bold mb-2">Database Management</h3>
                 <div className="space-y-2">
-                  <button 
+                  <button
                     onClick={() => {
                       if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
                         const initialStocks = [
-                          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18), extendedHistory: generateExtendedHistory(342.18), yearHistory: generateYearHistory(342.18) },
-                          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02), extendedHistory: generateExtendedHistory(248.02), yearHistory: generateYearHistory(248.02) },
-                          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89), extendedHistory: generateExtendedHistory(203.89), yearHistory: generateYearHistory(203.89) },
-                          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75), extendedHistory: generateExtendedHistory(156.75), yearHistory: generateYearHistory(156.75) },
-                          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54), extendedHistory: generateExtendedHistory(127.54), yearHistory: generateYearHistory(127.54) },
-                          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43), extendedHistory: generateExtendedHistory(89.43), yearHistory: generateYearHistory(89.43) },
-                          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34), extendedHistory: generateExtendedHistory(112.34), yearHistory: generateYearHistory(112.34) },
-                          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92), extendedHistory: generateExtendedHistory(78.92), yearHistory: generateYearHistory(78.92) },
+                          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
+                          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
+                          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
+                          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
+                          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
+                          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
+                          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
+                          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
                         ];
                         const stocksRef = ref(database, 'stocks');
                         set(stocksRef, initialStocks);
@@ -1620,7 +1853,7 @@ const ATLStockExchange = () => {
                   >
                     Reset Stocks
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       if (window.confirm('Clear all trading history? This action cannot be undone.')) {
                         const historyRef = ref(database, 'tradingHistory');
@@ -1633,7 +1866,7 @@ const ATLStockExchange = () => {
                   </button>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h3 className="font-bold mb-2">Market Configuration</h3>
                 <div className="space-y-2">
@@ -1670,20 +1903,20 @@ const ATLStockExchange = () => {
                 <h3 className="font-bold mb-2">Bulk Price Adjustments</h3>
                 <div className="space-y-2">
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Percentage change (%)" 
-                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    <input
+                      type="number"
+                      placeholder="Percentage change (%)"
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
                     />
                     <button className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
                       Apply to All Stocks
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Fixed amount change" 
-                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    <input
+                      type="number"
+                      placeholder="Fixed amount change"
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
                     />
                     <button className="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700">
                       Apply to All Stocks
@@ -1691,25 +1924,25 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h3 className="font-bold mb-2">Bulk User Operations</h3>
                 <div className="space-y-2">
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Amount to add to all users" 
-                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    <input
+                      type="number"
+                      placeholder="Amount to add to all users"
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
                     />
                     <button className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">
                       Add to All Users
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="Multiplier (e.g., 1.1 for 10% increase)" 
-                      className={`flex-1 p-2 border rounded ${inputClass}`} 
+                    <input
+                      type="number"
+                      placeholder="Multiplier (e.g., 1.1 for 10% increase)"
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
                     />
                     <button className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">
                       Multiply All Balances
@@ -1717,11 +1950,11 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h3 className="font-bold mb-2">Market Reset</h3>
                 <div className="space-y-2">
-                  <button 
+                  <button
                     onClick={() => {
                       if (window.confirm('Reset all stock prices to opening prices? This will reset highs, lows, and current prices.')) {
                         const updatedStocks = stocks.map(s => ({
@@ -1738,7 +1971,7 @@ const ATLStockExchange = () => {
                   >
                     Reset All Prices to Open
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       if (window.confirm('Reset all user balances to $50,000 and clear portfolios? This will affect ALL users.')) {
                         const updatedUsers = {};
@@ -1780,7 +2013,7 @@ const ATLStockExchange = () => {
         {user && adminTab === 'portfolio' && (
           <div className={`p-6 rounded-lg border-2 ${cardClass} mb-6`}>
             <h2 className="text-2xl font-bold mb-4">My Portfolio</h2>
-            
+
             {/* Enhanced Portfolio Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <div className="p-4 bg-blue-600 text-white rounded">
@@ -1850,7 +2083,7 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h4 className="font-bold mb-2">Portfolio Allocation</h4>
                 <div className="space-y-2 text-sm">
@@ -1881,7 +2114,7 @@ const ATLStockExchange = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className={`p-4 rounded border-2 ${cardClass}`}>
                 <h4 className="font-bold mb-2">Market Impact</h4>
                 <div className="space-y-2 text-sm">
@@ -1950,24 +2183,24 @@ const ATLStockExchange = () => {
                   {Object.entries(users[user]?.portfolio || {}).map(([ticker, qty]) => {
                     const stock = stocks.find(s => s.ticker === ticker);
                     if (!stock) return null;
-                    
+
                     // Calculate average cost (use a stable calculation based on ticker)
                     const avgCost = stock.price * (0.95 + (ticker.charCodeAt(0) % 10) * 0.01);
                     const currentValue = qty * stock.price;
                     const totalCost = qty * avgCost;
                     const pnl = currentValue - totalCost;
                     const pnlPercent = totalCost > 0 ? ((pnl / totalCost) * 100) : 0;
-                    
+
                     // Calculate % of portfolio
                     const totalPortfolioValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [t, q]) => {
                       const s = stocks.find(st => st.ticker === t);
                       return sum + (q * (s?.price || 0));
                     }, 0);
                     const portfolioPercent = (currentValue / totalPortfolioValue) * 100;
-                    
+
                     // Debug portfolio calculations
                     console.log(`${ticker}: currentValue=${currentValue}, totalPortfolioValue=${totalPortfolioValue}, portfolioPercent=${portfolioPercent.toFixed(2)}%`);
-                    
+
                     return (
                       <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
                         <td className="p-2 font-bold">{ticker}</td>
@@ -2054,7 +2287,7 @@ const ATLStockExchange = () => {
                   <tbody>
                     {tradingHistory.map((trade, idx) => (
                       <tr key={idx} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
-                        <td className="p-2">{getEasternTime(new Date(trade.timestamp)).toLocaleString('en-US', {timeZone: 'America/New_York'})} ET</td>
+                        <td className="p-2">{getEasternTime(new Date(trade.timestamp)).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET</td>
                         <td className="p-2">
                           <span className={`px-2 py-1 rounded text-xs font-bold ${trade.type === 'buy' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                             {trade.type.toUpperCase()}
@@ -2087,14 +2320,14 @@ const ATLStockExchange = () => {
           <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredStocks.map(stock => {
             const priceChange = stock.price - stock.open;
             const percentChange = ((priceChange / stock.open) * 100).toFixed(2);
             const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
-            
-            
+
+
             return (
               <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
                 <div className="flex justify-between items-start mb-4">
@@ -2107,7 +2340,7 @@ const ATLStockExchange = () => {
                     <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
                   </div>
                 </div>
-                
+
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
                   <LineChart data={generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
