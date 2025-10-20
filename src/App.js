@@ -1278,7 +1278,7 @@ const ATLStockExchange = () => {
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode]);
+  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment]);
 
   const sellStock = useCallback(() => {
     // Enhanced validation with user feedback
