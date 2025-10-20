@@ -449,23 +449,7 @@ const ATLStockExchange = () => {
 
 
 
-  // Connection status monitoring
-  useEffect(() => {
-    const checkConnection = () => {
-      setConnectionStatus(navigator.onLine ? 'connected' : 'disconnected');
-    };
 
-    window.addEventListener('online', checkConnection);
-    window.addEventListener('offline', checkConnection);
-
-    const statusInterval = setInterval(checkConnection, 5000);
-
-    return () => {
-      window.removeEventListener('online', checkConnection);
-      window.removeEventListener('offline', checkConnection);
-      clearInterval(statusInterval);
-    };
-  }, []);
 
 
 
@@ -3543,128 +3527,98 @@ const ATLStockExchange = () => {
         </div>
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
 
-        {showHeatmap ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-8">
-            {filteredStocks.map(stock => {
-              const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
-              const priceChange = stock.price - dayStartPrice;
-              const percentChange = ((priceChange / dayStartPrice) * 100);
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {filteredStocks.map(stock => {
+            // Calculate percentage from first price of the day (12:00 AM)
+            const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
+            const priceChange = stock.price - dayStartPrice;
+            const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
 
-              return (
-                <div
-                  key={stock.ticker}
-                  onClick={() => setSelectedStock(stock)}
-                  className={`p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${percentChange >= 5 ? 'bg-green-600 text-white' :
-                    percentChange >= 2 ? 'bg-green-400 text-white' :
-                      percentChange >= 0 ? 'bg-green-200 text-green-800' :
-                        percentChange >= -2 ? 'bg-red-200 text-red-800' :
-                          percentChange >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
+            return (
+              <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
+                {/* WATCHLIST BUTTON */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (watchlist.includes(stock.ticker)) {
+                      removeFromWatchlist(stock.ticker);
+                    } else {
+                      addToWatchlist(stock.ticker);
+                    }
+                  }}
+                  className={`absolute top-3 right-3 p-2 rounded-full transition-all hover:scale-110 ${watchlist.includes(stock.ticker)
+                    ? 'bg-yellow-500 text-white shadow-lg'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
                     }`}
                 >
-                  <div className="font-bold text-sm">{stock.ticker}</div>
-                  <div className="text-xs opacity-90">{formatCurrency(stock.price)}</div>
-                  <div className="font-bold text-sm">
-                    {percentChange >= 0 ? '+' : ''}{percentChange.toFixed(1)}%
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredStocks.map(stock => {
-              // Calculate percentage from first price of the day (12:00 AM)
-              const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
-              const priceChange = stock.price - dayStartPrice;
-              const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
+                  ⭐
+                </button>
 
-
-              return (
-                <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
-                  {/* WATCHLIST BUTTON */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (watchlist.includes(stock.ticker)) {
-                        removeFromWatchlist(stock.ticker);
-                      } else {
-                        addToWatchlist(stock.ticker);
-                      }
-                    }}
-                    className={`absolute top-3 right-3 p-2 rounded-full transition-all hover:scale-110 ${watchlist.includes(stock.ticker)
-                      ? 'bg-yellow-500 text-white shadow-lg'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
-                      }`}
-                  >
-                    ⭐
-                  </button>
-
-                  <div onClick={() => setSelectedStock(stock)}>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-xl font-bold">{stock.name}</h3>
-                          {isMarketOpen() && (
-                            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                          <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
-                            Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
-                          </span>
-                        </div>
+                <div onClick={() => setSelectedStock(stock)}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-bold">{stock.name}</h3>
+                        {isMarketOpen() && (
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
-                          {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                          {percentChange >= 0 ? '+' : ''}{percentChange}%
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                        <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
+                          Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
+                        </span>
                       </div>
                     </div>
-
-                    <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                      <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
-                        <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                        <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
-                        <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
-                        <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">High:</span>
-                        <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Low:</span>
-                        <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
-                        <span className="font-bold">{formatNumber(stock.marketCap)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">P/E:</span>
-                        <span className="font-bold">{stock.pe.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
-                        <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
-                        <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
+                        {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                        {percentChange >= 0 ? '+' : ''}{percentChange}%
                       </div>
                     </div>
                   </div>
+
+                  <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
+                    <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                      <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
+                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                      <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">High:</span>
+                      <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Low:</span>
+                      <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
+                      <span className="font-bold">{formatNumber(stock.marketCap)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">P/E:</span>
+                      <span className="font-bold">{stock.pe.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
+                      <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
+                      <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
