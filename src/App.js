@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  Bell, BarChart3, PieChart, Target, Crown, Star, Award,
-  Download, Filter, Share2, Globe, WifiOff
+  BarChart3, PieChart, Target, Crown, Star, Award,
+  Download, Filter, Share2, WifiOff
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
@@ -10,13 +10,7 @@ import { ref, set, onValue, update } from 'firebase/database';
 
 // Advanced Constants
 const MARKET_HOURS = { open: 9, close: 16, preMarket: 4, afterHours: 20 };
-const UPDATE_INTERVALS = {
-  PRICE: 1000,
-  CHART: 5000,
-  HEARTBEAT: 5000,
-  NEWS: 30000,
-  LEADERBOARD: 10000
-};
+
 
 const USER_LEVELS = {
   BRONZE: { min: 0, max: 50000, name: 'Bronze Trader', color: '#CD7F32' },
@@ -524,15 +518,7 @@ const ATLStockExchange = () => {
     };
   }, []);
 
-  // Achievement tracking
-  useEffect(() => {
-    if (!user || !users[user]) return;
 
-    const portfolio = users[user].portfolio || {};
-    const totalValue = users[user].balance + userPortfolioValue;
-    const stockCount = Object.keys(portfolio).length;
-
-  }, [user, users, userPortfolioValue]);
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -3298,7 +3284,7 @@ const ATLStockExchange = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                        <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                        <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
                           Vol: {formatNumber(stock.marketCap / stock.price)}
                         </span>
                       </div>
