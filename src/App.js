@@ -227,17 +227,17 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(1000); // Price update interval in ms
+  const [updateSpeed, setUpdateSpeed] = useState(3000); // Price update interval in ms - more realistic
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
-  const [marketSentiment, setMarketSentiment] = useState('bull'); // bull, bear only
+
 
   // const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
 
   // MASSIVE NEW FEATURES
-  const [watchlist, setWatchlist] = useState([]);
+
   // const [alerts, setAlerts] = useState([]);
   // const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
 
@@ -594,29 +594,47 @@ const ATLStockExchange = () => {
           stock = { ...stock, manualTrade: false };
         }
 
-        // Simple realistic price movement for live updates
+        // Realistic price movement algorithm
         const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
-
-        // Create a simple seeded random for this update
         let seed = timeSeed % 1000000;
         const simpleRandom = () => {
           seed = (seed * 1664525 + 1013904223) % 4294967296;
           return seed / 4294967296;
         };
 
-        // Random price movements with market sentiment
-        const marketSentimentMultiplier = marketSentiment === 'bull' ? 1.1 : 0.9;
+        // More realistic price movements with momentum and mean reversion
+        const timeOfDay = now.getHours() + now.getMinutes() / 60;
 
-        // More random price changes
-        const baseChange = (simpleRandom() - 0.5) * 0.002 * marketSentimentMultiplier;
-        const sentimentBias = marketSentiment === 'bull' ? 0.0001 : -0.0001;
-        const totalChange = baseChange + sentimentBias;
+        // Market activity varies by time of day (higher during market hours)
+        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.5 : 0.3;
+
+        // Base volatility (much smaller for realism)
+        const baseVolatility = 0.0002 * marketActivityMultiplier; // 0.02% max change per update
+
+        // Add some momentum (trending behavior)
+        const priceHistory = stock.history || [];
+        let momentum = 0;
+        if (priceHistory.length >= 2) {
+          const recent = priceHistory.slice(-2);
+          momentum = (recent[1].price - recent[0].price) / recent[0].price;
+          momentum = Math.max(-0.001, Math.min(0.001, momentum * 0.3)); // Dampen momentum
+        }
+
+        // Random walk component
+        const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
+
+        // Mean reversion (tendency to return to opening price over time)
+        const distanceFromOpen = (stock.price - stock.open) / stock.open;
+        const meanReversion = -distanceFromOpen * 0.00001; // Very weak mean reversion
+
+        // Combine all factors
+        const totalChange = randomComponent + momentum + meanReversion;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Simple price bounds to prevent extreme movements
-        const minPrice = stock.price * 0.999;
-        const maxPrice = stock.price * 1.001;
+        // Realistic price bounds (prevent extreme movements but allow natural fluctuation)
+        const minPrice = stock.price * 0.9995; // 0.05% down limit per update
+        const maxPrice = stock.price * 1.0005; // 0.05% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
@@ -717,7 +735,7 @@ const ATLStockExchange = () => {
     }, updateSpeed); // Use configurable update speed
 
     return () => clearInterval(interval);
-  }, [stocks, updateSpeed, isMarketController, marketRunning, marketSentiment]);
+  }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
 
   function generateExtendedHistory(basePrice, seedKey = '') {
@@ -1248,7 +1266,7 @@ const ATLStockExchange = () => {
         newPrice: newPrice,
         priceImpact: priceImpact,
         marketStatus: getMarketStatus(),
-        marketSentiment: marketSentiment
+
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
@@ -1256,7 +1274,7 @@ const ATLStockExchange = () => {
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment]);
+  }, [selectedStock, buyQuantity, user, users, stocks]);
 
   const sellStock = useCallback(() => {
     // Enhanced validation with user feedback
@@ -1530,18 +1548,7 @@ const ATLStockExchange = () => {
     }
   }, [user, users, userPortfolioValue]);
 
-  // PROFESSIONAL WATCHLIST MANAGEMENT
-  const addToWatchlist = useCallback((ticker) => {
-    if (!watchlist.includes(ticker)) {
-      setWatchlist(prev => [...prev, ticker]);
-      setNotifications(prev => [...prev, `⭐ ${ticker} added to watchlist`]);
-    }
-  }, [watchlist]);
 
-  const removeFromWatchlist = useCallback((ticker) => {
-    setWatchlist(prev => prev.filter(t => t !== ticker));
-    setNotifications(prev => [...prev, `❌ ${ticker} removed from watchlist`]);
-  }, []);
 
   // ADVANCED PORTFOLIO ANALYSIS
   const calculatePortfolioMetrics = useCallback(() => {
@@ -3264,57 +3271,7 @@ const ATLStockExchange = () => {
           </div>
         )}
 
-        {/* PROFESSIONAL WATCHLIST */}
-        {watchlist.length > 0 && (
-          <div className={`mb-6 p-6 rounded-2xl ${cardClass} border-2 shadow-xl`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-xl font-bold ${theme.accent} flex items-center gap-2`}>
-                ⭐ My Watchlist ({watchlist.length})
-              </h3>
-              <button
-                onClick={() => setWatchlist([])}
-                className={`${theme.danger} px-3 py-1 rounded-lg text-sm font-medium hover:opacity-80 transition-opacity`}
-              >
-                Clear All
-              </button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {watchlist.map(ticker => {
-                const stock = stocks.find(s => s.ticker === ticker);
-                if (!stock) return null;
-                const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
-                const change = ((stock.price - dayStartPrice) / dayStartPrice) * 100;
-                return (
-                  <div
-                    key={ticker}
-                    onClick={() => setSelectedStock(stock)}
-                    className={`p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-105 shadow-lg ${change >= 5 ? 'bg-green-600 text-white' :
-                      change >= 2 ? 'bg-green-400 text-white' :
-                        change >= 0 ? 'bg-green-200 text-green-800' :
-                          change >= -2 ? 'bg-red-200 text-red-800' :
-                            change >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
-                      }`}
-                  >
-                    <div className="font-bold text-sm">{ticker}</div>
-                    <div className="text-xs opacity-90">{formatCurrency(stock.price)}</div>
-                    <div className="font-bold text-sm">
-                      {change >= 0 ? '+' : ''}{change.toFixed(1)}%
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromWatchlist(ticker);
-                      }}
-                      className="mt-2 text-xs opacity-75 hover:opacity-100"
-                    >
-                      ❌ Remove
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
 
         {/* Market Events Ticker - Admin Only */}
         {isAdmin && marketEvents.length > 0 && (
@@ -3466,19 +3423,7 @@ const ATLStockExchange = () => {
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
-          {/* MARKET SENTIMENT CONTROL */}
-          <div className={`mb-6 p-4 rounded-lg ${cardClass} border`}>
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium">Market Sentiment:</span>
-              <button
-                onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : 'bull')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all ${marketSentiment === 'bull' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-                  }`}
-              >
-                {marketSentiment === 'bull' ? '🐂 BULLISH' : '🐻 BEARISH'}
-              </button>
-            </div>
-          </div>
+
 
           {/* Advanced Controls */}
           <div className="flex flex-wrap items-center gap-4">
@@ -3525,6 +3470,7 @@ const ATLStockExchange = () => {
             <button onClick={() => setStockFilter('smallcap')} className={`px-3 py-1 rounded ${stockFilter === 'smallcap' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>Small Cap</button>
           </div>
         </div>
+
         <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -3535,84 +3481,64 @@ const ATLStockExchange = () => {
             const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
 
             return (
-              <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
-                {/* WATCHLIST BUTTON */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (watchlist.includes(stock.ticker)) {
-                      removeFromWatchlist(stock.ticker);
-                    } else {
-                      addToWatchlist(stock.ticker);
-                    }
-                  }}
-                  className={`absolute top-3 right-3 p-2 rounded-full transition-all hover:scale-110 ${watchlist.includes(stock.ticker)
-                    ? 'bg-yellow-500 text-white shadow-lg'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
-                    }`}
-                >
-                  ⭐
-                </button>
-
-                <div onClick={() => setSelectedStock(stock)}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-xl font-bold">{stock.name}</h3>
-                        {isMarketOpen() && (
-                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                        <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
-                          Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
-                        </span>
-                      </div>
+              <div key={`${stock.ticker}-${stock.price}`} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`} onClick={() => setSelectedStock(stock)}>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-xl font-bold">{stock.name}</h3>
+                      {isMarketOpen() && (
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
-                        {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                        {percentChange >= 0 ? '+' : ''}{percentChange}%
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
+                      <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
+                        Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
+                      </span>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
+                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
+                      {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                      {percentChange >= 0 ? '+' : ''}{percentChange}%
+                    </div>
+                  </div>
+                </div>
 
-                  <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                    <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
-                      <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
-                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
-                      <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
+                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">High:</span>
-                      <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Low:</span>
-                      <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
-                      <span className="font-bold">{formatNumber(stock.marketCap)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">P/E:</span>
-                      <span className="font-bold">{stock.pe.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
-                      <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
-                      <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
-                    </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">High:</span>
+                    <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Low:</span>
+                    <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
+                    <span className="font-bold">{formatNumber(stock.marketCap)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">P/E:</span>
+                    <span className="font-bold">{stock.pe.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
+                    <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
+                    <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
                   </div>
                 </div>
               </div>
