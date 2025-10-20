@@ -250,32 +250,32 @@ const ATLStockExchange = () => {
   const [marketSentiment, setMarketSentiment] = useState('neutral'); // bull, bear, neutral
   const [volatilityMode, setVolatilityMode] = useState('normal'); // low, normal, high, extreme
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showOrderBook, setShowOrderBook] = useState(false);
+  // const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
 
   // MASSIVE NEW FEATURES
   const [tradingView, setTradingView] = useState('grid'); // grid, table, cards, professional
   const [watchlist, setWatchlist] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
+  // const [alerts, setAlerts] = useState([]);
+  // const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
   const [marketScanner, setMarketScanner] = useState({ active: false, criteria: {} });
   const [orderTypes, setOrderTypes] = useState('market'); // market, limit, stop, stop-limit
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
   const [timeInForce, setTimeInForce] = useState('DAY'); // DAY, GTC, IOC, FOK
   const [advancedCharts, setAdvancedCharts] = useState(false);
-  const [technicalIndicators, setTechnicalIndicators] = useState([]);
-  const [newsFilter, setNewsFilter] = useState('all');
+  // const [technicalIndicators, setTechnicalIndicators] = useState([]);
+  // const [newsFilter, setNewsFilter] = useState('all');
   const [performanceMetrics, setPerformanceMetrics] = useState({});
-  const [riskAnalysis, setRiskAnalysis] = useState({});
-  const [backtesting, setBacktesting] = useState({ active: false, results: {} });
+  // const [riskAnalysis, setRiskAnalysis] = useState({});
+  // const [backtesting, setBacktesting] = useState({ active: false, results: {} });
   const [paperTrading, setPaperTrading] = useState(false);
-  const [socialSentiment, setSocialSentiment] = useState({});
-  const [institutionalFlow, setInstitutionalFlow] = useState({});
-  const [optionsChain, setOptionsChain] = useState({});
+  // const [socialSentiment, setSocialSentiment] = useState({});
+  // const [institutionalFlow, setInstitutionalFlow] = useState({});
+  // const [optionsChain, setOptionsChain] = useState({});
   const [cryptoMode, setCryptoMode] = useState(false);
   const [forexMode, setForexMode] = useState(false);
-  const [commoditiesMode, setCommoditiesMode] = useState(false);
+  // const [commoditiesMode, setCommoditiesMode] = useState(false);
   const [themeMode, setThemeMode] = useState('professional'); // professional, gaming, minimal, colorful
 
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
@@ -294,9 +294,9 @@ const ATLStockExchange = () => {
   const [connectionStatus, setConnectionStatus] = useState('connected');
 
   // Computed values with memoization for better performance
-  const totalMarketCap = useMemo(() => {
-    return stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
-  }, [stocks]);
+  // const totalMarketCap = useMemo(() => {
+  //   return stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
+  // }, [stocks]);
 
   const marketStats = useMemo(() => {
     if (stocks.length === 0) return {
@@ -1364,7 +1364,7 @@ const ATLStockExchange = () => {
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode, setNotifications, setMarketEvents]);
+  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode]);
 
   const sellStock = useCallback(() => {
     // Enhanced validation with user feedback
@@ -1658,7 +1658,6 @@ const ATLStockExchange = () => {
     const portfolio = users[user].portfolio || {};
     const balance = users[user].balance || 0;
     let totalValue = balance;
-    let totalCost = 0;
     let dayChange = 0;
     let positions = [];
 
@@ -2162,8 +2161,8 @@ const ATLStockExchange = () => {
 
             {/* MARKET STATUS */}
             <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${getMarketStatus() === 'OPEN' ? 'bg-green-500 text-white animate-pulse' :
-                getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-500 text-black' :
-                  getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+              getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-500 text-black' :
+                getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
               }`}>
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${getMarketStatus() === 'OPEN' ? 'bg-green-200 animate-ping' : 'bg-white/50'
@@ -2174,7 +2173,7 @@ const ATLStockExchange = () => {
 
             {/* MARKET SENTIMENT */}
             <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
-                marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
+              marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
               }`}>
               {marketSentiment === 'bull' ? '🐂 BULL' :
                 marketSentiment === 'bear' ? '🐻 BEAR' : '😐 NEUTRAL'}
@@ -2182,8 +2181,8 @@ const ATLStockExchange = () => {
 
             {/* VOLATILITY */}
             <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
-                volatilityMode === 'high' ? 'bg-orange-600 text-white' :
-                  volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+              volatilityMode === 'high' ? 'bg-orange-600 text-white' :
+                volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
               }`}>
               📊 {volatilityMode.toUpperCase()}
             </div>
@@ -3515,10 +3514,10 @@ const ATLStockExchange = () => {
                     key={ticker}
                     onClick={() => setSelectedStock(stock)}
                     className={`p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-105 shadow-lg ${change >= 5 ? 'bg-green-600 text-white' :
-                        change >= 2 ? 'bg-green-400 text-white' :
-                          change >= 0 ? 'bg-green-200 text-green-800' :
-                            change >= -2 ? 'bg-red-200 text-red-800' :
-                              change >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
+                      change >= 2 ? 'bg-green-400 text-white' :
+                        change >= 0 ? 'bg-green-200 text-green-800' :
+                          change >= -2 ? 'bg-red-200 text-red-800' :
+                            change >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
                       }`}
                   >
                     <div className="font-bold text-sm">{ticker}</div>
@@ -3785,7 +3784,7 @@ const ATLStockExchange = () => {
                 <button
                   onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : marketSentiment === 'bear' ? 'neutral' : 'bull')}
                   className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
-                      marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
+                    marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
                     }`}
                 >
                   {marketSentiment === 'bull' ? '🐂 BULLISH' :
@@ -3798,8 +3797,8 @@ const ATLStockExchange = () => {
                 <button
                   onClick={() => setVolatilityMode(volatilityMode === 'low' ? 'normal' : volatilityMode === 'normal' ? 'high' : volatilityMode === 'high' ? 'extreme' : 'low')}
                   className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
-                      volatilityMode === 'high' ? 'bg-orange-600 text-white' :
-                        volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+                    volatilityMode === 'high' ? 'bg-orange-600 text-white' :
+                      volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
                     }`}
                 >
                   📊 {volatilityMode.toUpperCase()}
@@ -3959,8 +3958,8 @@ const ATLStockExchange = () => {
                       }
                     }}
                     className={`absolute top-3 right-3 p-2 rounded-full transition-all hover:scale-110 ${watchlist.includes(stock.ticker)
-                        ? 'bg-yellow-500 text-white shadow-lg'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
+                      ? 'bg-yellow-500 text-white shadow-lg'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
                       }`}
                   >
                     ⭐
