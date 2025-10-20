@@ -1168,20 +1168,15 @@ const ATLStockExchange = () => {
       setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(cost)}`]);
       setBuyQuantity('');
 
-      // Calculate realistic price impact based on market cap and liquidity
-      const purchaseValue = cost;
-      const marketCap = selectedStock.marketCap;
+      // Calculate price impact based on shares traded vs total shares outstanding
+      const totalShares = selectedStock.marketCap / selectedStock.price;
+      const sharesBought = quantity;
+      const sharePercentage = sharesBought / totalShares;
 
-      // More realistic price impact model: smaller impact for larger market caps
-      const liquidityFactor = Math.min(1, marketCap / 100000000000); // Normalize by $100B
-      const baseImpact = (purchaseValue / marketCap) * 100;
-      const adjustedImpact = baseImpact * (2 - liquidityFactor); // Less liquid = more impact
-
-      const priceImpact = (adjustedImpact / 100) * selectedStock.price;
-      const maxImpact = selectedStock.price * 0.02; // Cap at 2% per trade
-      const boundedImpact = Math.min(maxImpact, priceImpact);
-
-      const newPrice = parseFloat((selectedStock.price + boundedImpact).toFixed(2));
+      // Price impact proportional to percentage of shares traded - no caps!
+      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price increase
+      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
 
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
@@ -1258,20 +1253,15 @@ const ATLStockExchange = () => {
       setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}`]);
       setSellQuantity('');
 
-      // Calculate realistic price impact for selling (negative impact)
-      const saleValue = proceeds;
-      const marketCap = selectedStock.marketCap;
+      // Calculate price impact based on shares sold vs total shares outstanding
+      const totalShares = selectedStock.marketCap / selectedStock.price;
+      const sharesSold = quantity;
+      const sharePercentage = sharesSold / totalShares;
 
-      // More realistic price impact model for selling
-      const liquidityFactor = Math.min(1, marketCap / 100000000000); // Normalize by $100B
-      const baseImpact = (saleValue / marketCap) * 100;
-      const adjustedImpact = baseImpact * (2 - liquidityFactor); // Less liquid = more impact
-
-      const priceImpact = -(adjustedImpact / 100) * selectedStock.price; // Negative for selling
-      const maxImpact = selectedStock.price * 0.02; // Cap at 2% per trade
-      const boundedImpact = Math.max(-maxImpact, priceImpact);
-
-      const newPrice = parseFloat((selectedStock.price + boundedImpact).toFixed(2));
+      // Price impact proportional to percentage of shares traded - no caps!
+      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price decrease
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price; // Negative for selling
+      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
 
       // Record trade in history
       const tradeRecord = {
