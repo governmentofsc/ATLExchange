@@ -17,11 +17,7 @@ const UPDATE_INTERVALS = {
   NEWS: 30000,
   LEADERBOARD: 10000
 };
-const TRADING_FEES = {
-  COMMISSION: 0.001, // 0.1% commission
-  SPREAD: 0.0005, // 0.05% spread
-  MINIMUM: 1.00 // $1 minimum fee
-};
+
 const USER_LEVELS = {
   BRONZE: { min: 0, max: 50000, name: 'Bronze Trader', color: '#CD7F32' },
   SILVER: { min: 50000, max: 250000, name: 'Silver Trader', color: '#C0C0C0' },
@@ -66,18 +62,7 @@ const isMarketOpen = () => {
   return hour >= MARKET_HOURS.open && hour <= MARKET_HOURS.close;
 };
 
-const getMarketStatus = () => {
-  const now = getEasternTime();
-  const hour = now.getHours();
-  const day = now.getDay();
 
-  if (day === 0 || day === 6) return { status: 'closed', message: 'Weekend - Market Closed' };
-  if (hour < MARKET_HOURS.preMarket) return { status: 'closed', message: 'Pre-Market Opens at 4:00 AM ET' };
-  if (hour < MARKET_HOURS.open) return { status: 'premarket', message: 'Pre-Market Trading' };
-  if (hour <= MARKET_HOURS.close) return { status: 'open', message: 'Market Open' };
-  if (hour <= MARKET_HOURS.afterHours) return { status: 'afterhours', message: 'After-Hours Trading' };
-  return { status: 'closed', message: 'Market Closed' };
-};
 
 const getUserLevel = (totalValue) => {
   for (const [level, config] of Object.entries(USER_LEVELS)) {
@@ -105,18 +90,7 @@ const generateNewsHeadline = (stock, priceChange) => {
 // Store static chart data to prevent regeneration - moved outside component
 let staticChartData = {};
 
-// Performance optimization: Debounce function
-const debounce = (func, wait) => {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-};
+
 
 // Enhanced price history generation with better performance and caching
 function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
@@ -347,7 +321,6 @@ const ATLStockExchange = () => {
   const [achievements, setAchievements] = useState([]);
 
   const [connectionStatus, setConnectionStatus] = useState('connected');
-  const [lastUpdate, setLastUpdate] = useState(Date.now());
 
   // Computed values with memoization for better performance
   const totalMarketCap = useMemo(() => {
@@ -591,7 +564,6 @@ const ATLStockExchange = () => {
   useEffect(() => {
     const checkConnection = () => {
       setConnectionStatus(navigator.onLine ? 'connected' : 'disconnected');
-      setLastUpdate(Date.now());
     };
 
     window.addEventListener('online', checkConnection);
@@ -3099,7 +3071,7 @@ const ATLStockExchange = () => {
                           dataKey="percentage"
                           label={({ ticker, percentage }) => `${ticker}: ${percentage.toFixed(1)}%`}
                         >
-                          {portfolioAllocation.map((entry, index) => (
+                          {portfolioAllocation.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                           ))}
                         </Pie>
