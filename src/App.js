@@ -253,6 +253,31 @@ const ATLStockExchange = () => {
   const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
 
+  // MASSIVE NEW FEATURES
+  const [tradingView, setTradingView] = useState('grid'); // grid, table, cards, professional
+  const [watchlist, setWatchlist] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
+  const [marketScanner, setMarketScanner] = useState({ active: false, criteria: {} });
+  const [orderTypes, setOrderTypes] = useState('market'); // market, limit, stop, stop-limit
+  const [limitPrice, setLimitPrice] = useState('');
+  const [stopPrice, setStopPrice] = useState('');
+  const [timeInForce, setTimeInForce] = useState('DAY'); // DAY, GTC, IOC, FOK
+  const [advancedCharts, setAdvancedCharts] = useState(false);
+  const [technicalIndicators, setTechnicalIndicators] = useState([]);
+  const [newsFilter, setNewsFilter] = useState('all');
+  const [performanceMetrics, setPerformanceMetrics] = useState({});
+  const [riskAnalysis, setRiskAnalysis] = useState({});
+  const [backtesting, setBacktesting] = useState({ active: false, results: {} });
+  const [paperTrading, setPaperTrading] = useState(false);
+  const [socialSentiment, setSocialSentiment] = useState({});
+  const [institutionalFlow, setInstitutionalFlow] = useState({});
+  const [optionsChain, setOptionsChain] = useState({});
+  const [cryptoMode, setCryptoMode] = useState(false);
+  const [forexMode, setForexMode] = useState(false);
+  const [commoditiesMode, setCommoditiesMode] = useState(false);
+  const [themeMode, setThemeMode] = useState('professional'); // professional, gaming, minimal, colorful
+
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
   const [alertStock, setAlertStock] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
@@ -716,39 +741,70 @@ const ATLStockExchange = () => {
           }
         }
 
-        // Continuous update system: add new point every minute, update current point every few seconds
-        const elapsedMinutes = Math.floor(elapsedMs / 60000);
-        const expectedPoints = elapsedMinutes + 1;
+        // PROFESSIONAL CONTINUOUS CHART SYSTEM - NO MORE GAPS!
+        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
 
-        const hour = now.getHours();
-        const min = now.getMinutes();
-        let displayHour = hour;
-        let ampm = 'AM';
+        // Ensure we have data points for EVERY minute from midnight to now
+        while (newHistory.length <= currentTotalMinutes) {
+          const minutesSinceMidnight = newHistory.length;
+          const hours = Math.floor(minutesSinceMidnight / 60);
+          const mins = minutesSinceMidnight % 60;
 
-        if (hour === 0) {
-          displayHour = 12;
-          ampm = 'AM';
-        } else if (hour < 12) {
-          displayHour = hour;
-          ampm = 'AM';
-        } else if (hour === 12) {
-          displayHour = 12;
-          ampm = 'PM';
-        } else {
-          displayHour = hour - 12;
-          ampm = 'PM';
+          let displayHour = hours;
+          let ampm = 'AM';
+
+          if (hours === 0) {
+            displayHour = 12;
+          } else if (hours < 12) {
+            displayHour = hours;
+          } else if (hours === 12) {
+            displayHour = 12;
+            ampm = 'PM';
+          } else {
+            displayHour = hours - 12;
+            ampm = 'PM';
+          }
+
+          const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
+
+          // Use previous price if this is a backfill, otherwise use current price
+          const priceForThisMinute = minutesSinceMidnight === currentTotalMinutes ? newPrice2 :
+            (newHistory.length > 0 ? newHistory[newHistory.length - 1].price : stock.price);
+
+          newHistory.push({
+            time: timeLabel,
+            price: priceForThisMinute,
+            volume: Math.floor(Math.random() * 1000000 + 500000),
+            isLive: minutesSinceMidnight === currentTotalMinutes
+          });
         }
 
-        const timeLabel = `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`;
+        // Always update the current minute with live price
+        if (newHistory.length > 0) {
+          const currentIndex = newHistory.length - 1;
+          const hour = now.getHours();
+          const min = now.getMinutes();
+          let displayHour = hour;
+          let ampm = 'AM';
 
-        if (newHistory.length < expectedPoints) {
-          // Add new data point every minute
-          newHistory.push({ time: timeLabel, price: newPrice2 });
-        } else {
-          // Update the last point with current price every update cycle
-          if (newHistory.length > 0) {
-            newHistory[newHistory.length - 1] = { time: timeLabel, price: newPrice2 };
+          if (hour === 0) {
+            displayHour = 12;
+          } else if (hour < 12) {
+            displayHour = hour;
+          } else if (hour === 12) {
+            displayHour = 12;
+            ampm = 'PM';
+          } else {
+            displayHour = hour - 12;
+            ampm = 'PM';
           }
+
+          newHistory[currentIndex] = {
+            time: `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`,
+            price: newPrice2,
+            volume: Math.floor(Math.random() * 1000000 + 500000),
+            isLive: true
+          };
         }
 
         const sharesOutstanding = stock.marketCap / stock.price;
@@ -1308,7 +1364,7 @@ const ATLStockExchange = () => {
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode]);
+  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode, setNotifications, setMarketEvents]);
 
   const sellStock = useCallback(() => {
     // Enhanced validation with user feedback
@@ -1582,6 +1638,70 @@ const ATLStockExchange = () => {
     }
   }, [user, users, userPortfolioValue]);
 
+  // PROFESSIONAL WATCHLIST MANAGEMENT
+  const addToWatchlist = useCallback((ticker) => {
+    if (!watchlist.includes(ticker)) {
+      setWatchlist(prev => [...prev, ticker]);
+      setNotifications(prev => [...prev, `⭐ ${ticker} added to watchlist`]);
+    }
+  }, [watchlist]);
+
+  const removeFromWatchlist = useCallback((ticker) => {
+    setWatchlist(prev => prev.filter(t => t !== ticker));
+    setNotifications(prev => [...prev, `❌ ${ticker} removed from watchlist`]);
+  }, []);
+
+  // ADVANCED PORTFOLIO ANALYSIS
+  const calculatePortfolioMetrics = useCallback(() => {
+    if (!user || !users[user]) return;
+
+    const portfolio = users[user].portfolio || {};
+    const balance = users[user].balance || 0;
+    let totalValue = balance;
+    let totalCost = 0;
+    let dayChange = 0;
+    let positions = [];
+
+    Object.entries(portfolio).forEach(([ticker, quantity]) => {
+      const stock = stocks.find(s => s.ticker === ticker);
+      if (stock && quantity > 0) {
+        const currentValue = stock.price * quantity;
+        const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
+        const positionDayChange = (stock.price - dayStartPrice) * quantity;
+
+        totalValue += currentValue;
+        dayChange += positionDayChange;
+
+        positions.push({
+          ticker,
+          quantity,
+          currentPrice: stock.price,
+          currentValue,
+          dayChange: positionDayChange,
+          dayChangePercent: ((stock.price - dayStartPrice) / dayStartPrice) * 100,
+          weight: (currentValue / totalValue) * 100
+        });
+      }
+    });
+
+    const metrics = {
+      totalValue,
+      dayChange,
+      dayChangePercent: totalValue > 0 ? (dayChange / totalValue) * 100 : 0,
+      positions,
+      diversification: positions.length,
+      largestPosition: positions.length > 0 ? Math.max(...positions.map(p => p.weight)) : 0,
+      cash: balance,
+      cashPercent: (balance / totalValue) * 100
+    };
+
+    setPerformanceMetrics(metrics);
+  }, [user, users, stocks]);
+
+  useEffect(() => {
+    calculatePortfolioMetrics();
+  }, [calculatePortfolioMetrics]);
+
   // Market events system
   useEffect(() => {
     const generateMarketEvent = () => {
@@ -1692,9 +1812,61 @@ const ATLStockExchange = () => {
     ];
   };
 
-  const bgClass = darkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900';
-  const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-  const inputClass = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-900 border-gray-300';
+  // ADVANCED THEME SYSTEM - PERFECT FOR LIGHT & DARK MODE
+  const getThemeClasses = () => {
+    const base = {
+      professional: {
+        bg: darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900',
+        card: darkMode ? 'bg-slate-800 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200',
+        input: darkMode ? 'bg-slate-700 text-slate-100 border-slate-600 focus:border-blue-500' : 'bg-white text-slate-900 border-slate-300 focus:border-blue-500',
+        button: darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white',
+        accent: darkMode ? 'text-blue-400' : 'text-blue-600',
+        success: darkMode ? 'text-emerald-400 bg-emerald-900/20' : 'text-emerald-600 bg-emerald-50',
+        danger: darkMode ? 'text-red-400 bg-red-900/20' : 'text-red-600 bg-red-50',
+        warning: darkMode ? 'text-amber-400 bg-amber-900/20' : 'text-amber-600 bg-amber-50',
+        muted: darkMode ? 'text-slate-400' : 'text-slate-600'
+      },
+      gaming: {
+        bg: darkMode ? 'bg-gray-900 text-green-400' : 'bg-black text-green-500',
+        card: darkMode ? 'bg-gray-800 border-green-500/30 text-green-400' : 'bg-gray-900 border-green-500/50 text-green-500',
+        input: darkMode ? 'bg-gray-700 border-green-500/50 text-green-400' : 'bg-gray-800 border-green-500/50 text-green-500',
+        button: 'bg-green-600 hover:bg-green-700 text-black font-bold',
+        accent: 'text-green-400',
+        success: 'text-green-400 bg-green-900/30',
+        danger: 'text-red-400 bg-red-900/30',
+        warning: 'text-yellow-400 bg-yellow-900/30',
+        muted: darkMode ? 'text-green-600' : 'text-green-700'
+      },
+      minimal: {
+        bg: darkMode ? 'bg-neutral-950 text-neutral-100' : 'bg-neutral-50 text-neutral-900',
+        card: darkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-100' : 'bg-white border-neutral-200 text-neutral-900',
+        input: darkMode ? 'bg-neutral-700 border-neutral-600 text-neutral-100' : 'bg-white border-neutral-300 text-neutral-900',
+        button: darkMode ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-100' : 'bg-neutral-800 hover:bg-neutral-700 text-white',
+        accent: darkMode ? 'text-neutral-300' : 'text-neutral-700',
+        success: darkMode ? 'text-green-400' : 'text-green-600',
+        danger: darkMode ? 'text-red-400' : 'text-red-600',
+        warning: darkMode ? 'text-yellow-400' : 'text-yellow-600',
+        muted: darkMode ? 'text-neutral-500' : 'text-neutral-600'
+      },
+      colorful: {
+        bg: darkMode ? 'bg-purple-950 text-white' : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-900',
+        card: darkMode ? 'bg-purple-800 border-purple-600 text-white' : 'bg-white/80 backdrop-blur border-purple-200 text-gray-900',
+        input: darkMode ? 'bg-purple-700 border-purple-500 text-white' : 'bg-white/90 border-purple-300 text-gray-900',
+        button: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
+        accent: darkMode ? 'text-purple-400' : 'text-purple-600',
+        success: darkMode ? 'text-emerald-400 bg-emerald-900/30' : 'text-emerald-600 bg-emerald-100',
+        danger: darkMode ? 'text-red-400 bg-red-900/30' : 'text-red-600 bg-red-100',
+        warning: darkMode ? 'text-amber-400 bg-amber-900/30' : 'text-amber-600 bg-amber-100',
+        muted: darkMode ? 'text-purple-300' : 'text-purple-700'
+      }
+    };
+    return base[themeMode] || base.professional;
+  };
+
+  const theme = getThemeClasses();
+  const bgClass = theme.bg;
+  const cardClass = theme.card;
+  const inputClass = theme.input;
 
   // Loading state
   if (loading) {
@@ -1865,92 +2037,169 @@ const ATLStockExchange = () => {
 
   return (
     <div className={`min-h-screen ${bgClass}`}>
-      <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-            <span className="text-blue-600 font-bold text-sm">ASE</span>
+      {/* PROFESSIONAL HEADER - COMPLETELY REDESIGNED */}
+      <div className={`${theme.card} border-b-2 ${theme.accent} p-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-opacity-95`}>
+        <div className="flex items-center gap-4">
+          <div className={`w-10 h-10 ${theme.button} rounded-xl flex items-center justify-center shadow-lg`}>
+            <span className="text-white font-bold text-lg">ASE</span>
           </div>
           <div className="flex flex-col">
-            <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
-            <div className="flex items-center gap-2 text-xs opacity-75">
-              <span className="flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                {marketStats.gainers}
+            <h1 className={`text-2xl font-bold ${theme.accent} tracking-tight`}>Atlanta Stock Exchange</h1>
+            <div className="flex items-center gap-4 text-sm">
+              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.success}`}>
+                <TrendingUp className="w-4 h-4" />
+                {marketStats.gainers} Gainers
               </span>
-              <span className="flex items-center gap-1">
-                <TrendingDown className="w-3 h-3" />
-                {marketStats.losers}
+              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.danger}`}>
+                <TrendingDown className="w-4 h-4" />
+                {marketStats.losers} Losers
               </span>
-              <span className="flex items-center gap-1">
-                <DollarSign className="w-3 h-3" />
-                {formatNumber(totalMarketCap)}
+              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.warning}`}>
+                <DollarSign className="w-4 h-4" />
+                {formatNumber(marketStats.totalMarketCap)}
+              </span>
+              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${marketStats.vix > 30 ? theme.danger : marketStats.vix > 20 ? theme.warning : theme.success
+                }`}>
+                📊 VIX: {marketStats.vix.toFixed(1)}
               </span>
             </div>
           </div>
           {notifications.length > 0 && (
-            <div className="relative">
-              <AlertCircle className="w-6 h-6 text-yellow-300 animate-pulse" />
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 rounded-full min-w-[16px] h-4 flex items-center justify-center">
+            <div className="relative animate-bounce">
+              <AlertCircle className="w-7 h-7 text-yellow-500 drop-shadow-lg" />
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-lg">
                 {notifications.length}
               </span>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-3">
+          {/* ADVANCED SEARCH */}
           <div className="relative">
             <input
               type="text"
-              placeholder="Search stocks..."
+              placeholder="🔍 Search stocks, news, alerts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-2 rounded-lg text-gray-900 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              className={`${inputClass} px-4 py-2 rounded-xl text-sm w-64 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all`}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-blue-500 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
+
+          {/* THEME SELECTOR */}
+          <select
+            value={themeMode}
+            onChange={(e) => setThemeMode(e.target.value)}
+            className={`${inputClass} px-3 py-2 rounded-lg text-sm font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
+          >
+            <option value="professional">🏢 Professional</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="minimal">⚪ Minimal</option>
+            <option value="colorful">🌈 Colorful</option>
+          </select>
+
+          {/* TRADING MODE SELECTOR */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPaperTrading(!paperTrading)}
+              className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${paperTrading ? 'bg-yellow-500 text-black' : theme.button
+                }`}
+            >
+              {paperTrading ? '📝 Paper' : '💰 Live'}
+            </button>
+          </div>
+
+          {/* USER PORTFOLIO DISPLAY */}
           {user && users[user] && (
-            <div className="flex items-center gap-2">
-              <div className="bg-green-600 px-3 py-1 rounded-lg">
-                <span className="text-sm font-bold">{formatCurrency(users[user].balance)}</span>
+            <div className="flex items-center gap-3">
+              <div className={`${theme.success} px-4 py-2 rounded-xl shadow-lg`}>
+                <div className="text-xs opacity-75">Balance</div>
+                <div className="font-bold text-lg">{formatCurrency(users[user].balance)}</div>
               </div>
+              {performanceMetrics.totalValue && (
+                <div className={`${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger} px-4 py-2 rounded-xl shadow-lg`}>
+                  <div className="text-xs opacity-75">Portfolio</div>
+                  <div className="font-bold text-lg">{formatCurrency(performanceMetrics.totalValue)}</div>
+                  <div className="text-xs">
+                    {performanceMetrics.dayChange >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%
+                  </div>
+                </div>
+              )}
               {connectionStatus === 'disconnected' && (
-                <div className="bg-red-500 px-2 py-1 rounded-lg">
-                  <WifiOff className="w-4 h-4" />
+                <div className={`${theme.danger} px-3 py-2 rounded-lg animate-pulse`}>
+                  <WifiOff className="w-5 h-5" />
                 </div>
               )}
             </div>
           )}
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-          {isAdmin && <span className="bg-red-500 px-2 py-1 rounded-full text-xs font-bold hidden md:inline animate-pulse">ADMIN</span>}
-          {isAdmin && isMarketController && <span className="bg-green-500 px-2 py-1 rounded-full text-xs font-bold hidden md:inline">CONTROLLER</span>}
-          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${marketRunning ? 'bg-green-500' : 'bg-red-500'}`}>
-            <div className="flex items-center gap-1">
-              <div className={`w-2 h-2 rounded-full ${marketRunning ? 'bg-green-200 animate-pulse' : 'bg-red-200'}`}></div>
-              MARKET {marketRunning ? 'LIVE' : 'CLOSED'}
+          {/* PROFESSIONAL CONTROLS */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`${theme.button} p-3 rounded-xl shadow-lg hover:scale-105 transition-all`}
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+
+            {isAdmin && (
+              <span className="bg-gradient-to-r from-red-500 to-pink-500 px-3 py-2 rounded-xl text-xs font-bold text-white animate-pulse shadow-lg hidden md:inline">
+                👑 ADMIN
+              </span>
+            )}
+
+            {isAdmin && isMarketController && (
+              <span className="bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-lg hidden md:inline">
+                🎮 CONTROLLER
+              </span>
+            )}
+
+            {/* MARKET STATUS */}
+            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${getMarketStatus() === 'OPEN' ? 'bg-green-500 text-white animate-pulse' :
+                getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-500 text-black' :
+                  getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+              }`}>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${getMarketStatus() === 'OPEN' ? 'bg-green-200 animate-ping' : 'bg-white/50'
+                  }`}></div>
+                {getMarketStatus().replace('_', ' ')}
+              </div>
             </div>
-          </div>
-          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${marketSentiment === 'bull' ? 'bg-green-600' :
-            marketSentiment === 'bear' ? 'bg-red-600' : 'bg-yellow-600'
-            }`}>
-            {marketSentiment === 'bull' ? '🐂 BULLISH' :
-              marketSentiment === 'bear' ? '🐻 BEARISH' : '😐 NEUTRAL'}
-          </div>
-          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${volatilityMode === 'extreme' ? 'bg-red-600 animate-pulse' :
-            volatilityMode === 'high' ? 'bg-orange-600' :
-              volatilityMode === 'low' ? 'bg-blue-600' : 'bg-gray-600'
-            }`}>
-            📊 {volatilityMode.toUpperCase()} VOL
-          </div>
-          <div className="bg-blue-700 px-3 py-1 rounded-lg text-xs font-bold hidden md:inline">
-            {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
+
+            {/* MARKET SENTIMENT */}
+            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
+                marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
+              }`}>
+              {marketSentiment === 'bull' ? '🐂 BULL' :
+                marketSentiment === 'bear' ? '🐻 BEAR' : '😐 NEUTRAL'}
+            </div>
+
+            {/* VOLATILITY */}
+            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
+                volatilityMode === 'high' ? 'bg-orange-600 text-white' :
+                  volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+              }`}>
+              📊 {volatilityMode.toUpperCase()}
+            </div>
+
+            {/* LIVE CLOCK */}
+            <div className={`${theme.card} px-4 py-2 rounded-xl text-sm font-bold shadow-lg border-2 hidden md:flex`}>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                {getEasternTime().toLocaleTimeString('en-US', {
+                  timeZone: 'America/New_York',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                })} ET
+              </div>
+            </div>
           </div>
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
@@ -1965,7 +2214,7 @@ const ATLStockExchange = () => {
 
       {mobileMenuOpen && (
         <div className={`md:hidden p-4 ${cardClass} border-b`}>
-          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> ${(users[user].balance).toFixed(2)}</p>}
+          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> {formatCurrency(users[user].balance)}</p>}
           <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
           {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
           {isAdmin && isMarketController && <span className="block bg-green-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">MARKET CONTROLLER</span>}
@@ -3241,6 +3490,58 @@ const ATLStockExchange = () => {
           </div>
         )}
 
+        {/* PROFESSIONAL WATCHLIST */}
+        {watchlist.length > 0 && (
+          <div className={`mb-6 p-6 rounded-2xl ${cardClass} border-2 shadow-xl`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-bold ${theme.accent} flex items-center gap-2`}>
+                ⭐ My Watchlist ({watchlist.length})
+              </h3>
+              <button
+                onClick={() => setWatchlist([])}
+                className={`${theme.danger} px-3 py-1 rounded-lg text-sm font-medium hover:opacity-80 transition-opacity`}
+              >
+                Clear All
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {watchlist.map(ticker => {
+                const stock = stocks.find(s => s.ticker === ticker);
+                if (!stock) return null;
+                const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
+                const change = ((stock.price - dayStartPrice) / dayStartPrice) * 100;
+                return (
+                  <div
+                    key={ticker}
+                    onClick={() => setSelectedStock(stock)}
+                    className={`p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-105 shadow-lg ${change >= 5 ? 'bg-green-600 text-white' :
+                        change >= 2 ? 'bg-green-400 text-white' :
+                          change >= 0 ? 'bg-green-200 text-green-800' :
+                            change >= -2 ? 'bg-red-200 text-red-800' :
+                              change >= -5 ? 'bg-red-400 text-white' : 'bg-red-600 text-white'
+                      }`}
+                  >
+                    <div className="font-bold text-sm">{ticker}</div>
+                    <div className="text-xs opacity-90">{formatCurrency(stock.price)}</div>
+                    <div className="font-bold text-sm">
+                      {change >= 0 ? '+' : ''}{change.toFixed(1)}%
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromWatchlist(ticker);
+                      }}
+                      className="mt-2 text-xs opacity-75 hover:opacity-100"
+                    >
+                      ❌ Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Market Events Ticker */}
         {marketEvents.length > 0 && (
           <div className={`mb-6 p-4 rounded-xl ${cardClass} border-2 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20`}>
@@ -3251,6 +3552,80 @@ const ATLStockExchange = () => {
             <div className="text-sm text-yellow-700 dark:text-yellow-300">
               {marketEvents[marketEvents.length - 1]}
             </div>
+          </div>
+        )}
+
+        {/* PROFESSIONAL PORTFOLIO ANALYTICS */}
+        {user && performanceMetrics.totalValue && (
+          <div className={`mb-8 p-6 rounded-2xl ${cardClass} border-2 shadow-xl`}>
+            <h3 className={`text-xl font-bold ${theme.accent} mb-6 flex items-center gap-2`}>
+              📊 Portfolio Analytics Dashboard
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+              <div className={`p-4 rounded-xl ${theme.success} text-center shadow-lg`}>
+                <div className="text-2xl font-bold">{formatCurrency(performanceMetrics.totalValue)}</div>
+                <div className="text-sm opacity-75">Total Value</div>
+              </div>
+
+              <div className={`p-4 rounded-xl text-center shadow-lg ${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger
+                }`}>
+                <div className="text-2xl font-bold">
+                  {performanceMetrics.dayChange >= 0 ? '+' : ''}{formatCurrency(performanceMetrics.dayChange)}
+                </div>
+                <div className="text-sm opacity-75">Day P&L</div>
+              </div>
+
+              <div className={`p-4 rounded-xl text-center shadow-lg ${performanceMetrics.dayChangePercent >= 0 ? theme.success : theme.danger
+                }`}>
+                <div className="text-2xl font-bold">
+                  {performanceMetrics.dayChangePercent >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%
+                </div>
+                <div className="text-sm opacity-75">Day Return</div>
+              </div>
+
+              <div className={`p-4 rounded-xl ${theme.warning} text-center shadow-lg`}>
+                <div className="text-2xl font-bold">{performanceMetrics.diversification}</div>
+                <div className="text-sm opacity-75">Positions</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 text-center shadow-lg">
+                <div className="text-2xl font-bold">{performanceMetrics.largestPosition.toFixed(1)}%</div>
+                <div className="text-sm opacity-75">Largest Position</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 text-center shadow-lg">
+                <div className="text-2xl font-bold">{performanceMetrics.cashPercent.toFixed(1)}%</div>
+                <div className="text-sm opacity-75">Cash Weight</div>
+              </div>
+            </div>
+
+            {/* TOP POSITIONS */}
+            {performanceMetrics.positions && performanceMetrics.positions.length > 0 && (
+              <div>
+                <h4 className={`text-lg font-bold ${theme.accent} mb-4`}>Top Positions</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {performanceMetrics.positions.slice(0, 6).map(position => (
+                    <div key={position.ticker} className={`p-4 rounded-xl ${cardClass} border shadow-lg hover:scale-105 transition-all cursor-pointer`}
+                      onClick={() => {
+                        const stock = stocks.find(s => s.ticker === position.ticker);
+                        if (stock) setSelectedStock(stock);
+                      }}>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-bold text-lg">{position.ticker}</div>
+                        <div className={`text-sm px-2 py-1 rounded-lg ${position.dayChangePercent >= 0 ? theme.success : theme.danger
+                          }`}>
+                          {position.dayChangePercent >= 0 ? '+' : ''}{position.dayChangePercent.toFixed(2)}%
+                        </div>
+                      </div>
+                      <div className="text-sm opacity-75 mb-1">{position.quantity} shares</div>
+                      <div className="font-bold">{formatCurrency(position.currentValue)}</div>
+                      <div className="text-sm opacity-75">{position.weight.toFixed(1)}% of portfolio</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3347,46 +3722,145 @@ const ATLStockExchange = () => {
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
-          {/* Market Controls */}
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <button
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`px-4 py-2 rounded-lg font-bold transition-colors ${showHeatmap ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                }`}
-            >
-              🔥 Heatmap View
-            </button>
-            <button
-              onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : marketSentiment === 'bear' ? 'neutral' : 'bull')}
-              className={`px-4 py-2 rounded-lg font-bold transition-colors ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
-                marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-white'
-                }`}
-            >
-              {marketSentiment === 'bull' ? '🐂 Bull Market' :
-                marketSentiment === 'bear' ? '🐻 Bear Market' : '😐 Neutral Market'}
-            </button>
-            <button
-              onClick={() => setVolatilityMode(volatilityMode === 'low' ? 'normal' : volatilityMode === 'normal' ? 'high' : volatilityMode === 'high' ? 'extreme' : 'low')}
-              className={`px-4 py-2 rounded-lg font-bold transition-colors ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
-                volatilityMode === 'high' ? 'bg-orange-600 text-white' :
-                  volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
-                }`}
-            >
-              📊 {volatilityMode.charAt(0).toUpperCase() + volatilityMode.slice(1)} Volatility
-            </button>
-            <button
-              onClick={() => setShowOrderBook(!showOrderBook)}
-              className={`px-4 py-2 rounded-lg font-bold transition-colors ${showOrderBook ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                }`}
-            >
-              📈 Level II Data
-            </button>
-            <div className={`px-3 py-1 rounded-lg text-xs font-bold ${getMarketStatus() === 'OPEN' ? 'bg-green-600 text-white' :
-              getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-600 text-white' :
-                getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-600 text-white' : 'bg-red-600 text-white'
-              }`}>
-              🕐 {getMarketStatus().replace('_', ' ')}
+          {/* PROFESSIONAL TRADING CONTROLS */}
+          <div className={`mb-6 p-6 rounded-2xl ${cardClass} border-2 shadow-xl`}>
+            <h3 className={`text-lg font-bold ${theme.accent} mb-4 flex items-center gap-2`}>
+              🎛️ Trading Controls & Market Tools
+            </h3>
+
+            {/* VIEW CONTROLS */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+              <button
+                onClick={() => setTradingView(tradingView === 'grid' ? 'table' : tradingView === 'table' ? 'cards' : tradingView === 'cards' ? 'professional' : 'grid')}
+                className={`${theme.button} px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg`}
+              >
+                📊 {tradingView.charAt(0).toUpperCase() + tradingView.slice(1)} View
+              </button>
+
+              <button
+                onClick={() => setShowHeatmap(!showHeatmap)}
+                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${showHeatmap ? 'bg-orange-600 text-white' : theme.button
+                  }`}
+              >
+                🔥 Heatmap {showHeatmap ? 'ON' : 'OFF'}
+              </button>
+
+              <button
+                onClick={() => setAdvancedCharts(!advancedCharts)}
+                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${advancedCharts ? 'bg-purple-600 text-white' : theme.button
+                  }`}
+              >
+                📈 Advanced Charts
+              </button>
+
+              <button
+                onClick={() => setMarketScanner(prev => ({ ...prev, active: !prev.active }))}
+                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${marketScanner.active ? 'bg-cyan-600 text-white animate-pulse' : theme.button
+                  }`}
+              >
+                🔍 Scanner {marketScanner.active ? 'ON' : 'OFF'}
+              </button>
+
+              <button
+                onClick={() => setCryptoMode(!cryptoMode)}
+                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${cryptoMode ? 'bg-yellow-600 text-black' : theme.button
+                  }`}
+              >
+                ₿ Crypto Mode
+              </button>
+
+              <button
+                onClick={() => setForexMode(!forexMode)}
+                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${forexMode ? 'bg-green-600 text-white' : theme.button
+                  }`}
+              >
+                💱 Forex Mode
+              </button>
             </div>
+
+            {/* MARKET CONDITIONS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${theme.muted}`}>Market Sentiment:</span>
+                <button
+                  onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : marketSentiment === 'bear' ? 'neutral' : 'bull')}
+                  className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
+                      marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
+                    }`}
+                >
+                  {marketSentiment === 'bull' ? '🐂 BULLISH' :
+                    marketSentiment === 'bear' ? '🐻 BEARISH' : '😐 NEUTRAL'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${theme.muted}`}>Volatility:</span>
+                <button
+                  onClick={() => setVolatilityMode(volatilityMode === 'low' ? 'normal' : volatilityMode === 'normal' ? 'high' : volatilityMode === 'high' ? 'extreme' : 'low')}
+                  className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
+                      volatilityMode === 'high' ? 'bg-orange-600 text-white' :
+                        volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+                    }`}
+                >
+                  📊 {volatilityMode.toUpperCase()}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${theme.muted}`}>Order Type:</span>
+                <select
+                  value={orderTypes}
+                  onChange={(e) => setOrderTypes(e.target.value)}
+                  className={`${inputClass} px-3 py-2 rounded-xl font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
+                >
+                  <option value="market">🏃 Market</option>
+                  <option value="limit">🎯 Limit</option>
+                  <option value="stop">🛑 Stop</option>
+                  <option value="stop-limit">🎯🛑 Stop-Limit</option>
+                </select>
+              </div>
+            </div>
+
+            {/* ORDER PARAMETERS */}
+            {(orderTypes === 'limit' || orderTypes === 'stop-limit') && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Limit Price</label>
+                  <input
+                    type="number"
+                    value={limitPrice}
+                    onChange={(e) => setLimitPrice(e.target.value)}
+                    placeholder="Enter limit price"
+                    className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
+                  />
+                </div>
+                {(orderTypes === 'stop' || orderTypes === 'stop-limit') && (
+                  <div>
+                    <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Stop Price</label>
+                    <input
+                      type="number"
+                      value={stopPrice}
+                      onChange={(e) => setStopPrice(e.target.value)}
+                      placeholder="Enter stop price"
+                      className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Time in Force</label>
+                  <select
+                    value={timeInForce}
+                    onChange={(e) => setTimeInForce(e.target.value)}
+                    className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
+                  >
+                    <option value="DAY">📅 Day Order</option>
+                    <option value="GTC">♾️ Good Till Canceled</option>
+                    <option value="IOC">⚡ Immediate or Cancel</option>
+                    <option value="FOK">🎯 Fill or Kill</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Advanced Controls */}
@@ -3473,8 +3947,26 @@ const ATLStockExchange = () => {
 
 
               return (
-                <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
-                  <div>
+                <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
+                  {/* WATCHLIST BUTTON */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (watchlist.includes(stock.ticker)) {
+                        removeFromWatchlist(stock.ticker);
+                      } else {
+                        addToWatchlist(stock.ticker);
+                      }
+                    }}
+                    className={`absolute top-3 right-3 p-2 rounded-full transition-all hover:scale-110 ${watchlist.includes(stock.ticker)
+                        ? 'bg-yellow-500 text-white shadow-lg'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'
+                      }`}
+                  >
+                    ⭐
+                  </button>
+
+                  <div onClick={() => setSelectedStock(stock)}>
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
