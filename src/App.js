@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, PieChart, Target, Crown, Star, Award,
+  BarChart3, PieChart, Target, Crown, Star, Award, Trophy,
   Download, Filter, Share2, WifiOff
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
