@@ -67,9 +67,9 @@ let staticChartData = {};
 // Enhanced price history generation with better performance and caching
 function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   const now = getEasternTime();
-  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Normalize parameters with better type checking and validation
+  // Normalize parameters
   let currentPrice = openPrice;
   let seedKey = '';
 
@@ -84,7 +84,14 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   if (!openPrice || openPrice <= 0) return [];
   if (!currentPrice || currentPrice <= 0) currentPrice = openPrice;
 
-  // Enhanced seeding with more randomness
+  // Generate data points from 12:00 AM to current time only
+  const data = [];
+
+  // Start at midnight (0 minutes) and go to current time
+  const intervalMinutes = 10; // Data point every 10 minutes
+  const totalPoints = Math.floor(currentMinutes / intervalMinutes) + 1;
+
+  // Seeded random for consistent data
   const hashString = (str) => {
     if (!str) return Math.floor(openPrice * 1000);
     let h = 0;
@@ -94,127 +101,50 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     return h;
   };
 
-  const dateKey = now.toDateString();
-  const dataKey = `${seedKey || Math.floor(openPrice)}-${dateKey}`;
-
-  // Get existing data or create new
-  let existingData = staticChartData[dataKey] || [];
-  const lastExistingTime = existingData.length > 0 ? existingData[existingData.length - 1].time : null;
-
-  // Parse last existing time to minutes since midnight
-  const parseTime = (timeStr) => {
-    if (!timeStr) return 0;
-    const [time, period] = timeStr.split(' ');
-    const [hours, minutes] = time.split(':').map(Number);
-    let totalMinutes = hours * 60 + minutes;
-    if (period === 'PM' && hours !== 12) totalMinutes += 12 * 60;
-    if (period === 'AM' && hours === 12) totalMinutes -= 12 * 60;
-    return totalMinutes;
+  let seed = hashString(seedKey + now.toDateString());
+  const seededRandom = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
   };
 
-  const lastExistingMinutes = parseTime(lastExistingTime);
-
-  // If we already have data up to current time, return it
-  if (lastExistingMinutes >= totalMinutes) {
-    return existingData;
-  }
-
-  // Generate new data points from last existing time to current time
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const newData = [...existingData];
-
-  // Start from last known price (or open)
-  let prevPrice = newData.length > 0 ? newData[newData.length - 1].price : openPrice;
-
-  // Simple seeded random number generator for consistent but natural randomness
-  const createSeededRandom = (seed) => {
-    let state = seed;
-    return () => {
-      state = (state * 1664525 + 1013904223) % 4294967296;
-      return state / 4294967296;
-    };
-  };
-
-  const baseSeed = hashString(seedKey);
-  const random = createSeededRandom(baseSeed);
-
-  // Initialize realistic market variables
-  let momentum = 0;
-  let volatility = 0.0008;
-
-  // Add new data points every 1 minute for proper time intervals
-  for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
-    const time = new Date(startOfDay.getTime() + minutes * 60000);
-    const hour = time.getHours();
-    const minute = time.getMinutes();
+  // Generate price progression from open to current
+  for (let i = 0; i < totalPoints; i++) {
+    const minutes = i * intervalMinutes;
+    const progress = i / (totalPoints - 1);
 
     // Format time as 12-hour format
-    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    let displayHour = hours;
+    let ampm = 'AM';
 
-    // Generate realistic price movement using proper random walk
-    const r1 = random();
-    const r2 = random();
+    if (hours === 0) {
+      displayHour = 12;
+    } else if (hours < 12) {
+      displayHour = hours;
+    } else if (hours === 12) {
+      displayHour = 12;
+      ampm = 'PM';
+    } else {
+      displayHour = hours - 12;
+      ampm = 'PM';
+    }
 
-    // Market hours effect (higher volatility during trading hours)
-    const marketHours = (hour >= 9 && hour <= 16) ? 1.2 : 0.8;
+    const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
 
-    // Random walk with momentum
-    const randomChange = (r1 - 0.5) * 2; // -1 to 1
-    momentum = momentum * 0.7 + randomChange * 0.3; // Momentum carries forward
+    // Calculate price with some random variation but trending toward current price
+    const basePrice = openPrice + (currentPrice - openPrice) * progress;
+    const variation = (seededRandom() - 0.5) * 0.02 * basePrice; // 2% max variation
+    const price = Math.max(0.01, basePrice + variation);
 
-    // Volatility clustering (periods of high/low volatility)
-    if (r2 > 0.95) volatility *= 1.3; // Increase volatility
-    if (r2 < 0.05) volatility *= 0.8; // Decrease volatility
-    volatility = Math.max(0.0003, Math.min(0.002, volatility)); // Keep in bounds
-
-    // Calculate price change
-    const change = momentum * volatility * marketHours;
-    const newPrice = prevPrice * (1 + change);
-
-    // Keep price within reasonable daily bounds
-    const minPrice = openPrice * 0.96;
-    const maxPrice = openPrice * 1.04;
-    const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
-
-    prevPrice = boundedPrice;
-
-    newData.push({
-      time: timeStr,
-      price: parseFloat(boundedPrice.toFixed(2))
+    data.push({
+      time: timeLabel,
+      price: parseFloat(price.toFixed(2))
     });
   }
 
-  // Smoothly adjust the last point toward current live price to avoid jumps
-  if (newData.length > 0 && currentPrice !== openPrice) {
-    const lastPoint = newData[newData.length - 1];
-    const priceDiff = currentPrice - lastPoint.price;
+  return data;
 
-    // Only adjust if the difference is significant, and do it gradually
-    if (Math.abs(priceDiff) > 0.01) {
-      const adjustment = priceDiff * 0.1; // Gradual adjustment (10% of difference)
-      const adjustedPrice = lastPoint.price + adjustment;
-
-      // Keep within reasonable bounds
-      const minPrice = openPrice * 0.96;
-      const maxPrice = openPrice * 1.04;
-      const boundedAdjustedPrice = Math.max(minPrice, Math.min(maxPrice, adjustedPrice));
-
-      newData[newData.length - 1].price = parseFloat(boundedAdjustedPrice.toFixed(2));
-    }
-
-    // Update time to current time
-    const currentTime = `${now.getHours() > 12 ? now.getHours() - 12 : now.getHours() === 0 ? 12 : now.getHours()}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-    newData[newData.length - 1].time = currentTime;
-  }
-
-  // Cache the updated data
-  staticChartData[dataKey] = newData;
-
-  return newData;
 }
 
 const ATLStockExchange = () => {
