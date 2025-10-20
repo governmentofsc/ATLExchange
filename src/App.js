@@ -213,6 +213,10 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
+  const [alertStock, setAlertStock] = useState('');
+  const [alertPrice, setAlertPrice] = useState('');
+  const [alertType, setAlertType] = useState('above');
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -858,12 +862,20 @@ const ATLStockExchange = () => {
       // Clear the input
       setBuyQuantity('');
 
-      // Calculate price impact based on market cap (real-world model)
-      // Price impact = (purchase value / market cap) as percentage increase
+      // Calculate realistic price impact based on market cap and liquidity
       const purchaseValue = cost;
-      const priceImpactPercent = (purchaseValue / selectedStock.marketCap) * 100;
-      const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const marketCap = selectedStock.marketCap;
+
+      // More realistic price impact model: smaller impact for larger market caps
+      const liquidityFactor = Math.min(1, marketCap / 100000000000); // Normalize by $100B
+      const baseImpact = (purchaseValue / marketCap) * 100;
+      const adjustedImpact = baseImpact * (2 - liquidityFactor); // Less liquid = more impact
+
+      const priceImpact = (adjustedImpact / 100) * selectedStock.price;
+      const maxImpact = selectedStock.price * 0.02; // Cap at 2% per trade
+      const boundedImpact = Math.min(maxImpact, priceImpact);
+
+      const newPrice = parseFloat((selectedStock.price + boundedImpact).toFixed(2));
 
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
@@ -922,11 +934,20 @@ const ATLStockExchange = () => {
       // Clear the input
       setSellQuantity('');
 
-      // Calculate price impact based on market cap
+      // Calculate realistic price impact for selling (negative impact)
       const saleValue = proceeds;
-      const priceImpactPercent = (saleValue / selectedStock.marketCap) * 100;
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const marketCap = selectedStock.marketCap;
+
+      // More realistic price impact model for selling
+      const liquidityFactor = Math.min(1, marketCap / 100000000000); // Normalize by $100B
+      const baseImpact = (saleValue / marketCap) * 100;
+      const adjustedImpact = baseImpact * (2 - liquidityFactor); // Less liquid = more impact
+
+      const priceImpact = -(adjustedImpact / 100) * selectedStock.price; // Negative for selling
+      const maxImpact = selectedStock.price * 0.02; // Cap at 2% per trade
+      const boundedImpact = Math.max(-maxImpact, priceImpact);
+
+      const newPrice = parseFloat((selectedStock.price + boundedImpact).toFixed(2));
 
       // Record trade in history
       const tradeRecord = {
@@ -1095,6 +1116,24 @@ const ATLStockExchange = () => {
   const stopMarket = () => {
     const marketStateRef = ref(database, 'marketState');
     set(marketStateRef, { running: false });
+  };
+
+  const createPriceAlert = () => {
+    if (!alertStock || !alertPrice) return;
+
+    const newAlert = {
+      id: Date.now(),
+      stock: alertStock,
+      price: parseFloat(alertPrice),
+      type: alertType,
+      created: Date.now()
+    };
+
+    // In a real app, this would be stored in the database
+    setNotifications(prev => [...prev, `Alert created for ${alertStock} at $${alertPrice}`]);
+
+    setAlertStock('');
+    setAlertPrice('');
   };
 
   const executeStockSplit = () => {
@@ -1331,25 +1370,58 @@ const ATLStockExchange = () => {
   return (
     <div className={`min-h-screen ${bgClass}`}>
       <div className="bg-blue-600 text-white p-4 flex justify-between items-center sticky top-0 z-50">
-        <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+            <span className="text-blue-600 font-bold text-sm">ASE</span>
+          </div>
+          <h1 className="text-xl font-bold">Atlanta Stock Exchange</h1>
+          {notifications.length > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
+              {notifications.length}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2 md:gap-4">
-          <input type="text" placeholder="Search stocks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="px-3 py-1 rounded text-gray-900 text-sm" />
-          {user && users[user] && <span className="text-sm">${(users[user].balance).toFixed(2)}</span>}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search stocks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="px-3 py-2 rounded-lg text-gray-900 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {user && users[user] && (
+            <div className="bg-green-600 px-3 py-1 rounded-lg">
+              <span className="text-sm font-bold">${(users[user].balance).toFixed(2)}</span>
+            </div>
+          )}
           <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-blue-700 rounded text-white">
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
-          {isAdmin && <span className="bg-red-600 px-2 py-1 rounded text-xs hidden md:inline">ADMIN</span>}
-          {isAdmin && isMarketController && <span className="bg-green-600 px-2 py-1 rounded text-xs hidden md:inline">MARKET CONTROLLER</span>}
-          <span className={`px-2 py-1 rounded text-xs hidden md:inline ${marketRunning ? 'bg-green-600' : 'bg-red-600'}`}>
-            MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
-          </span>
-          <span className="px-2 py-1 rounded text-xs hidden md:inline bg-blue-600 text-white">
+          {isAdmin && <span className="bg-red-500 px-2 py-1 rounded-full text-xs font-bold hidden md:inline animate-pulse">ADMIN</span>}
+          {isAdmin && isMarketController && <span className="bg-green-500 px-2 py-1 rounded-full text-xs font-bold hidden md:inline">CONTROLLER</span>}
+          <div className={`px-3 py-1 rounded-lg text-xs font-bold hidden md:inline ${marketRunning ? 'bg-green-500' : 'bg-red-500'}`}>
+            <div className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full ${marketRunning ? 'bg-green-200 animate-pulse' : 'bg-red-200'}`}></div>
+              MARKET {marketRunning ? 'LIVE' : 'CLOSED'}
+            </div>
+          </div>
+          <div className="bg-blue-700 px-3 py-1 rounded-lg text-xs font-bold hidden md:inline">
             {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
-          </span>
+          </div>
           {user ? (
             <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
           ) : (
-            <button onClick={() => setShowLoginModal(true)} className="px-3 py-1 bg-white text-blue-600 rounded font-bold hover:bg-gray-200 text-sm">Login</button>
+            <button onClick={() => setShowLoginModal(true)} className="px-4 py-2 bg-white text-blue-600 rounded-lg font-bold hover:bg-gray-100 text-sm transition-colors shadow-md">Login</button>
           )}
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white">
             {mobileMenuOpen ? <X /> : <Menu />}
@@ -1423,6 +1495,9 @@ const ATLStockExchange = () => {
           <button onClick={() => setAdminTab('analytics')} className={`px-4 py-2 rounded ${adminTab === 'analytics' ? 'bg-white text-blue-600' : ''}`}>Analytics</button>
           <button onClick={() => setAdminTab('system')} className={`px-4 py-2 rounded ${adminTab === 'system' ? 'bg-white text-blue-600' : ''}`}>System Settings</button>
           <button onClick={() => setAdminTab('bulk')} className={`px-4 py-2 rounded ${adminTab === 'bulk' ? 'bg-white text-blue-600' : ''}`}>Bulk Operations</button>
+          <button onClick={() => setAdminTab('trading')} className={`px-4 py-2 rounded ${adminTab === 'trading' ? 'bg-white text-blue-600' : ''}`}>Trading Monitor</button>
+          <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded ${adminTab === 'portfolio' ? 'bg-white text-blue-600' : ''}`}>Portfolio Manager</button>
+          <button onClick={() => setAdminTab('alerts')} className={`px-4 py-2 rounded ${adminTab === 'alerts' ? 'bg-white text-blue-600' : ''}`}>Price Alerts</button>
         </div>
       )}
 
@@ -2005,13 +2080,238 @@ const ATLStockExchange = () => {
         </div>
       )}
 
+      {isAdmin && adminTab === 'trading' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Live Trading Monitor</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Recent Trades</h4>
+                <div className="space-y-2 text-sm max-h-64 overflow-y-auto">
+                  {Object.entries(users).flatMap(([username, userData]) =>
+                    Object.entries(userData.portfolio || {}).map(([ticker, qty]) => ({
+                      user: username,
+                      ticker,
+                      qty,
+                      value: qty * (stocks.find(s => s.ticker === ticker)?.price || 0)
+                    }))
+                  ).sort((a, b) => b.value - a.value).slice(0, 10).map((trade, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                      <span className="font-bold">{trade.user}</span>
+                      <span>{trade.ticker}</span>
+                      <span>{trade.qty} shares</span>
+                      <span className="text-green-600">${trade.value.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Top Movers</h4>
+                <div className="space-y-2 text-sm">
+                  {stocks.sort((a, b) => Math.abs((b.price - b.open) / b.open) - Math.abs((a.price - a.open) / a.open)).slice(0, 5).map(stock => {
+                    const change = ((stock.price - stock.open) / stock.open * 100);
+                    return (
+                      <div key={stock.ticker} className="flex justify-between items-center">
+                        <span className="font-bold">{stock.ticker}</span>
+                        <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Market Stats</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Active Users:</span>
+                    <span className="font-bold">{Object.keys(users).length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Trades Today:</span>
+                    <span className="font-bold">{Object.values(users).reduce((sum, u) => sum + Object.keys(u.portfolio || {}).length, 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Market Cap:</span>
+                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Avg Price:</span>
+                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'portfolio' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Portfolio Manager</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Force Portfolio Rebalance</h4>
+                <select className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                  <option value="">Select User</option>
+                  {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <button className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">
+                  Auto-Rebalance Portfolio
+                </button>
+                <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">
+                  Optimize Holdings
+                </button>
+                <button className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">
+                  Generate Report
+                </button>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Portfolio Analytics</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Most Diversified:</span>
+                    <span className="font-bold">
+                      {Object.entries(users).sort((a, b) => Object.keys(b[1].portfolio || {}).length - Object.keys(a[1].portfolio || {}).length)[0]?.[0] || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Highest Value:</span>
+                    <span className="font-bold">
+                      {Object.entries(users).sort((a, b) => {
+                        const aValue = a[1].balance + Object.entries(a[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
+                          const stock = stocks.find(s => s.ticker === ticker);
+                          return sum + (qty * (stock?.price || 0));
+                        }, 0);
+                        const bValue = b[1].balance + Object.entries(b[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
+                          const stock = stocks.find(s => s.ticker === ticker);
+                          return sum + (qty * (stock?.price || 0));
+                        }, 0);
+                        return bValue - aValue;
+                      })[0]?.[0] || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Most Active:</span>
+                    <span className="font-bold">
+                      {Object.entries(users).sort((a, b) => Object.values(b[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0) - Object.values(a[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0))[0]?.[0] || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && adminTab === 'alerts' && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+            <h2 className="text-xl font-bold mb-4">Price Alerts & Notifications</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Create Price Alert</h4>
+                <select
+                  value={alertStock}
+                  onChange={(e) => setAlertStock(e.target.value)}
+                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                >
+                  <option value="">Select Stock</option>
+                  {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+                </select>
+                <input
+                  type="number"
+                  placeholder="Alert Price"
+                  value={alertPrice}
+                  onChange={(e) => setAlertPrice(e.target.value)}
+                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                />
+                <select
+                  value={alertType}
+                  onChange={(e) => setAlertType(e.target.value)}
+                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                >
+                  <option value="above">Alert when price goes above</option>
+                  <option value="below">Alert when price goes below</option>
+                </select>
+                <button
+                  onClick={createPriceAlert}
+                  className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700"
+                >
+                  Create Alert
+                </button>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Market Alerts</h4>
+                <div className="space-y-2">
+                  <button className="w-full bg-yellow-600 text-white p-2 rounded font-bold hover:bg-yellow-700">
+                    Alert: High Volatility Detected
+                  </button>
+                  <button className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">
+                    Alert: Large Price Movement
+                  </button>
+                  <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">
+                    Alert: Trading Volume Spike
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-4 rounded border-2 ${cardClass}`}>
+              <h4 className="font-bold mb-2">Active Alerts</h4>
+              <div className="text-sm text-gray-500 text-center py-4">
+                No active alerts. Create some alerts above to monitor price movements.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {notifications.length > 0 && (
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="mb-4 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
+            <h4 className="font-bold text-yellow-800 mb-2">Notifications</h4>
+            {notifications.slice(-3).map((notification, idx) => (
+              <div key={idx} className="text-yellow-700 text-sm mb-1">
+                • {notification}
+              </div>
+            ))}
+            <button
+              onClick={() => setNotifications([])}
+              className="text-yellow-600 hover:text-yellow-800 text-xs underline mt-2"
+            >
+              Clear all
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto p-4">
-        <div className="mb-6 bg-blue-600 text-white p-4 rounded-lg">
-          <h3 className="font-bold mb-2">How to Buy/Sell</h3>
-          <p className="text-sm">1. Click "Login" button in top right and sign in (demo/demo or admin/admin)</p>
-          <p className="text-sm">2. Click on any stock to view details</p>
-          <p className="text-sm">3. Enter quantity and click Buy or Sell</p>
-          <p className="text-sm">4. Use the moon/sun icon to toggle dark mode</p>
+        <div className="mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-lg shadow-lg">
+          <h3 className="font-bold mb-3 text-lg">🚀 Welcome to Atlanta Stock Exchange</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 className="font-semibold mb-2">Getting Started:</h4>
+              <p className="mb-1">• Login with demo/demo or admin/admin</p>
+              <p className="mb-1">• Browse stocks or use search</p>
+              <p className="mb-1">• Click any stock to view details</p>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-2">Trading:</h4>
+              <p className="mb-1">• Enter quantity and Buy/Sell</p>
+              <p className="mb-1">• Purchases affect stock prices realistically</p>
+              <p className="mb-1">• View portfolio and trading history</p>
+            </div>
+          </div>
         </div>
 
         {user && (
@@ -2203,15 +2503,12 @@ const ATLStockExchange = () => {
                     const pnl = currentValue - totalCost;
                     const pnlPercent = totalCost > 0 ? ((pnl / totalCost) * 100) : 0;
 
-                    // Calculate % of portfolio
-                    const totalPortfolioValue = (users[user]?.balance || 0) + Object.entries(users[user]?.portfolio || {}).reduce((sum, [t, q]) => {
+                    // Calculate % of portfolio (stocks only, excluding cash)
+                    const totalStockValue = Object.entries(users[user]?.portfolio || {}).reduce((sum, [t, q]) => {
                       const s = stocks.find(st => st.ticker === t);
                       return sum + (q * (s?.price || 0));
                     }, 0);
-                    const portfolioPercent = (currentValue / totalPortfolioValue) * 100;
-
-                    // Debug portfolio calculations
-                    console.log(`${ticker}: currentValue=${currentValue}, totalPortfolioValue=${totalPortfolioValue}, portfolioPercent=${portfolioPercent.toFixed(2)}%`);
+                    const portfolioPercent = totalStockValue > 0 ? (currentValue / totalStockValue) * 100 : 0;
 
                     return (
                       <tr key={ticker} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
@@ -2341,7 +2638,7 @@ const ATLStockExchange = () => {
 
 
             return (
-              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-lg border-2 ${cardClass} cursor-pointer hover:shadow-lg transition-shadow`}>
+              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-xl font-bold">{stock.name}</h3>
@@ -2349,7 +2646,10 @@ const ATLStockExchange = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-blue-600">${stock.price.toFixed(2)}</p>
-                    <p className={`text-lg font-bold ${percentChangeColor}`}>{percentChange >= 0 ? '+' : ''}{percentChange}%</p>
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <span className={`mr-1 ${percentChange >= 0 ? '↗' : '↘'}`}></span>
+                      {percentChange >= 0 ? '+' : ''}{percentChange}%
+                    </div>
                   </div>
                 </div>
 
