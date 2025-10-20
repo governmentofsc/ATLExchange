@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, PieChart, Download, Filter, Share2, WifiOff
+  BarChart3, PieChart, Download, Filter, Share2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
@@ -22,11 +22,7 @@ const TRADING_FEES = {
   minimumFee: 1.00 // Minimum $1 fee
 };
 
-const CIRCUIT_BREAKERS = {
-  level1: 0.07, // 7% drop triggers 15-minute halt
-  level2: 0.13, // 13% drop triggers 15-minute halt
-  level3: 0.20  // 20% drop triggers market close
-};
+
 
 
 
@@ -236,17 +232,15 @@ const ATLStockExchange = () => {
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
   const [marketSentiment, setMarketSentiment] = useState('bull'); // bull, bear only
-  const [showHeatmap, setShowHeatmap] = useState(false);
+
   // const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
 
   // MASSIVE NEW FEATURES
-  const [tradingView, setTradingView] = useState('grid'); // grid, table, cards, professional
   const [watchlist, setWatchlist] = useState([]);
   // const [alerts, setAlerts] = useState([]);
   // const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
-  const [marketScanner, setMarketScanner] = useState({ active: false, criteria: {} });
-  const [orderTypes, setOrderTypes] = useState('market'); // market, limit, stop, stop-limit
+
   const [performanceMetrics, setPerformanceMetrics] = useState({});
   // Removed theme modes - only light/dark now
 
@@ -263,7 +257,7 @@ const ATLStockExchange = () => {
 
 
 
-  const [connectionStatus, setConnectionStatus] = useState('connected');
+
 
   // Computed values with memoization for better performance
   // const totalMarketCap = useMemo(() => {
