@@ -76,19 +76,7 @@ const isMarketOpen = () => {
 };
 
 const getMarketStatus = () => {
-  const now = getEasternTime();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const day = now.getDay();
-  const currentTime = hour + minute / 60;
-
-  if (day === 0 || day === 6) return 'WEEKEND';
-
-  if (currentTime < MARKET_HOURS.preMarket) return 'CLOSED';
-  if (currentTime < MARKET_HOURS.open) return 'PRE_MARKET';
-  if (currentTime <= MARKET_HOURS.close) return 'OPEN';
-  if (currentTime <= MARKET_HOURS.afterHours) return 'AFTER_HOURS';
-  return 'CLOSED';
+  return 'OPEN'; // 24/7 trading
 };
 
 
@@ -247,8 +235,7 @@ const ATLStockExchange = () => {
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
-  const [marketSentiment, setMarketSentiment] = useState('neutral'); // bull, bear, neutral
-  const [volatilityMode, setVolatilityMode] = useState('normal'); // low, normal, high, extreme
+  const [marketSentiment, setMarketSentiment] = useState('bull'); // bull, bear only
   const [showHeatmap, setShowHeatmap] = useState(false);
   // const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
@@ -260,23 +247,8 @@ const ATLStockExchange = () => {
   // const [portfolioAnalysis, setPortfolioAnalysis] = useState({});
   const [marketScanner, setMarketScanner] = useState({ active: false, criteria: {} });
   const [orderTypes, setOrderTypes] = useState('market'); // market, limit, stop, stop-limit
-  const [limitPrice, setLimitPrice] = useState('');
-  const [stopPrice, setStopPrice] = useState('');
-  const [timeInForce, setTimeInForce] = useState('DAY'); // DAY, GTC, IOC, FOK
-  const [advancedCharts, setAdvancedCharts] = useState(false);
-  // const [technicalIndicators, setTechnicalIndicators] = useState([]);
-  // const [newsFilter, setNewsFilter] = useState('all');
   const [performanceMetrics, setPerformanceMetrics] = useState({});
-  // const [riskAnalysis, setRiskAnalysis] = useState({});
-  // const [backtesting, setBacktesting] = useState({ active: false, results: {} });
-  const [paperTrading, setPaperTrading] = useState(false);
-  // const [socialSentiment, setSocialSentiment] = useState({});
-  // const [institutionalFlow, setInstitutionalFlow] = useState({});
-  // const [optionsChain, setOptionsChain] = useState({});
-  const [cryptoMode, setCryptoMode] = useState(false);
-  const [forexMode, setForexMode] = useState(false);
-  // const [commoditiesMode, setCommoditiesMode] = useState(false);
-  const [themeMode, setThemeMode] = useState('professional'); // professional, gaming, minimal, colorful
+  // Removed theme modes - only light/dark now
 
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
   const [alertStock, setAlertStock] = useState('');
@@ -300,48 +272,19 @@ const ATLStockExchange = () => {
 
   const marketStats = useMemo(() => {
     if (stocks.length === 0) return {
-      avgPrice: 0, totalVolume: 0, gainers: 0, losers: 0, unchanged: 0,
-      totalMarketCap: 0, avgPE: 0, totalDividendYield: 0, vix: 0,
-      advanceDeclineRatio: 0, newHighs: 0, newLows: 0
+      gainers: 0, losers: 0, totalMarketCap: 0
     };
 
-    const avgPrice = stocks.reduce((sum, stock) => sum + stock.price, 0) / stocks.length;
     const gainers = stocks.filter(stock => stock.price > stock.open).length;
     const losers = stocks.filter(stock => stock.price < stock.open).length;
-    const unchanged = stocks.filter(stock => stock.price === stock.open).length;
-
     const totalMarketCap = stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
-    const avgPE = stocks.reduce((sum, stock) => sum + (stock.pe || 0), 0) / stocks.length;
-    const totalDividendYield = stocks.reduce((sum, stock) => sum + (stock.dividend || 0), 0) / stocks.length;
-
-    // Calculate VIX-like volatility index
-    const volatilities = stocks.map(stock => {
-      const dayChange = Math.abs((stock.price - stock.open) / stock.open);
-      return dayChange;
-    });
-    const vix = (volatilities.reduce((sum, vol) => sum + vol, 0) / volatilities.length) * 100;
-
-    const advanceDeclineRatio = losers > 0 ? gainers / losers : gainers;
-    const newHighs = stocks.filter(stock => stock.price >= stock.high52w * 0.98).length;
-    const newLows = stocks.filter(stock => stock.price <= stock.low52w * 1.02).length;
 
     return {
-      avgPrice,
-      totalVolume: Object.values(users).reduce((sum, user) => {
-        return sum + Object.values(user.portfolio || {}).reduce((userSum, qty) => userSum + qty, 0);
-      }, 0),
       gainers,
       losers,
-      unchanged,
-      totalMarketCap,
-      avgPE,
-      totalDividendYield,
-      vix,
-      advanceDeclineRatio,
-      newHighs,
-      newLows
+      totalMarketCap
     };
-  }, [stocks, users]);
+  }, [stocks]);
 
   const userPortfolioValue = useMemo(() => {
     if (!user || !users[user]) return 0;
@@ -683,43 +626,20 @@ const ATLStockExchange = () => {
           return seed / 4294967296;
         };
 
-        // Enhanced price movements with volatility modes
-        const volatilityMultiplier =
-          volatilityMode === 'extreme' ? 5.0 :
-            volatilityMode === 'high' ? 2.0 :
-              volatilityMode === 'low' ? 0.3 : 1.0;
+        // Random price movements with market sentiment
+        const marketSentimentMultiplier = marketSentiment === 'bull' ? 1.1 : 0.9;
 
-        const marketSentimentMultiplier =
-          marketSentiment === 'bull' ? 1.2 :
-            marketSentiment === 'bear' ? 0.8 : 1.0;
-
-        const baseChange = (simpleRandom() - 0.5) * 0.0008 * volatilityMultiplier * marketSentimentMultiplier;
-        const sentimentBias = marketSentiment === 'bull' ? 0.0001 : marketSentiment === 'bear' ? -0.0001 : 0;
+        // More random price changes
+        const baseChange = (simpleRandom() - 0.5) * 0.002 * marketSentimentMultiplier;
+        const sentimentBias = marketSentiment === 'bull' ? 0.0001 : -0.0001;
         const totalChange = baseChange + sentimentBias;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Circuit breaker check
-        const dayStartPrice = stock.open || stock.price;
-        const priceChangePercent = Math.abs((newPrice - dayStartPrice) / dayStartPrice);
-
-        let circuitBreakerTriggered = false;
-        if (priceChangePercent >= CIRCUIT_BREAKERS.level3) {
-          circuitBreakerTriggered = true;
-          setMarketEvents(prev => [...prev.slice(-2), `🚨 CIRCUIT BREAKER: ${stock.ticker} trading halted - 20% limit reached`]);
-        } else if (priceChangePercent >= CIRCUIT_BREAKERS.level2) {
-          circuitBreakerTriggered = true;
-          setMarketEvents(prev => [...prev.slice(-2), `⚠️ CIRCUIT BREAKER: ${stock.ticker} trading halted - 13% limit reached`]);
-        } else if (priceChangePercent >= CIRCUIT_BREAKERS.level1) {
-          circuitBreakerTriggered = true;
-          setMarketEvents(prev => [...prev.slice(-2), `⚡ CIRCUIT BREAKER: ${stock.ticker} trading halted - 7% limit reached`]);
-        }
-
-        // Apply bounds (tighter during circuit breaker)
-        const boundMultiplier = circuitBreakerTriggered ? 0.9999 : 0.9998;
-        const minPrice = stock.price * boundMultiplier;
-        const maxPrice = stock.price * (2 - boundMultiplier);
-        const boundedPrice = circuitBreakerTriggered ? stock.price : Math.max(minPrice, Math.min(maxPrice, newPrice));
+        // Simple price bounds to prevent extreme movements
+        const minPrice = stock.price * 0.999;
+        const maxPrice = stock.price * 1.001;
+        const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
         const newHigh = Math.max(stock.high, newPrice2);
@@ -819,7 +739,7 @@ const ATLStockExchange = () => {
     }, updateSpeed); // Use configurable update speed
 
     return () => clearInterval(interval);
-  }, [stocks, updateSpeed, isMarketController, marketRunning, marketSentiment, volatilityMode]);
+  }, [stocks, updateSpeed, isMarketController, marketRunning, marketSentiment]);
 
 
   function generateExtendedHistory(basePrice, seedKey = '') {
@@ -1285,12 +1205,7 @@ const ATLStockExchange = () => {
     const spread = baseCost * TRADING_FEES.spread;
     const totalCost = baseCost + commission + spread;
 
-    // Market hours validation
-    const marketStatus = getMarketStatus();
-    if (marketStatus === 'CLOSED' || marketStatus === 'WEEKEND') {
-      setNotifications(prev => [...prev, `🕐 Market is ${marketStatus}. Trading unavailable.`]);
-      return;
-    }
+    // 24/7 trading - no market hours restrictions
 
     // Position size validation (max 10% of available shares per trade)
     const maxTradeSize = Math.floor(availableShares * 0.1);
@@ -1355,7 +1270,6 @@ const ATLStockExchange = () => {
         newPrice: newPrice,
         priceImpact: priceImpact,
         marketStatus: getMarketStatus(),
-        volatilityMode: volatilityMode,
         marketSentiment: marketSentiment
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
@@ -1811,58 +1725,18 @@ const ATLStockExchange = () => {
     ];
   };
 
-  // ADVANCED THEME SYSTEM - PERFECT FOR LIGHT & DARK MODE
-  const getThemeClasses = () => {
-    const base = {
-      professional: {
-        bg: darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900',
-        card: darkMode ? 'bg-slate-800 text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-200',
-        input: darkMode ? 'bg-slate-700 text-slate-100 border-slate-600 focus:border-blue-500' : 'bg-white text-slate-900 border-slate-300 focus:border-blue-500',
-        button: darkMode ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white',
-        accent: darkMode ? 'text-blue-400' : 'text-blue-600',
-        success: darkMode ? 'text-emerald-400 bg-emerald-900/20' : 'text-emerald-600 bg-emerald-50',
-        danger: darkMode ? 'text-red-400 bg-red-900/20' : 'text-red-600 bg-red-50',
-        warning: darkMode ? 'text-amber-400 bg-amber-900/20' : 'text-amber-600 bg-amber-50',
-        muted: darkMode ? 'text-slate-400' : 'text-slate-600'
-      },
-      gaming: {
-        bg: darkMode ? 'bg-gray-900 text-green-400' : 'bg-black text-green-500',
-        card: darkMode ? 'bg-gray-800 border-green-500/30 text-green-400' : 'bg-gray-900 border-green-500/50 text-green-500',
-        input: darkMode ? 'bg-gray-700 border-green-500/50 text-green-400' : 'bg-gray-800 border-green-500/50 text-green-500',
-        button: 'bg-green-600 hover:bg-green-700 text-black font-bold',
-        accent: 'text-green-400',
-        success: 'text-green-400 bg-green-900/30',
-        danger: 'text-red-400 bg-red-900/30',
-        warning: 'text-yellow-400 bg-yellow-900/30',
-        muted: darkMode ? 'text-green-600' : 'text-green-700'
-      },
-      minimal: {
-        bg: darkMode ? 'bg-neutral-950 text-neutral-100' : 'bg-neutral-50 text-neutral-900',
-        card: darkMode ? 'bg-neutral-800 border-neutral-700 text-neutral-100' : 'bg-white border-neutral-200 text-neutral-900',
-        input: darkMode ? 'bg-neutral-700 border-neutral-600 text-neutral-100' : 'bg-white border-neutral-300 text-neutral-900',
-        button: darkMode ? 'bg-neutral-700 hover:bg-neutral-600 text-neutral-100' : 'bg-neutral-800 hover:bg-neutral-700 text-white',
-        accent: darkMode ? 'text-neutral-300' : 'text-neutral-700',
-        success: darkMode ? 'text-green-400' : 'text-green-600',
-        danger: darkMode ? 'text-red-400' : 'text-red-600',
-        warning: darkMode ? 'text-yellow-400' : 'text-yellow-600',
-        muted: darkMode ? 'text-neutral-500' : 'text-neutral-600'
-      },
-      colorful: {
-        bg: darkMode ? 'bg-purple-950 text-white' : 'bg-gradient-to-br from-blue-50 to-purple-50 text-gray-900',
-        card: darkMode ? 'bg-purple-800 border-purple-600 text-white' : 'bg-white/80 backdrop-blur border-purple-200 text-gray-900',
-        input: darkMode ? 'bg-purple-700 border-purple-500 text-white' : 'bg-white/90 border-purple-300 text-gray-900',
-        button: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
-        accent: darkMode ? 'text-purple-400' : 'text-purple-600',
-        success: darkMode ? 'text-emerald-400 bg-emerald-900/30' : 'text-emerald-600 bg-emerald-100',
-        danger: darkMode ? 'text-red-400 bg-red-900/30' : 'text-red-600 bg-red-100',
-        warning: darkMode ? 'text-amber-400 bg-amber-900/30' : 'text-amber-600 bg-amber-100',
-        muted: darkMode ? 'text-purple-300' : 'text-purple-700'
-      }
-    };
-    return base[themeMode] || base.professional;
+  // Simple theme system - just light/dark
+  const theme = {
+    bg: darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900',
+    card: darkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200',
+    input: darkMode ? 'bg-gray-700 text-white border-gray-600 focus:border-blue-500' : 'bg-white text-gray-900 border-gray-300 focus:border-blue-500',
+    button: 'bg-blue-600 hover:bg-blue-700 text-white',
+    accent: darkMode ? 'text-blue-400' : 'text-blue-600',
+    success: darkMode ? 'text-emerald-400 bg-emerald-900/20' : 'text-emerald-600 bg-emerald-50',
+    danger: darkMode ? 'text-red-400 bg-red-900/20' : 'text-red-600 bg-red-50',
+    warning: darkMode ? 'text-amber-400 bg-amber-900/20' : 'text-amber-600 bg-amber-50',
+    muted: darkMode ? 'text-gray-400' : 'text-gray-600'
   };
-
-  const theme = getThemeClasses();
   const bgClass = theme.bg;
   const cardClass = theme.card;
   const inputClass = theme.input;
@@ -2057,10 +1931,7 @@ const ATLStockExchange = () => {
                 <DollarSign className="w-4 h-4" />
                 {formatNumber(marketStats.totalMarketCap)}
               </span>
-              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${marketStats.vix > 30 ? theme.danger : marketStats.vix > 20 ? theme.warning : theme.success
-                }`}>
-                📊 VIX: {marketStats.vix.toFixed(1)}
-              </span>
+
             </div>
           </div>
           {notifications.length > 0 && (
@@ -2092,50 +1963,18 @@ const ATLStockExchange = () => {
             )}
           </div>
 
-          {/* THEME SELECTOR */}
-          <select
-            value={themeMode}
-            onChange={(e) => setThemeMode(e.target.value)}
-            className={`${inputClass} px-3 py-2 rounded-lg text-sm font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
-          >
-            <option value="professional">🏢 Professional</option>
-            <option value="gaming">🎮 Gaming</option>
-            <option value="minimal">⚪ Minimal</option>
-            <option value="colorful">🌈 Colorful</option>
-          </select>
 
-          {/* TRADING MODE SELECTOR */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPaperTrading(!paperTrading)}
-              className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${paperTrading ? 'bg-yellow-500 text-black' : theme.button
-                }`}
-            >
-              {paperTrading ? '📝 Paper' : '💰 Live'}
-            </button>
-          </div>
 
           {/* USER PORTFOLIO DISPLAY */}
-          {user && users[user] && (
+          {user && users[user] && performanceMetrics.totalValue && (
             <div className="flex items-center gap-3">
-              <div className={`${theme.success} px-4 py-2 rounded-xl shadow-lg`}>
-                <div className="text-xs opacity-75">Balance</div>
-                <div className="font-bold text-lg">{formatCurrency(users[user].balance)}</div>
+              <div className={`${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger} px-4 py-2 rounded-xl shadow-lg`}>
+                <div className="text-xs opacity-75">Portfolio</div>
+                <div className="font-bold text-lg">{formatCurrency(performanceMetrics.totalValue)}</div>
+                <div className="text-xs">
+                  {performanceMetrics.dayChange >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%
+                </div>
               </div>
-              {performanceMetrics.totalValue && (
-                <div className={`${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger} px-4 py-2 rounded-xl shadow-lg`}>
-                  <div className="text-xs opacity-75">Portfolio</div>
-                  <div className="font-bold text-lg">{formatCurrency(performanceMetrics.totalValue)}</div>
-                  <div className="text-xs">
-                    {performanceMetrics.dayChange >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%
-                  </div>
-                </div>
-              )}
-              {connectionStatus === 'disconnected' && (
-                <div className={`${theme.danger} px-3 py-2 rounded-lg animate-pulse`}>
-                  <WifiOff className="w-5 h-5" />
-                </div>
-              )}
             </div>
           )}
           {/* PROFESSIONAL CONTROLS */}
@@ -2159,33 +1998,7 @@ const ATLStockExchange = () => {
               </span>
             )}
 
-            {/* MARKET STATUS */}
-            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${getMarketStatus() === 'OPEN' ? 'bg-green-500 text-white animate-pulse' :
-              getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-500 text-black' :
-                getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
-              }`}>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${getMarketStatus() === 'OPEN' ? 'bg-green-200 animate-ping' : 'bg-white/50'
-                  }`}></div>
-                {getMarketStatus().replace('_', ' ')}
-              </div>
-            </div>
 
-            {/* MARKET SENTIMENT */}
-            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
-              marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
-              }`}>
-              {marketSentiment === 'bull' ? '🐂 BULL' :
-                marketSentiment === 'bear' ? '🐻 BEAR' : '😐 NEUTRAL'}
-            </div>
-
-            {/* VOLATILITY */}
-            <div className={`px-4 py-2 rounded-xl text-sm font-bold shadow-lg hidden md:flex ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
-              volatilityMode === 'high' ? 'bg-orange-600 text-white' :
-                volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
-              }`}>
-              📊 {volatilityMode.toUpperCase()}
-            </div>
 
             {/* LIVE CLOCK */}
             <div className={`${theme.card} px-4 py-2 rounded-xl text-sm font-bold shadow-lg border-2 hidden md:flex`}>
@@ -3098,23 +2911,7 @@ const ATLStockExchange = () => {
       )}
 
       <div className="max-w-7xl mx-auto p-4">
-        <div className="mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-lg shadow-lg">
-          <h3 className="font-bold mb-3 text-lg">🚀 Welcome to Atlanta Stock Exchange</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 className="font-semibold mb-2">Getting Started:</h4>
-              <p className="mb-1">• Login with demo/demo or admin/admin</p>
-              <p className="mb-1">• Browse stocks or use search</p>
-              <p className="mb-1">• Click any stock to view details</p>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-2">Trading:</h4>
-              <p className="mb-1">• Enter quantity and Buy/Sell</p>
-              <p className="mb-1">• Purchases affect stock prices realistically</p>
-              <p className="mb-1">• View portfolio and trading history</p>
-            </div>
-          </div>
-        </div>
+
 
         {user && (
           <div className="mb-6 flex gap-2">
@@ -3541,12 +3338,12 @@ const ATLStockExchange = () => {
           </div>
         )}
 
-        {/* Market Events Ticker */}
-        {marketEvents.length > 0 && (
+        {/* Market Events Ticker - Admin Only */}
+        {isAdmin && marketEvents.length > 0 && (
           <div className={`mb-6 p-4 rounded-xl ${cardClass} border-2 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20`}>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
-              <span className="font-bold text-yellow-800 dark:text-yellow-200">🚨 BREAKING MARKET NEWS</span>
+              <span className="font-bold text-yellow-800 dark:text-yellow-200">🚨 ADMIN MARKET NEWS</span>
             </div>
             <div className="text-sm text-yellow-700 dark:text-yellow-300">
               {marketEvents[marketEvents.length - 1]}
@@ -3636,7 +3433,7 @@ const ATLStockExchange = () => {
               <BarChart3 className="w-5 h-5" />
               Market Overview
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">{marketStats.gainers}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">Gainers</div>
@@ -3648,36 +3445,6 @@ const ATLStockExchange = () => {
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{formatNumber(marketStats.totalMarketCap)}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">Market Cap</div>
-              </div>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${marketStats.vix > 30 ? 'text-red-600' : marketStats.vix > 20 ? 'text-yellow-600' : 'text-green-600'}`}>
-                  {marketStats.vix.toFixed(1)}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">VIX</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{marketStats.avgPE.toFixed(1)}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Avg P/E</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-indigo-600">{marketStats.totalDividendYield.toFixed(2)}%</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Avg Yield</div>
-              </div>
-            </div>
-
-            {/* Professional Market Indicators */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div className="text-center">
-                <div className="text-lg font-bold">{marketStats.advanceDeclineRatio.toFixed(2)}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">A/D Ratio</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-green-600">{marketStats.newHighs}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">New Highs</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-red-600">{marketStats.newLows}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">New Lows</div>
               </div>
             </div>
 
@@ -3721,145 +3488,18 @@ const ATLStockExchange = () => {
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
-          {/* PROFESSIONAL TRADING CONTROLS */}
-          <div className={`mb-6 p-6 rounded-2xl ${cardClass} border-2 shadow-xl`}>
-            <h3 className={`text-lg font-bold ${theme.accent} mb-4 flex items-center gap-2`}>
-              🎛️ Trading Controls & Market Tools
-            </h3>
-
-            {/* VIEW CONTROLS */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+          {/* MARKET SENTIMENT CONTROL */}
+          <div className={`mb-6 p-4 rounded-lg ${cardClass} border`}>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium">Market Sentiment:</span>
               <button
-                onClick={() => setTradingView(tradingView === 'grid' ? 'table' : tradingView === 'table' ? 'cards' : tradingView === 'cards' ? 'professional' : 'grid')}
-                className={`${theme.button} px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg`}
-              >
-                📊 {tradingView.charAt(0).toUpperCase() + tradingView.slice(1)} View
-              </button>
-
-              <button
-                onClick={() => setShowHeatmap(!showHeatmap)}
-                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${showHeatmap ? 'bg-orange-600 text-white' : theme.button
+                onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : 'bull')}
+                className={`px-4 py-2 rounded-lg font-bold transition-all ${marketSentiment === 'bull' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
                   }`}
               >
-                🔥 Heatmap {showHeatmap ? 'ON' : 'OFF'}
-              </button>
-
-              <button
-                onClick={() => setAdvancedCharts(!advancedCharts)}
-                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${advancedCharts ? 'bg-purple-600 text-white' : theme.button
-                  }`}
-              >
-                📈 Advanced Charts
-              </button>
-
-              <button
-                onClick={() => setMarketScanner(prev => ({ ...prev, active: !prev.active }))}
-                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${marketScanner.active ? 'bg-cyan-600 text-white animate-pulse' : theme.button
-                  }`}
-              >
-                🔍 Scanner {marketScanner.active ? 'ON' : 'OFF'}
-              </button>
-
-              <button
-                onClick={() => setCryptoMode(!cryptoMode)}
-                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${cryptoMode ? 'bg-yellow-600 text-black' : theme.button
-                  }`}
-              >
-                ₿ Crypto Mode
-              </button>
-
-              <button
-                onClick={() => setForexMode(!forexMode)}
-                className={`px-4 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${forexMode ? 'bg-green-600 text-white' : theme.button
-                  }`}
-              >
-                💱 Forex Mode
+                {marketSentiment === 'bull' ? '🐂 BULLISH' : '🐻 BEARISH'}
               </button>
             </div>
-
-            {/* MARKET CONDITIONS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-medium ${theme.muted}`}>Market Sentiment:</span>
-                <button
-                  onClick={() => setMarketSentiment(marketSentiment === 'bull' ? 'bear' : marketSentiment === 'bear' ? 'neutral' : 'bull')}
-                  className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${marketSentiment === 'bull' ? 'bg-green-600 text-white' :
-                    marketSentiment === 'bear' ? 'bg-red-600 text-white' : 'bg-yellow-600 text-black'
-                    }`}
-                >
-                  {marketSentiment === 'bull' ? '🐂 BULLISH' :
-                    marketSentiment === 'bear' ? '🐻 BEARISH' : '😐 NEUTRAL'}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-medium ${theme.muted}`}>Volatility:</span>
-                <button
-                  onClick={() => setVolatilityMode(volatilityMode === 'low' ? 'normal' : volatilityMode === 'normal' ? 'high' : volatilityMode === 'high' ? 'extreme' : 'low')}
-                  className={`px-4 py-2 rounded-xl font-bold transition-all hover:scale-105 shadow-lg ${volatilityMode === 'extreme' ? 'bg-red-600 text-white animate-pulse' :
-                    volatilityMode === 'high' ? 'bg-orange-600 text-white' :
-                      volatilityMode === 'low' ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
-                    }`}
-                >
-                  📊 {volatilityMode.toUpperCase()}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-medium ${theme.muted}`}>Order Type:</span>
-                <select
-                  value={orderTypes}
-                  onChange={(e) => setOrderTypes(e.target.value)}
-                  className={`${inputClass} px-3 py-2 rounded-xl font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
-                >
-                  <option value="market">🏃 Market</option>
-                  <option value="limit">🎯 Limit</option>
-                  <option value="stop">🛑 Stop</option>
-                  <option value="stop-limit">🎯🛑 Stop-Limit</option>
-                </select>
-              </div>
-            </div>
-
-            {/* ORDER PARAMETERS */}
-            {(orderTypes === 'limit' || orderTypes === 'stop-limit') && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Limit Price</label>
-                  <input
-                    type="number"
-                    value={limitPrice}
-                    onChange={(e) => setLimitPrice(e.target.value)}
-                    placeholder="Enter limit price"
-                    className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
-                  />
-                </div>
-                {(orderTypes === 'stop' || orderTypes === 'stop-limit') && (
-                  <div>
-                    <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Stop Price</label>
-                    <input
-                      type="number"
-                      value={stopPrice}
-                      onChange={(e) => setStopPrice(e.target.value)}
-                      placeholder="Enter stop price"
-                      className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className={`block text-sm font-medium ${theme.muted} mb-2`}>Time in Force</label>
-                  <select
-                    value={timeInForce}
-                    onChange={(e) => setTimeInForce(e.target.value)}
-                    className={`${inputClass} w-full px-3 py-2 rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400`}
-                  >
-                    <option value="DAY">📅 Day Order</option>
-                    <option value="GTC">♾️ Good Till Canceled</option>
-                    <option value="IOC">⚡ Immediate or Cancel</option>
-                    <option value="FOK">🎯 Fill or Kill</option>
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Advanced Controls */}
