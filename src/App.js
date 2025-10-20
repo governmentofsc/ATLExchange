@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Users, Activity, AlertCircle,
-  Bell, Settings, BarChart3, PieChart, Calculator, Target, Zap, Shield, Crown, Star, Award, Trophy,
-  Download, Upload, RefreshCw, Filter, Search, Eye, EyeOff, Lock, Unlock, Bookmark, Heart,
-  MessageSquare, Share2, Copy, ExternalLink, Calendar, Clock, Globe, Wifi, WifiOff
+  ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
+  Bell, BarChart3, PieChart, Target, Crown, Star, Award, Trophy,
+  Download, Filter, Bookmark, Heart, Share2, Globe, WifiOff
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
 
@@ -17,12 +16,6 @@ const UPDATE_INTERVALS = {
   HEARTBEAT: 5000,
   NEWS: 30000,
   LEADERBOARD: 10000
-};
-const PRICE_BOUNDS = {
-  DAILY_MIN: 0.96,
-  DAILY_MAX: 1.04,
-  TRADE_IMPACT_MAX: 0.02,
-  CIRCUIT_BREAKER: 0.20 // 20% circuit breaker
 };
 const TRADING_FEES = {
   COMMISSION: 0.001, // 0.1% commission
@@ -60,9 +53,7 @@ const formatNumber = (num) => {
   return num.toFixed(2);
 };
 
-const calculatePercentChange = (current, previous) => {
-  return ((current - previous) / previous * 100).toFixed(2);
-};
+
 
 const isMarketOpen = () => {
   const now = getEasternTime();
@@ -97,10 +88,7 @@ const getUserLevel = (totalValue) => {
   return USER_LEVELS.BRONZE;
 };
 
-const calculateTradingFee = (amount) => {
-  const fee = Math.max(amount * TRADING_FEES.COMMISSION, TRADING_FEES.MINIMUM);
-  return parseFloat(fee.toFixed(2));
-};
+
 
 const generateNewsHeadline = (stock, priceChange) => {
   const headlines = [
@@ -112,21 +100,7 @@ const generateNewsHeadline = (stock, priceChange) => {
   return headlines[Math.floor(Math.random() * headlines.length)];
 };
 
-const calculateRSI = (prices, period = 14) => {
-  if (prices.length < period) return 50;
 
-  let gains = 0, losses = 0;
-  for (let i = 1; i < period; i++) {
-    const change = prices[i] - prices[i - 1];
-    if (change > 0) gains += change;
-    else losses -= change;
-  }
-
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
-};
 
 // Store static chart data to prevent regeneration - moved outside component
 let staticChartData = {};
@@ -365,35 +339,15 @@ const ATLStockExchange = () => {
   // Advanced Features State
   const [watchlist, setWatchlist] = useState([]);
   const [newsItems, setNewsItems] = useState([]);
-  const [showAdvancedChart, setShowAdvancedChart] = useState(false);
-  const [chartType, setChartType] = useState('line'); // line, area, candlestick
-  const [showTechnicalIndicators, setShowTechnicalIndicators] = useState(false);
-  const [portfolioView, setPortfolioView] = useState('overview'); // overview, performance, allocation
+
   const [sortBy, setSortBy] = useState('marketCap'); // marketCap, price, change, volume
   const [sortOrder, setSortOrder] = useState('desc');
   const [showOnlyWatchlist, setShowOnlyWatchlist] = useState(false);
-  const [tradingMode, setTradingMode] = useState('market'); // market, limit, stop
-  const [limitPrice, setLimitPrice] = useState('');
-  const [stopPrice, setStopPrice] = useState('');
-  const [orderExpiry, setOrderExpiry] = useState('day'); // day, gtc (good till cancelled)
-  const [showPaperTrading, setShowPaperTrading] = useState(false);
-  const [paperBalance, setPaperBalance] = useState(100000);
-  const [paperPortfolio, setPaperPortfolio] = useState({});
+
   const [achievements, setAchievements] = useState([]);
-  const [socialFeed, setSocialFeed] = useState([]);
-  const [userPreferences, setUserPreferences] = useState({
-    theme: 'auto',
-    notifications: true,
-    soundEffects: false,
-    autoRefresh: true,
-    compactView: false
-  });
+
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [lastUpdate, setLastUpdate] = useState(Date.now());
-
-  // Refs for advanced features
-  const chartRef = useRef(null);
-  const audioRef = useRef(null);
 
   // Computed values with memoization for better performance
   const totalMarketCap = useMemo(() => {
@@ -530,6 +484,22 @@ const ATLStockExchange = () => {
     return allocation.sort((a, b) => b.percentage - a.percentage);
   }, [user, users, stocks, userPortfolioValue]);
 
+  const generateAchievement = useCallback((type, data) => {
+    const achievementTypes = {
+      firstTrade: { title: 'First Trade', description: 'Made your first trade!', icon: '🎯' },
+      bigGainer: { title: 'Big Winner', description: 'Stock gained over 10%!', icon: '🚀' },
+      diversified: { title: 'Diversified', description: 'Own 5+ different stocks', icon: '📊' },
+      millionaire: { title: 'Millionaire', description: 'Portfolio worth $1M+', icon: '💎' },
+      dayTrader: { title: 'Day Trader', description: '10+ trades in one day', icon: '⚡' }
+    };
+
+    const achievement = achievementTypes[type];
+    if (achievement) {
+      setAchievements(prev => [...prev, { ...achievement, timestamp: Date.now(), data }]);
+      setNotifications(prev => [...prev, `🏆 Achievement Unlocked: ${achievement.title}`]);
+    }
+  }, []);
+
   const topMovers = useMemo(() => {
     const movers = stocks.map(stock => ({
       ...stock,
@@ -542,11 +512,7 @@ const ATLStockExchange = () => {
     return { gainers, losers };
   }, [stocks]);
 
-  // Debounced search for better performance
-  const debouncedSearch = useCallback(
-    debounce((query) => setSearchQuery(query), 300),
-    []
-  );
+
 
   // Persist dark mode to localStorage
   useEffect(() => {
@@ -1620,59 +1586,11 @@ const ATLStockExchange = () => {
     }
   }, [watchlist, addToWatchlist, removeFromWatchlist]);
 
-  const executeLimitOrder = useCallback((stock, quantity, limitPrice, type) => {
-    // Simulate limit order execution
-    const currentPrice = stock.price;
-    const shouldExecute = type === 'buy' ? currentPrice <= limitPrice : currentPrice >= limitPrice;
 
-    if (shouldExecute) {
-      if (type === 'buy') {
-        buyStock();
-      } else {
-        sellStock();
-      }
-      setNotifications(prev => [...prev, `✅ Limit ${type} order executed for ${stock.ticker} at ${formatCurrency(limitPrice)}`]);
-    } else {
-      setNotifications(prev => [...prev, `⏳ Limit ${type} order placed for ${stock.ticker} at ${formatCurrency(limitPrice)}`]);
-    }
-  }, [buyStock, sellStock]);
 
-  const calculatePortfolioPerformance = useCallback(() => {
-    if (!user || !users[user]) return { totalReturn: 0, dayChange: 0, weekChange: 0 };
 
-    const portfolio = users[user].portfolio || {};
-    let totalCost = 0;
-    let currentValue = 0;
 
-    Object.entries(portfolio).forEach(([ticker, qty]) => {
-      const stock = stocks.find(s => s.ticker === ticker);
-      if (stock) {
-        // Estimate average cost (in real app, this would be tracked)
-        const avgCost = stock.price * (0.95 + Math.random() * 0.1);
-        totalCost += qty * avgCost;
-        currentValue += qty * stock.price;
-      }
-    });
 
-    const totalReturn = ((currentValue - totalCost) / totalCost) * 100;
-    return { totalReturn: totalReturn || 0, currentValue, totalCost };
-  }, [user, users, stocks]);
-
-  const generateAchievement = useCallback((type, data) => {
-    const achievementTypes = {
-      firstTrade: { title: 'First Trade', description: 'Made your first trade!', icon: '🎯' },
-      bigGainer: { title: 'Big Winner', description: 'Stock gained over 10%!', icon: '🚀' },
-      diversified: { title: 'Diversified', description: 'Own 5+ different stocks', icon: '📊' },
-      millionaire: { title: 'Millionaire', description: 'Portfolio worth $1M+', icon: '💎' },
-      dayTrader: { title: 'Day Trader', description: '10+ trades in one day', icon: '⚡' }
-    };
-
-    const achievement = achievementTypes[type];
-    if (achievement) {
-      setAchievements(prev => [...prev, { ...achievement, timestamp: Date.now(), data }]);
-      setNotifications(prev => [...prev, `🏆 Achievement Unlocked: ${achievement.title}`]);
-    }
-  }, []);
 
   const exportPortfolio = useCallback(() => {
     if (!user || !users[user]) return;
@@ -1774,30 +1692,7 @@ const ATLStockExchange = () => {
     setSplitRatio('');
   };
 
-  const getFilteredStocks = () => {
-    let filtered = stocks;
 
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.ticker.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    // Filter by stock filter (price range, market cap, etc)
-    if (stockFilter === 'under100') filtered = filtered.filter(s => s.price < 100);
-    if (stockFilter === '100to500') filtered = filtered.filter(s => s.price >= 100 && s.price < 500);
-    if (stockFilter === 'over500') filtered = filtered.filter(s => s.price >= 500);
-    if (stockFilter === 'largecap') filtered = filtered.filter(s => s.marketCap > 400000000000);
-    if (stockFilter === 'midcap') filtered = filtered.filter(s => s.marketCap >= 200000000000 && s.marketCap <= 400000000000);
-    if (stockFilter === 'smallcap') filtered = filtered.filter(s => s.marketCap < 200000000000);
-
-    // Sort by market cap if no search
-    if (!searchQuery) filtered.sort((a, b) => b.marketCap - a.marketCap);
-
-    return filtered.slice(0, 10);
-  };
 
 
 
