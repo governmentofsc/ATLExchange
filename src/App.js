@@ -10,6 +10,7 @@ const getEasternTime = (date = new Date()) => {
 };
 
 // Store static chart data to prevent regeneration - moved outside component
+// Clear cache to apply new randomization algorithm
 let staticChartData = {};
 
 function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
@@ -70,13 +71,24 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   // Start from last known price (or open)
   let prevPrice = newData.length > 0 ? newData[newData.length - 1].price : openPrice;
 
-  // Enhanced randomization with more realistic market behavior
-  const baseSeed = hashString(seedKey);
-  let trendDirection = Math.sin(baseSeed * 0.001) > 0 ? 1 : -1; // Overall trend for the day
-  let momentum = 0; // Momentum factor for more realistic price movement
+  // Simple seeded random number generator for consistent but natural randomness
+  const createSeededRandom = (seed) => {
+    let state = seed;
+    return () => {
+      state = (state * 1664525 + 1013904223) % 4294967296;
+      return state / 4294967296;
+    };
+  };
 
-  // Add new data points every 1 minute from last existing time to now
-  for (let minutes = lastExistingMinutes + 1; minutes <= totalMinutes; minutes += 1) {
+  const baseSeed = hashString(seedKey);
+  const random = createSeededRandom(baseSeed);
+
+  // Initialize realistic market variables
+  let momentum = 0;
+  let volatility = 0.0008;
+
+  // Add new data points every 5 minutes for smoother, more realistic charts
+  for (let minutes = Math.max(lastExistingMinutes + 5, 5); minutes <= totalMinutes; minutes += 5) {
     const time = new Date(startOfDay.getTime() + minutes * 60000);
     const hour = time.getHours();
     const minute = time.getMinutes();
@@ -86,47 +98,36 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
     const period = hour >= 12 ? 'PM' : 'AM';
     const timeStr = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
 
-    // Enhanced random movement with momentum and trend
-    const timeOfDay = minutes / 1440; // 0..1
-    const seed = baseSeed + minutes;
+    // Generate realistic price movement using proper random walk
+    const r1 = random();
+    const r2 = random();
 
-    // Multiple random sources for more realistic movement
-    const random1 = Math.sin(seed * 0.1234) * 0.5 + 0.5;
-    const random2 = Math.sin(seed * 0.5678) * 0.5 + 0.5;
-    const random3 = Math.sin(seed * 0.9012) * 0.5 + 0.5;
+    // Market hours effect (higher volatility during trading hours)
+    const marketHours = (hour >= 9 && hour <= 16) ? 1.2 : 0.8;
 
-    // Market opening/closing effects
-    const marketHourEffect = Math.sin(timeOfDay * Math.PI) * 0.0002;
+    // Random walk with momentum
+    const randomChange = (r1 - 0.5) * 2; // -1 to 1
+    momentum = momentum * 0.7 + randomChange * 0.3; // Momentum carries forward
 
-    // Trend component (stronger than before)
-    const trendStrength = 0.0003 * trendDirection;
+    // Volatility clustering (periods of high/low volatility)
+    if (r2 > 0.95) volatility *= 1.3; // Increase volatility
+    if (r2 < 0.05) volatility *= 0.8; // Decrease volatility
+    volatility = Math.max(0.0003, Math.min(0.002, volatility)); // Keep in bounds
 
-    // Momentum (price tends to continue in same direction)
-    momentum = momentum * 0.8 + (random1 - 0.5) * 0.4;
+    // Calculate price change
+    const change = momentum * volatility * marketHours;
+    const newPrice = prevPrice * (1 + change);
 
-    // Volatility with some clustering
-    const volatilityBase = 0.0015; // Increased base volatility
-    const volatilityCluster = Math.abs(Math.sin(seed * 0.01)) * 0.001;
-    const totalVolatility = volatilityBase + volatilityCluster;
+    // Keep price within reasonable daily bounds
+    const minPrice = openPrice * 0.96;
+    const maxPrice = openPrice * 1.04;
+    const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
 
-    // Combine all factors
-    const noise = (random2 - 0.5) * 2; // -1..1
-    const step = marketHourEffect + trendStrength + momentum * 0.3 + totalVolatility * noise;
-
-    // Occasional trend reversals for realism
-    if (Math.abs(random3 - 0.5) > 0.48) {
-      trendDirection *= -1;
-    }
-
-    const unclamped = prevPrice * (1 + step);
-    const minP = openPrice * 0.88; // Wider bounds for more movement
-    const maxP = openPrice * 1.12;
-    const price = Math.max(minP, Math.min(maxP, unclamped));
-    prevPrice = price;
+    prevPrice = boundedPrice;
 
     newData.push({
       time: timeStr,
-      price: parseFloat(price.toFixed(2))
+      price: parseFloat(boundedPrice.toFixed(2))
     });
   }
 
@@ -146,6 +147,11 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 }
 
 const ATLStockExchange = () => {
+  // Clear chart cache on component mount to show new randomization
+  React.useEffect(() => {
+    staticChartData = {};
+  }, []);
+
   const [darkMode, setDarkMode] = useState(false);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -400,17 +406,19 @@ const ATLStockExchange = () => {
   function generateExtendedHistory(basePrice, seedKey = '') {
     const data = [];
 
-    // Use seeded randomization for consistency
-    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    let seedCounter = 0;
-    const seededRandom = () => {
-      seedCounter++;
-      const x = Math.sin(baseSeed + seedCounter) * 10000;
-      return x - Math.floor(x);
+    // Simple seeded random number generator for consistent but natural randomness
+    const createSeededRandom = (seed) => {
+      let state = seed;
+      return () => {
+        state = (state * 1664525 + 1013904223) % 4294967296;
+        return state / 4294967296;
+      };
     };
 
-    let price = basePrice * (0.92 + seededRandom() * 0.16); // More variation in starting price
-    let trend = (seededRandom() - 0.5) * 0.02; // Overall trend for the week
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    const random = createSeededRandom(baseSeed);
+
+    let price = basePrice * (0.92 + random() * 0.16); // More variation in starting price
     let momentum = 0;
 
     // Generate 7 days of data with hourly intervals for better resolution
@@ -420,27 +428,18 @@ const ATLStockExchange = () => {
         const timeOfDay = hour / 24;
         const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
 
-        // Enhanced randomization
-        const random1 = seededRandom();
-        const random2 = seededRandom();
-        const random3 = seededRandom();
+        // Simple realistic randomization
+        const r1 = random();
 
-        // Momentum carries forward
-        momentum = momentum * 0.7 + (random1 - 0.5) * 0.6;
+        // Random walk with momentum
+        const randomChange = (r1 - 0.5) * 2; // -1 to 1
+        momentum = momentum * 0.8 + randomChange * 0.2;
 
-        // Volatility clustering
-        const baseVolatility = 0.008 + marketActivity * 0.004; // Higher volatility during active hours
-        const volatilityCluster = Math.abs(random2 - 0.5) * 0.006;
-        const totalVolatility = baseVolatility + volatilityCluster;
+        // Market activity affects volatility
+        const volatility = 0.01 + marketActivity * 0.005;
 
-        // Trend can shift
-        if (random3 > 0.95) {
-          trend = (seededRandom() - 0.5) * 0.02;
-        }
-
-        // Combine factors
-        const noise = (seededRandom() - 0.5) * 2;
-        const change = trend + momentum * 0.4 + totalVolatility * noise;
+        // Calculate price change
+        const change = momentum * volatility;
 
         price = price * (1 + change);
 
