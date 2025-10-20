@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  Bell, BarChart3, PieChart, Target, Crown, Star, Award, Trophy,
-  Download, Filter, Bookmark, Heart, Share2, Globe, WifiOff
+  Bell, BarChart3, PieChart, Target, Crown, Star, Award,
+  Download, Filter, Share2, Globe, WifiOff
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { database } from './firebase';
@@ -75,15 +75,7 @@ const getUserLevel = (totalValue) => {
 
 
 
-const generateNewsHeadline = (stock, priceChange) => {
-  const headlines = [
-    `${stock.ticker} ${priceChange > 0 ? 'surges' : 'drops'} ${Math.abs(priceChange).toFixed(1)}% in active trading`,
-    `Investors ${priceChange > 0 ? 'bullish' : 'bearish'} on ${stock.name} as shares ${priceChange > 0 ? 'climb' : 'fall'}`,
-    `${stock.name} stock ${priceChange > 0 ? 'rallies' : 'declines'} amid ${priceChange > 0 ? 'positive' : 'negative'} market sentiment`,
-    `Breaking: ${stock.ticker} sees ${priceChange > 0 ? 'strong gains' : 'significant losses'} in today's session`
-  ];
-  return headlines[Math.floor(Math.random() * headlines.length)];
-};
+
 
 
 
@@ -311,14 +303,11 @@ const ATLStockExchange = () => {
   const [notifications, setNotifications] = useState([]);
 
   // Advanced Features State
-  const [watchlist, setWatchlist] = useState([]);
-  const [newsItems, setNewsItems] = useState([]);
 
   const [sortBy, setSortBy] = useState('marketCap'); // marketCap, price, change, volume
   const [sortOrder, setSortOrder] = useState('desc');
-  const [showOnlyWatchlist, setShowOnlyWatchlist] = useState(false);
 
-  const [achievements, setAchievements] = useState([]);
+
 
   const [connectionStatus, setConnectionStatus] = useState('connected');
 
@@ -355,10 +344,7 @@ const ATLStockExchange = () => {
   const filteredStocks = useMemo(() => {
     let filtered = stocks;
 
-    // Apply watchlist filter
-    if (showOnlyWatchlist && watchlist.length > 0) {
-      filtered = filtered.filter(s => watchlist.includes(s.ticker));
-    }
+
 
     // Apply search filter
     if (searchQuery) {
@@ -411,7 +397,7 @@ const ATLStockExchange = () => {
     });
 
     return filtered.slice(0, 50); // Increased limit for better browsing
-  }, [stocks, searchQuery, stockFilter, sortBy, sortOrder, showOnlyWatchlist, watchlist]);
+  }, [stocks, searchQuery, stockFilter, sortBy, sortOrder]);
 
   const userLevel = useMemo(() => {
     if (!user || !users[user]) return USER_LEVELS.BRONZE;
@@ -457,21 +443,7 @@ const ATLStockExchange = () => {
     return allocation.sort((a, b) => b.percentage - a.percentage);
   }, [user, users, stocks, userPortfolioValue]);
 
-  const generateAchievement = useCallback((type, data) => {
-    const achievementTypes = {
-      firstTrade: { title: 'First Trade', description: 'Made your first trade!', icon: '🎯' },
-      bigGainer: { title: 'Big Winner', description: 'Stock gained over 10%!', icon: '🚀' },
-      diversified: { title: 'Diversified', description: 'Own 5+ different stocks', icon: '📊' },
-      millionaire: { title: 'Millionaire', description: 'Portfolio worth $1M+', icon: '💎' },
-      dayTrader: { title: 'Day Trader', description: '10+ trades in one day', icon: '⚡' }
-    };
 
-    const achievement = achievementTypes[type];
-    if (achievement) {
-      setAchievements(prev => [...prev, { ...achievement, timestamp: Date.now(), data }]);
-      setNotifications(prev => [...prev, `🏆 Achievement Unlocked: ${achievement.title}`]);
-    }
-  }, []);
 
   const topMovers = useMemo(() => {
     const movers = stocks.map(stock => ({
@@ -532,33 +504,7 @@ const ATLStockExchange = () => {
     }
   }, [notifications]);
 
-  // Generate news items based on stock movements
-  useEffect(() => {
-    const generateNews = () => {
-      const significantMovers = stocks.filter(stock => {
-        const change = Math.abs(((stock.price - stock.open) / stock.open) * 100);
-        return change > 2; // 2% or more movement
-      });
 
-      if (significantMovers.length > 0) {
-        const randomStock = significantMovers[Math.floor(Math.random() * significantMovers.length)];
-        const priceChange = ((randomStock.price - randomStock.open) / randomStock.open) * 100;
-
-        const newsItem = {
-          id: Date.now(),
-          headline: generateNewsHeadline(randomStock, priceChange),
-          ticker: randomStock.ticker,
-          timestamp: Date.now(),
-          type: priceChange > 0 ? 'positive' : 'negative'
-        };
-
-        setNewsItems(prev => [newsItem, ...prev.slice(0, 19)]); // Keep last 20 news items
-      }
-    };
-
-    const newsInterval = setInterval(generateNews, UPDATE_INTERVALS.NEWS);
-    return () => clearInterval(newsInterval);
-  }, [stocks]);
 
   // Connection status monitoring
   useEffect(() => {
@@ -586,15 +532,7 @@ const ATLStockExchange = () => {
     const totalValue = users[user].balance + userPortfolioValue;
     const stockCount = Object.keys(portfolio).length;
 
-    // Check for achievements
-    if (totalValue >= 1000000 && !achievements.some(a => a.title === 'Millionaire')) {
-      generateAchievement('millionaire', { value: totalValue });
-    }
-
-    if (stockCount >= 5 && !achievements.some(a => a.title === 'Diversified')) {
-      generateAchievement('diversified', { count: stockCount });
-    }
-  }, [user, users, userPortfolioValue, achievements, generateAchievement]);
+  }, [user, users, userPortfolioValue]);
 
   useEffect(() => {
     const stocksRef = ref(database, 'stocks');
@@ -1537,26 +1475,7 @@ const ATLStockExchange = () => {
     set(marketStateRef, { running: false });
   };
 
-  // Advanced Trading Functions
-  const addToWatchlist = useCallback((ticker) => {
-    if (!watchlist.includes(ticker)) {
-      setWatchlist(prev => [...prev, ticker]);
-      setNotifications(prev => [...prev, `⭐ Added ${ticker} to watchlist`]);
-    }
-  }, [watchlist]);
 
-  const removeFromWatchlist = useCallback((ticker) => {
-    setWatchlist(prev => prev.filter(t => t !== ticker));
-    setNotifications(prev => [...prev, `❌ Removed ${ticker} from watchlist`]);
-  }, []);
-
-  const toggleWatchlist = useCallback((ticker) => {
-    if (watchlist.includes(ticker)) {
-      removeFromWatchlist(ticker);
-    } else {
-      addToWatchlist(ticker);
-    }
-  }, [watchlist, addToWatchlist, removeFromWatchlist]);
 
 
 
@@ -3101,27 +3020,7 @@ const ATLStockExchange = () => {
               </div>
             )}
 
-            {/* Achievements */}
-            {achievements.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <Trophy className="w-5 h-5" />
-                  Recent Achievements
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {achievements.slice(-6).reverse().map((achievement, index) => (
-                    <div key={index} className={`p-4 rounded-lg border-2 ${cardClass} hover:shadow-md transition-shadow`}>
-                      <div className="text-2xl mb-2">{achievement.icon}</div>
-                      <div className="font-bold">{achievement.title}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">{achievement.description}</div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        {new Date(achievement.timestamp).toLocaleDateString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
             <h3 className="text-xl font-bold mb-4">Holdings</h3>
             <div className="overflow-x-auto">
@@ -3326,57 +3225,10 @@ const ATLStockExchange = () => {
             </div>
           </div>
 
-          {/* News & Alerts */}
-          <div className={`p-6 rounded-xl ${cardClass} border-2`}>
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <Bell className="w-4 h-4" />
-              Market News
-            </h3>
-            <div className="space-y-3 max-h-64 overflow-y-auto">
-              {newsItems.slice(0, 5).map(news => (
-                <div key={news.id} className={`p-3 rounded-lg text-sm ${news.type === 'positive' ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500' : 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500'}`}>
-                  <div className="font-medium mb-1">{news.ticker}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">{news.headline}</div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {new Date(news.timestamp).toLocaleTimeString()}
-                  </div>
-                </div>
-              ))}
-              {newsItems.length === 0 && (
-                <div className="text-center text-gray-500 py-4">
-                  <Globe className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <div className="text-sm">No recent news</div>
-                </div>
-              )}
-            </div>
-          </div>
+
         </div>
 
-        {/* Watchlist Section */}
-        {watchlist.length > 0 && (
-          <div className={`p-6 rounded-xl ${cardClass} border-2 mb-6`}>
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Bookmark className="w-5 h-5" />
-              My Watchlist ({watchlist.length})
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {watchlist.map(ticker => {
-                const stock = stocks.find(s => s.ticker === ticker);
-                if (!stock) return null;
-                const change = ((stock.price - stock.open) / stock.open) * 100;
-                return (
-                  <div key={ticker} onClick={() => setSelectedStock(stock)} className={`p-3 rounded-lg cursor-pointer hover:shadow-md transition-shadow ${cardClass} border`}>
-                    <div className="font-bold text-sm">{ticker}</div>
-                    <div className="text-lg font-bold">{formatCurrency(stock.price)}</div>
-                    <div className={`text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
 
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
@@ -3386,10 +3238,7 @@ const ATLStockExchange = () => {
               <Filter className="w-4 h-4" />
               <span className="text-sm font-medium">Filters:</span>
             </div>
-            <button onClick={() => setShowOnlyWatchlist(!showOnlyWatchlist)} className={`px-3 py-1 rounded flex items-center gap-1 ${showOnlyWatchlist ? 'bg-yellow-500 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>
-              <Bookmark className="w-3 h-3" />
-              Watchlist Only
-            </button>
+
             <div className="flex items-center gap-2">
               <span className="text-sm">Sort:</span>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={`px-2 py-1 rounded text-sm ${inputClass}`}>
@@ -3437,19 +3286,8 @@ const ATLStockExchange = () => {
 
 
             return (
-              <div key={`${stock.ticker}-${stock.price}`} className={`relative p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'} ${watchlist.includes(stock.ticker) ? 'ring-2 ring-yellow-400' : ''}`}>
-                {/* Watchlist Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleWatchlist(stock.ticker);
-                  }}
-                  className={`absolute top-2 right-2 p-2 rounded-full transition-colors ${watchlist.includes(stock.ticker) ? 'bg-yellow-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-yellow-200'}`}
-                >
-                  {watchlist.includes(stock.ticker) ? <Heart className="w-4 h-4 fill-current" /> : <Heart className="w-4 h-4" />}
-                </button>
-
-                <div onClick={() => setSelectedStock(stock)}>
+              <div key={`${stock.ticker}-${stock.price}`} onClick={() => setSelectedStock(stock)} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`}>
+                <div>
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
