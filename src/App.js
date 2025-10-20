@@ -252,9 +252,7 @@ const ATLStockExchange = () => {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showOrderBook, setShowOrderBook] = useState(false);
   const [marketEvents, setMarketEvents] = useState([]);
-  const [orderBook, setOrderBook] = useState({});
-  const [level2Data, setLevel2Data] = useState({});
-  const [marketDepth, setMarketDepth] = useState(5); // Show top 5 levels
+
   const [tradingHistory, setTradingHistory] = useState([]); // User's trading history
   const [alertStock, setAlertStock] = useState('');
   const [alertPrice, setAlertPrice] = useState('');
@@ -670,7 +668,7 @@ const ATLStockExchange = () => {
           marketSentiment === 'bull' ? 1.2 :
             marketSentiment === 'bear' ? 0.8 : 1.0;
 
-        const baseChange = (simpleRandom() - 0.5) * 0.0008 * volatilityMultiplier;
+        const baseChange = (simpleRandom() - 0.5) * 0.0008 * volatilityMultiplier * marketSentimentMultiplier;
         const sentimentBias = marketSentiment === 'bull' ? 0.0001 : marketSentiment === 'bear' ? -0.0001 : 0;
         const totalChange = baseChange + sentimentBias;
 
@@ -765,7 +763,7 @@ const ATLStockExchange = () => {
     }, updateSpeed); // Use configurable update speed
 
     return () => clearInterval(interval);
-  }, [stocks, updateSpeed, isMarketController, marketRunning]);
+  }, [stocks, updateSpeed, isMarketController, marketRunning, marketSentiment, volatilityMode]);
 
 
   function generateExtendedHistory(basePrice, seedKey = '') {
@@ -1310,7 +1308,7 @@ const ATLStockExchange = () => {
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Purchase failed. Please try again.']);
     }
-  }, [selectedStock, buyQuantity, user, users, stocks]);
+  }, [selectedStock, buyQuantity, user, users, stocks, marketSentiment, volatilityMode]);
 
   const sellStock = useCallback(() => {
     // Enhanced validation with user feedback
@@ -3384,8 +3382,8 @@ const ATLStockExchange = () => {
               📈 Level II Data
             </button>
             <div className={`px-3 py-1 rounded-lg text-xs font-bold ${getMarketStatus() === 'OPEN' ? 'bg-green-600 text-white' :
-                getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-600 text-white' :
-                  getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-600 text-white' : 'bg-red-600 text-white'
+              getMarketStatus() === 'PRE_MARKET' ? 'bg-yellow-600 text-white' :
+                getMarketStatus() === 'AFTER_HOURS' ? 'bg-orange-600 text-white' : 'bg-red-600 text-white'
               }`}>
               🕐 {getMarketStatus().replace('_', ' ')}
             </div>
