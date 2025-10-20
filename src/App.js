@@ -666,8 +666,21 @@ const ATLStockExchange = () => {
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        const newHistory = [...stock.history];
+        // Reset history at start of new trading day (if it's early morning and history exists from previous day)
+        let newHistory = [...(stock.history || [])];
         const elapsedMs = now - dayStartTime;
+
+        // If it's early in the day (before 6 AM) and we have history, it might be from yesterday - reset it
+        if (now.getHours() < 6 && newHistory.length > 0) {
+          // Check if the last entry is from a different day by looking at elapsed time
+          const lastEntryTime = elapsedMs / 120000; // Convert to 2-minute intervals
+          if (lastEntryTime < 0 || newHistory.length > 200) { // Reset if negative time or too many entries
+            newHistory = [];
+            // Also reset daily high/low at start of new day
+            stock.high = stock.price;
+            stock.low = stock.price;
+          }
+        }
 
         // Rolling update system: update last point every 5 seconds, add new point every 2 minutes
         const elapsed2Min = Math.floor(elapsedMs / 120000);
@@ -1013,8 +1026,10 @@ const ATLStockExchange = () => {
         data = generateMinuteHistory(stockData.price, 60, stockData.ticker);
         break;
       case '1d':
-        // Stable: generate from open to now, seeded by ticker so old points never change
-        data = generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
+        // Use live history if available, otherwise generate synthetic data
+        data = stockData.history && stockData.history.length > 0
+          ? stockData.history
+          : generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
         break;
       case '1w':
         // Generate fresh weekly data with proper seeding
@@ -3280,10 +3295,10 @@ const ATLStockExchange = () => {
                   </div>
 
                   <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-list-${chartKey}`}>
-                    <LineChart data={generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                    <LineChart data={stock.history || generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
                       <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker).length / 10))} />
-                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                      <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history || generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
+                      <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history || generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history || generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
                       <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
