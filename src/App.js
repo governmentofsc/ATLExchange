@@ -631,6 +631,12 @@ const ATLStockExchange = () => {
       dayStartTime.setHours(0, 0, 0, 0);
 
       const updatedStocks = stocks.map(stock => {
+        // Skip live updates for stocks that were recently traded (within 10 seconds)
+        const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
+        if (timeSinceLastTrade < 10000) {
+          return stock; // Don't update price if recently traded
+        }
+
         // Simple realistic price movement for live updates
         const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
 
@@ -649,7 +655,7 @@ const ATLStockExchange = () => {
         const minPrice = stock.price * 0.9998; // 0.02% down limit per update
         const maxPrice = stock.price * 1.0002; // 0.02% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
-        const newPrice2 = parseFloat(boundedPrice.toFixed(2));
+        const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2))); // Prevent negative prices
 
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
@@ -1171,12 +1177,28 @@ const ATLStockExchange = () => {
       // Calculate price impact based on shares traded vs total shares outstanding
       const totalShares = selectedStock.marketCap / selectedStock.price;
       const sharesBought = quantity;
+
+      // Calculate total shares already owned by all users
+      const totalOwnedShares = Object.values(users).reduce((total, userData) => {
+        const portfolio = userData.portfolio || {};
+        return total + (portfolio[selectedStock.ticker] || 0);
+      }, 0);
+
+      const availableShares = totalShares - totalOwnedShares;
+
+      // Check if there are enough shares available
+      if (sharesBought > availableShares) {
+        const availablePercent = ((availableShares / totalShares) * 100).toFixed(2);
+        setNotifications(prev => [...prev, `⚠️ Only ${Math.floor(availableShares)} shares available (${availablePercent}% of company). Total owned by all users: ${((totalOwnedShares / totalShares) * 100).toFixed(1)}%`]);
+        return;
+      }
+
       const sharePercentage = sharesBought / totalShares;
 
       // Price impact proportional to percentage of shares traded - no caps!
       const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price increase
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
 
       // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
@@ -1185,7 +1207,7 @@ const ATLStockExchange = () => {
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now() };
         }
         return s;
       });
@@ -1261,7 +1283,7 @@ const ATLStockExchange = () => {
       // Price impact proportional to percentage of shares traded - no caps!
       const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price decrease
       const priceImpact = -(priceImpactPercent / 100) * selectedStock.price; // Negative for selling
-      const newPrice = parseFloat((selectedStock.price + priceImpact).toFixed(2));
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
 
       // Record trade in history
       const tradeRecord = {
@@ -1283,7 +1305,7 @@ const ATLStockExchange = () => {
           const newLow = Math.min(s.low, newPrice);
           const sharesOutstanding = s.marketCap / s.price;
           const newMarketCap = sharesOutstanding * newPrice;
-          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap };
+          return { ...s, price: newPrice, high: newHigh, low: newLow, marketCap: newMarketCap, lastTradeTime: Date.now() };
         }
         return s;
       });
