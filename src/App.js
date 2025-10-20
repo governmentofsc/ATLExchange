@@ -1152,6 +1152,25 @@ const ATLStockExchange = () => {
       return;
     }
 
+    // Calculate price impact and validate shares BEFORE updating database
+    const totalShares = selectedStock.marketCap / selectedStock.price;
+    const sharesBought = quantity;
+
+    // Calculate total shares already owned by all users
+    const totalOwnedShares = Object.values(users).reduce((total, userData) => {
+      const portfolio = userData.portfolio || {};
+      return total + (portfolio[selectedStock.ticker] || 0);
+    }, 0);
+
+    const availableShares = totalShares - totalOwnedShares;
+
+    // Check if there are enough shares available
+    if (sharesBought > availableShares) {
+      const availablePercent = ((availableShares / totalShares) * 100).toFixed(2);
+      setNotifications(prev => [...prev, `⚠️ Only ${Math.floor(availableShares)} shares available (${availablePercent}% of company). Total owned by all users: ${((totalOwnedShares / totalShares) * 100).toFixed(1)}%`]);
+      return;
+    }
+
     const cost = selectedStock.price * quantity;
 
     if (users[user].balance < cost) {
@@ -1160,6 +1179,7 @@ const ATLStockExchange = () => {
     }
 
     try {
+      // Update user portfolio and balance first
       const userRef = ref(database, `users/${user}`);
       const newBalance = users[user].balance - cost;
       const currentPortfolio = users[user].portfolio || {};
@@ -1170,32 +1190,8 @@ const ATLStockExchange = () => {
 
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
 
-      // Success notification
-      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(cost)}`]);
-      setBuyQuantity('');
-
-      // Calculate price impact based on shares traded vs total shares outstanding
-      const totalShares = selectedStock.marketCap / selectedStock.price;
-      const sharesBought = quantity;
-
-      // Calculate total shares already owned by all users
-      const totalOwnedShares = Object.values(users).reduce((total, userData) => {
-        const portfolio = userData.portfolio || {};
-        return total + (portfolio[selectedStock.ticker] || 0);
-      }, 0);
-
-      const availableShares = totalShares - totalOwnedShares;
-
-      // Check if there are enough shares available
-      if (sharesBought > availableShares) {
-        const availablePercent = ((availableShares / totalShares) * 100).toFixed(2);
-        setNotifications(prev => [...prev, `⚠️ Only ${Math.floor(availableShares)} shares available (${availablePercent}% of company). Total owned by all users: ${((totalOwnedShares / totalShares) * 100).toFixed(1)}%`]);
-        return;
-      }
-
+      // Calculate and apply price impact
       const sharePercentage = sharesBought / totalShares;
-
-      // Price impact proportional to percentage of shares traded - no caps!
       const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price increase
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
       const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
@@ -1214,6 +1210,10 @@ const ATLStockExchange = () => {
 
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
+
+      // Success notification
+      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(cost)} - Price impact: ${priceImpact > 0 ? '+' : ''}${((priceImpact / selectedStock.price) * 100).toFixed(2)}%`]);
+      setBuyQuantity('');
 
       // Record trade in history
       const tradeRecord = {
