@@ -16,11 +16,7 @@ const MARKET_HOURS = {
   lunchBreak: { start: 12, end: 13 } // Optional lunch break
 };
 
-const TRADING_FEES = {
-  commission: 0.005, // 0.5% commission
-  spread: 0.001, // 0.1% bid-ask spread
-  minimumFee: 1.00 // Minimum $1 fee
-};
+
 
 
 
@@ -71,9 +67,7 @@ const isMarketOpen = () => {
   return currentTime >= MARKET_HOURS.open && currentTime <= MARKET_HOURS.close;
 };
 
-const getMarketStatus = () => {
-  return 'OPEN'; // 24/7 trading
-};
+
 
 
 
