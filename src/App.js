@@ -1145,11 +1145,8 @@ const ATLStockExchange = () => {
       return;
     }
 
-    // Professional trading cost calculation with fees
-    const baseCost = selectedStock.price * quantity;
-    const commission = Math.max(TRADING_FEES.minimumFee, baseCost * TRADING_FEES.commission);
-    const spread = baseCost * TRADING_FEES.spread;
-    const totalCost = baseCost + commission + spread;
+    // No trading fees - simple cost
+    const totalCost = selectedStock.price * quantity;
 
     // 24/7 trading - no market hours restrictions
 
@@ -1161,7 +1158,7 @@ const ATLStockExchange = () => {
     }
 
     if (users[user].balance < totalCost) {
-      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(totalCost - users[user].balance)} more (includes fees: ${formatCurrency(commission + spread)})`]);
+      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(totalCost - users[user].balance)} more`]);
       return;
     }
 
@@ -1177,13 +1174,14 @@ const ATLStockExchange = () => {
 
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
 
-      // Calculate and apply price impact
+      // SIMPLE PRICE IMPACT: 1% shares = 1% price increase
+      const totalShares = selectedStock.marketCap / selectedStock.price;
       const sharePercentage = sharesBought / totalShares;
-      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price increase
+      const priceImpactPercent = sharePercentage * 100; // 1% shares = 1% price change
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2)));
 
-      // Update stock price based on purchase
+      // Update stock price with realistic impact
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -1198,25 +1196,23 @@ const ATLStockExchange = () => {
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
 
-      // Success notification with detailed breakdown
-      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(baseCost)} + ${formatCurrency(commission + spread)} fees = ${formatCurrency(totalCost)} - Price impact: ${priceImpact > 0 ? '+' : ''}${((priceImpact / selectedStock.price) * 100).toFixed(2)}%`]);
+      // Success notification with price impact
+      const impactPercent = ((priceImpact / selectedStock.price) * 100);
+      const impactText = Math.abs(impactPercent) > 0.001 ? ` (+${impactPercent.toFixed(2)}%)` : '';
+      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(totalCost)}${impactText}`]);
       setBuyQuantity('');
 
-      // Record professional trade in history
+      // Record trade in history with impact
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
         ticker: selectedStock.ticker,
         quantity: quantity,
         price: selectedStock.price,
-        baseCost: baseCost,
-        commission: commission,
-        spread: spread,
         total: totalCost,
         newPrice: newPrice,
         priceImpact: priceImpact,
-        marketStatus: getMarketStatus(),
-
+        impactPercent: ((priceImpact / selectedStock.price) * 100)
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
@@ -1267,30 +1263,14 @@ const ATLStockExchange = () => {
       setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}`]);
       setSellQuantity('');
 
-      // Calculate price impact based on shares sold vs total shares outstanding
+      // SIMPLE SELL PRICE IMPACT: 1% shares = 1% price decrease
       const totalShares = selectedStock.marketCap / selectedStock.price;
-      const sharesSold = quantity;
-      const sharePercentage = sharesSold / totalShares;
-
-      // Price impact proportional to percentage of shares traded - no caps!
-      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price decrease
+      const sharePercentage = quantity / totalShares;
+      const priceImpactPercent = sharePercentage * 100; // 1% shares = 1% price change
       const priceImpact = -(priceImpactPercent / 100) * selectedStock.price; // Negative for selling
-      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2)));
 
-      // Record trade in history
-      const tradeRecord = {
-        timestamp: Date.now(),
-        type: 'sell',
-        ticker: selectedStock.ticker,
-        quantity: quantity,
-        price: selectedStock.price,
-        total: proceeds,
-        newPrice: newPrice,
-        priceImpact: priceImpact
-      };
-      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
-      set(historyRef, tradeRecord);
-
+      // Update stock price with realistic sell impact
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -1304,6 +1284,26 @@ const ATLStockExchange = () => {
 
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
+
+      // Sell notification with price impact
+      const impactPercent = ((priceImpact / selectedStock.price) * 100);
+      const impactText = Math.abs(impactPercent) > 0.001 ? ` (${impactPercent.toFixed(2)}%)` : '';
+      setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}${impactText}`]);
+
+      // Record trade in history with realistic impact
+      const tradeRecord = {
+        timestamp: Date.now(),
+        type: 'sell',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        price: selectedStock.price,
+        total: proceeds,
+        newPrice: newPrice,
+        priceImpact: priceImpact,
+        impactPercent: ((priceImpact / selectedStock.price) * 100)
+      };
+      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
+      set(historyRef, tradeRecord);
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Sale failed. Please try again.']);
     }
