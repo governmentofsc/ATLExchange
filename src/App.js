@@ -624,83 +624,6 @@ const ATLStockExchange = () => {
 
 
 
-  function generateYearHistory(basePrice, seedKey = '') {
-    const data = [];
-
-    // Use seeded randomization for consistency
-    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    let seedCounter = 0;
-    const seededRandom = () => {
-      seedCounter++;
-      const x = Math.sin(baseSeed + seedCounter) * 10000;
-      return x - Math.floor(x);
-    };
-
-    let price = basePrice * (0.95 + seededRandom() * 0.10); // Much smaller starting variation
-    let longTermTrend = (seededRandom() - 0.5) * 0.008; // Much smaller yearly trend
-    let momentum = 0;
-
-    // Generate 12 months of data with more frequent intervals
-    for (let month = 0; month < 12; month++) {
-      for (let week = 0; week < 4; week++) {
-        // Very subtle seasonal effects
-        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.002;
-
-        // Subtle market cycles
-        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.001;
-
-        // Much more realistic randomization
-        const random1 = seededRandom();
-        const random2 = seededRandom();
-        const random3 = seededRandom();
-
-        // Subtle momentum over longer periods
-        momentum = momentum * 0.95 + (random1 - 0.5) * 0.1;
-
-        // Much smaller volatility for realistic movements
-        const baseVolatility = 0.003 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.002;
-        const volatilityCluster = Math.abs(random2 - 0.5) * 0.002;
-        const totalVolatility = baseVolatility + volatilityCluster;
-
-        // Trend can shift quarterly but much smaller
-        if (week === 0 && month % 3 === 0 && random3 > 0.8) {
-          longTermTrend = (seededRandom() - 0.5) * 0.008;
-        }
-
-        // Rare market events with smaller impact
-        let eventImpact = 0;
-        if (random3 > 0.99) {
-          eventImpact = (seededRandom() - 0.5) * 0.03; // Much smaller major event
-        } else if (random3 > 0.97) {
-          eventImpact = (seededRandom() - 0.5) * 0.015; // Smaller minor event
-        }
-
-        // Combine all factors with much smaller impact
-        const noise = (seededRandom() - 0.5) * 0.5;
-        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.1 + totalVolatility * noise + eventImpact;
-
-        price = price * (1 + change);
-
-        // Much more realistic bounds for yearly stock movement
-        price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.30, price));
-
-        const date = getEasternTime();
-        date.setMonth(date.getMonth() - (12 - month));
-        date.setDate(1 + week * 7);
-
-        // Ensure valid date
-        if (date.getDate() > 28) {
-          date.setDate(28);
-        }
-
-        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-
-        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-      }
-    }
-    return data;
-  }
-
   // NEW: Generate smooth, realistic stock charts
   function generateSmoothChart(currentPrice, periods, timeUnit, seedKey = '') {
     const data = [];
@@ -771,8 +694,6 @@ const ATLStockExchange = () => {
 
     return data;
   }
-
-  // New function to generate monthly data (30 days)
 
   // SIMPLE CHART DATA FUNCTION
   function getChartData(stockData, period) {
@@ -1184,9 +1105,7 @@ const ATLStockExchange = () => {
       low52w: low52w,
       dividend: dividend,
       qtrlyDiv: dividend / 4,
-      history: generatePriceHistory(parseFloat(newStockPrice), parseFloat(newStockPrice), newStockTicker || ''),
-      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice), newStockTicker || ''),
-      yearHistory: generateYearHistory(parseFloat(newStockPrice), newStockTicker || '')
+      history: []
     };
 
     const stocksRef = ref(database, 'stocks');
@@ -2315,21 +2234,21 @@ const ATLStockExchange = () => {
                     onClick={() => {
                       if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
                         const initialStocks = [
-                          { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
-                          { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
-                          { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
-                          { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
-                          { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
-                          { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
-                          { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
-                          { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
-                          { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
-                          { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
-                          { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
-                          { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
-                          { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
-                          { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
-                          { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
+                          { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: [] },
+                          { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: [] },
+                          { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: [] },
+                          { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: [] },
+                          { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: [] },
+                          { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: [] },
+                          { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: [] },
+                          { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: [] },
+                          { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: [] },
+                          { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: [] },
+                          { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: [] },
+                          { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: [] },
+                          { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: [] },
+                          { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: [] },
+                          { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: [] },
                         ];
                         const stocksRef = ref(database, 'stocks');
                         set(stocksRef, initialStocks);
@@ -3326,10 +3245,10 @@ const ATLStockExchange = () => {
                 </div>
 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)).length / 10))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
