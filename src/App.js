@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, PieChart, Download, Filter, Share2, Eye, EyeOff, Zap, Target, Bell, Settings,
-  RefreshCw, Users, Globe, Smartphone, Monitor, Tablet
+  BarChart3, PieChart, Download, Filter, Share2, Zap, Target, Bell, Settings,
+  Users, Globe
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart as RechartsPieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, Legend
+  PieChart as RechartsPieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
 
-// Add custom CSS animations
+// Atlanta Stock Exchange - Clean Build Version 2.0
+// All unused imports and variables have been removed
 const customStyles = `
   @keyframes slide-in-right {
     from { transform: translateX(100%); opacity: 0; }
@@ -74,13 +75,6 @@ if (typeof document !== 'undefined') {
 }
 
 // Advanced Constants - Professional Stock Exchange Settings
-const MARKET_HOURS = {
-  preMarket: 4,
-  open: 9,
-  close: 16,
-  afterHours: 20,
-  lunchBreak: { start: 12, end: 13 } // Optional lunch break
-};
 
 const TRADING_FEES = {
   commission: 0.005, // 0.5% commission
@@ -138,24 +132,7 @@ const formatNumber = (num) => {
 
 
 
-const isMarketOpen = () => {
-  const now = getEasternTime();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const day = now.getDay(); // 0 = Sunday, 6 = Saturday
-  const currentTime = hour + minute / 60;
-
-  // Market closed on weekends
-  if (day === 0 || day === 6) return false;
-
-  // Check for market holidays (simplified)
-  const holidays = ['2024-01-01', '2024-07-04', '2024-12-25']; // Add more as needed
-  const today = now.toISOString().split('T')[0];
-  if (holidays.includes(today)) return false;
-
-  // Regular trading hours
-  return currentTime >= MARKET_HOURS.open && currentTime <= MARKET_HOURS.close;
-};
+// Removed unused isMarketOpen function
 
 const getMarketStatus = () => {
   return 'OPEN'; // 24/7 trading
@@ -307,20 +284,8 @@ const ATLStockExchange = () => {
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(MARKET_SIMULATION.chartUpdateInterval);
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
-  const [connectionStatus, setConnectionStatus] = useState('connected');
-  const [performanceStats, setPerformanceStats] = useState({
-    updateCount: 0,
-    avgUpdateTime: 0,
-    lastUpdateTime: 0
-  });
-
   // Enhanced state management
   const [marketEvents, setMarketEvents] = useState([]);
-  const [systemHealth, setSystemHealth] = useState({
-    cpu: 'good',
-    memory: 'good',
-    network: 'good'
-  });
 
   // MASSIVE NEW FEATURES
 
@@ -670,8 +635,6 @@ const ATLStockExchange = () => {
     }
 
     const interval = setInterval(() => {
-      const updateStartTime = performance.now();
-
       try {
         const now = getEasternTime();
         const dayStartTime = getEasternTime();
@@ -822,24 +785,10 @@ const ATLStockExchange = () => {
         set(stocksRef, updatedStocks);
         setStocks(updatedStocks); // Update local state immediately
 
-        // Performance monitoring
-        const updateEndTime = performance.now();
-        const updateDuration = updateEndTime - updateStartTime;
-
-        setPerformanceStats(prev => ({
-          updateCount: prev.updateCount + 1,
-          avgUpdateTime: (prev.avgUpdateTime * prev.updateCount + updateDuration) / (prev.updateCount + 1),
-          lastUpdateTime: updateDuration
-        }));
-
-        // Health check
-        if (updateDuration > 100) { // If update takes more than 100ms
-          console.warn(`Slow update detected: ${updateDuration.toFixed(2)}ms`);
-        }
+        // Performance monitoring removed to eliminate unused variables
 
       } catch (error) {
         console.error('Price update error:', error);
-        setConnectionStatus('error');
         setNotifications(prev => [...prev, '⚠️ Price update failed - retrying...']);
       }
     }, updateSpeed); // Use configurable update speed
@@ -1809,16 +1758,7 @@ const ATLStockExchange = () => {
     return [parseFloat(paddedMin.toFixed(2)), parseFloat(paddedMax.toFixed(2))];
   };
 
-  const getYAxisTicks = (domain) => {
-    const [min, max] = domain;
-    const step = (max - min) / 3;
-    return [
-      parseFloat(min.toFixed(2)),
-      parseFloat((min + step).toFixed(2)),
-      parseFloat((min + step * 2).toFixed(2)),
-      parseFloat(max.toFixed(2))
-    ];
-  };
+  // Removed unused getYAxisTicks function
 
   // Simple theme system - just light/dark
   const theme = {
