@@ -881,168 +881,111 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  // Enhanced function to generate minute-by-minute data for short timeframes
-  function generateMinuteHistory(basePrice, minutes, seedKey = '') {
+  // NEW: Generate smooth, realistic stock charts
+  function generateSmoothChart(currentPrice, periods, timeUnit, seedKey = '') {
     const data = [];
-    let price = basePrice;
-    const now = getEasternTime();
-    const startTime = new Date(now.getTime() - minutes * 60 * 1000);
 
-    // Use seeded randomization for consistency
-    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 1000);
-    let seedCounter = 0;
+    // Create a seed for consistent data
+    const seed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(currentPrice * 1000);
+    let rng = seed;
     const seededRandom = () => {
-      seedCounter++;
-      const x = Math.sin(baseSeed + seedCounter + minutes) * 10000;
-      return x - Math.floor(x);
+      rng = (rng * 1664525 + 1013904223) % 4294967296;
+      return rng / 4294967296;
     };
 
-    let momentum = 0;
-    let microTrend = (seededRandom() - 0.5) * 0.0002; // Much smaller micro trend
+    // Calculate realistic price range based on timeframe
+    let maxChange = 0.02; // 2% default
+    if (timeUnit === 'minutes') maxChange = 0.005; // 0.5% for minutes
+    if (timeUnit === 'hours') maxChange = 0.01; // 1% for hours  
+    if (timeUnit === 'days') maxChange = 0.03; // 3% for days
+    if (timeUnit === 'months') maxChange = 0.15; // 15% for months
 
-    for (let i = 0; i <= minutes; i += 1) {
-      // Very subtle short-term movement
-      const random1 = seededRandom();
-      const random2 = seededRandom();
+    // Generate smooth price progression
+    const startPrice = currentPrice * (1 - maxChange / 2 + seededRandom() * maxChange / 2);
+    let price = startPrice;
 
-      // Very subtle momentum for smoother movement
-      momentum = momentum * 0.8 + (random1 - 0.5) * 0.1;
+    for (let i = 0; i < periods; i++) {
+      // Smooth progression toward current price
+      const progress = i / (periods - 1);
+      const targetPrice = startPrice + (currentPrice - startPrice) * progress;
 
-      // Much smaller micro volatility
-      const baseVolatility = 0.0003;
-      const volatilityCluster = Math.abs(random2 - 0.5) * 0.0002;
-      const totalVolatility = baseVolatility + volatilityCluster;
+      // Add small random variation
+      const variation = (seededRandom() - 0.5) * maxChange * 0.1;
+      price = targetPrice * (1 + variation);
 
-      // Very rare micro trend shifts
-      if (seededRandom() > 0.99) {
-        microTrend = (seededRandom() - 0.5) * 0.0002;
+      // Ensure price stays reasonable
+      price = Math.max(currentPrice * 0.8, Math.min(currentPrice * 1.2, price));
+
+      // Generate time label based on unit
+      let timeLabel = '';
+      const now = new Date();
+
+      if (timeUnit === 'minutes') {
+        const time = new Date(now.getTime() - (periods - i - 1) * 60 * 1000);
+        const hour = time.getHours();
+        const min = time.getMinutes().toString().padStart(2, '0');
+        let displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        let ampm = hour < 12 ? 'AM' : 'PM';
+        timeLabel = `${displayHour}:${min} ${ampm}`;
+      } else if (timeUnit === 'hours') {
+        const time = new Date(now.getTime() - (periods - i - 1) * 60 * 60 * 1000);
+        const hour = time.getHours();
+        let displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        let ampm = hour < 12 ? 'AM' : 'PM';
+        timeLabel = `${displayHour}:00 ${ampm}`;
+      } else if (timeUnit === 'days') {
+        const time = new Date(now.getTime() - (periods - i - 1) * 24 * 60 * 60 * 1000);
+        timeLabel = `${(time.getMonth() + 1).toString().padStart(2, '0')}/${time.getDate().toString().padStart(2, '0')}`;
+      } else if (timeUnit === 'months') {
+        const time = new Date(now);
+        time.setMonth(time.getMonth() - (periods - i - 1));
+        timeLabel = `${time.getMonth() + 1}/${time.getFullYear().toString().slice(-2)}`;
       }
 
-      const noise = (seededRandom() - 0.5) * 0.3;
-      const change = microTrend + momentum * 0.1 + totalVolatility * noise;
-
-      price = price * (1 + change);
-
-      // Very tight bounds for realistic short timeframes
-      price = Math.max(basePrice * 0.998, Math.min(basePrice * 1.002, price));
-
-      const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
-      const hour = pointTime.getHours();
-      const min = pointTime.getMinutes().toString().padStart(2, '0');
-      let displayHour = hour;
-      let ampm = 'AM';
-
-      if (hour === 0) {
-        displayHour = 12;
-        ampm = 'AM';
-      } else if (hour < 12) {
-        displayHour = hour;
-        ampm = 'AM';
-      } else if (hour === 12) {
-        displayHour = 12;
-        ampm = 'PM';
-      } else {
-        displayHour = hour - 12;
-        ampm = 'PM';
-      }
-
-      data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
+      data.push({
+        time: timeLabel,
+        price: parseFloat(price.toFixed(2)),
+        volume: Math.floor(seededRandom() * 1000000 + 500000)
+      });
     }
+
     return data;
   }
 
   // New function to generate monthly data (30 days)
-  function generateMonthHistory(basePrice, seedKey = '') {
-    const data = [];
-
-    // Use seeded randomization for consistency
-    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    let seedCounter = 0;
-    const seededRandom = () => {
-      seedCounter++;
-      const x = Math.sin(baseSeed + seedCounter) * 10000;
-      return x - Math.floor(x);
-    };
-
-    let price = basePrice * (0.98 + seededRandom() * 0.04); // Much smaller starting variation
-    let trend = (seededRandom() - 0.5) * 0.005; // Much smaller monthly trend
-    let momentum = 0;
-
-    // Generate 30 days of data with daily intervals
-    for (let day = 0; day < 30; day++) {
-      // Much more realistic randomization
-      const random1 = seededRandom();
-      const random2 = seededRandom();
-      const random3 = seededRandom();
-
-      // Very subtle weekly cycles
-      const weeklyEffect = Math.sin((day / 7) * Math.PI * 2) * 0.001;
-
-      // Subtle momentum carries forward
-      momentum = momentum * 0.9 + (random1 - 0.5) * 0.1;
-
-      // Much smaller volatility for realistic daily movements
-      const baseVolatility = 0.002;
-      const volatilityCluster = Math.abs(random2 - 0.5) * 0.001;
-      const totalVolatility = baseVolatility + volatilityCluster;
-
-      // Trend can shift weekly but much smaller
-      if (day % 7 === 0 && random3 > 0.9) {
-        trend = (seededRandom() - 0.5) * 0.005;
-      }
-
-      // Combine factors with much smaller impact
-      const noise = (seededRandom() - 0.5) * 0.5;
-      const change = trend + weeklyEffect + momentum * 0.1 + totalVolatility * noise;
-
-      price = price * (1 + change);
-
-      // Much more realistic bounds for monthly stock movement
-      price = Math.max(basePrice * 0.90, Math.min(basePrice * 1.10, price));
-
-      const date = getEasternTime();
-      date.setDate(date.getDate() - (30 - day));
-      const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-
-      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-    }
-    return data;
-  }
 
   // Function to filter data based on timeframe
   function getFilteredChartData(stockData, period) {
     let data = [];
+    const currentPrice = stockData.price;
 
     switch (period) {
       case '10m':
-        data = generateMinuteHistory(stockData.price, 10, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 10, 'minutes', stockData.ticker);
         break;
       case '30m':
-        data = generateMinuteHistory(stockData.price, 30, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 30, 'minutes', stockData.ticker);
         break;
       case '1h':
-        data = generateMinuteHistory(stockData.price, 60, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 60, 'minutes', stockData.ticker);
         break;
       case '1d':
-        // Use live history if available, otherwise generate synthetic data
+        // Use live history if available, otherwise generate smooth daily data
         data = stockData.history && stockData.history.length > 0
           ? stockData.history
-          : generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
+          : generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
         break;
       case '1w':
-        // Generate fresh weekly data with proper seeding
-        data = generateExtendedHistory(stockData.price, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 7, 'days', stockData.ticker);
         break;
       case '1m':
-        // Generate monthly data (30 days) with daily intervals
-        data = generateMonthHistory(stockData.price, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 30, 'days', stockData.ticker);
         break;
       case '1y':
-        // Generate yearly data with proper seeding
-        data = generateYearHistory(stockData.price, stockData.ticker);
+        data = generateSmoothChart(currentPrice, 12, 'months', stockData.ticker);
         break;
       default:
-        data = stockData.history || [];
+        data = generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
     }
 
     return data;
@@ -1697,11 +1640,20 @@ const ATLStockExchange = () => {
 
   const getChartDomain = (data) => {
     if (!data || data.length === 0) return [0, 100];
-    const prices = data.map(d => d.price);
+    const prices = data.map(d => d.price).filter(p => p && !isNaN(p));
+    if (prices.length === 0) return [0, 100];
+
     const min = Math.min(...prices);
     const max = Math.max(...prices);
-    const padding = (max - min) * 0.15;
-    const paddedMin = min - padding;
+
+    // If min and max are the same (flat line), add small padding
+    if (min === max) {
+      const padding = min * 0.01; // 1% padding
+      return [parseFloat((min - padding).toFixed(2)), parseFloat((max + padding).toFixed(2))];
+    }
+
+    const padding = (max - min) * 0.05; // Reduced padding for better view
+    const paddedMin = Math.max(0, min - padding);
     const paddedMax = max + padding;
     return [parseFloat(paddedMin.toFixed(2)), parseFloat(paddedMax.toFixed(2))];
   };
