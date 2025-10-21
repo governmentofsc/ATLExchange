@@ -77,9 +77,9 @@ if (typeof document !== 'undefined') {
 // Advanced Constants - Professional Stock Exchange Settings
 
 const TRADING_FEES = {
-  commission: 0.005, // 0.5% commission
-  spread: 0.001, // 0.1% bid-ask spread
-  minimumFee: 1.00 // Minimum $1 fee
+  commission: 0.0, // No commission fees
+  spread: 0.0, // No bid-ask spread
+  minimumFee: 0.0 // No minimum fee
 };
 
 
@@ -111,6 +111,12 @@ const UI_CONSTANTS = {
 // Utility functions
 const getEasternTime = (date = new Date()) => {
   return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
+};
+
+// Mobile detection
+const isMobile = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (window.innerWidth <= UI_CONSTANTS.mobileBreakpoint);
 };
 
 const formatCurrency = (amount) => {
@@ -350,6 +356,7 @@ const ATLStockExchange = () => {
   const [stocks, setStocks] = useState([]);
   const [users, setUsers] = useState({});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [chartPeriod, setChartPeriod] = useState('1d');
   const [adminTab, setAdminTab] = useState('create');
   const [newStockName, setNewStockName] = useState('');
@@ -546,6 +553,18 @@ const ATLStockExchange = () => {
 
 
 
+  // Mobile detection and optimization
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileDevice(isMobile());
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Persist dark mode to localStorage
   useEffect(() => {
     localStorage.setItem('darkMode', darkMode.toString());
@@ -698,33 +717,51 @@ const ATLStockExchange = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stocks]);
 
-  // Simplified market controller - just make this tab the controller
+  // Enhanced market controller with better synchronization
   useEffect(() => {
     const controllerRef = ref(database, 'marketController');
     const sessionId = Date.now() + Math.random();
 
-    // Become the market controller immediately
+    // Listen for controller changes first
+    const unsubscribe = onValue(controllerRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const timeSinceLastUpdate = Date.now() - data.timestamp;
+        // If controller hasn't updated in 10 seconds, take control
+        if (timeSinceLastUpdate > 10000 || data.sessionId === sessionId) {
+          setIsMarketController(true);
+        } else {
+          setIsMarketController(false);
+        }
+      } else {
+        // No controller exists, become the controller
+        setIsMarketController(true);
+      }
+    });
+
+    // Try to become controller
     set(controllerRef, {
       sessionId,
       timestamp: Date.now(),
       user: user || 'anonymous'
     });
 
-    setIsMarketController(true);
-
     // Heartbeat to maintain control
     const heartbeat = setInterval(() => {
-      update(controllerRef, {
-        sessionId,
-        timestamp: Date.now(),
-        user: user || 'anonymous'
-      });
-    }, 5000);
+      if (isMarketController) {
+        update(controllerRef, {
+          sessionId,
+          timestamp: Date.now(),
+          user: user || 'anonymous'
+        });
+      }
+    }, 3000); // More frequent heartbeat
 
     return () => {
       clearInterval(heartbeat);
+      unsubscribe();
     };
-  }, [user]);
+  }, [user, isMarketController]);
 
   useEffect(() => {
     if (stocks.length === 0) return;
@@ -753,13 +790,21 @@ const ATLStockExchange = () => {
             stock = { ...stock, manualTrade: false };
           }
 
-          // Enhanced realistic price movement algorithm
+          // Enhanced realistic price movement algorithm with smooth start
           const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
           let seed = timeSeed % 1000000;
           const simpleRandom = () => {
             seed = (seed * 1664525 + 1013904223) % 4294967296;
             return seed / 4294967296;
           };
+
+          // Smooth market start - reduce volatility for first few minutes
+          const marketStartTime = stock.marketStartTime || Date.now();
+          if (!stock.marketStartTime) {
+            stock.marketStartTime = Date.now();
+          }
+          const timeSinceStart = Date.now() - marketStartTime;
+          const startSmoothingFactor = Math.min(1, timeSinceStart / (5 * 60 * 1000)); // 5 minutes to full volatility
 
           // More sophisticated price movements
           const timeOfDay = now.getHours() + now.getMinutes() / 60;
@@ -769,8 +814,9 @@ const ATLStockExchange = () => {
           const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ?
             (dayOfWeek >= 1 && dayOfWeek <= 5 ? MARKET_SIMULATION.volatilityMultiplier : 0.8) : 0.4;
 
-          // Base volatility with stock-specific characteristics
-          const stockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
+          // Base volatility with stock-specific characteristics and smooth start
+          const baseStockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
+          const stockVolatility = baseStockVolatility * startSmoothingFactor; // Apply smooth start
           const sectorVolatility = stock.marketCap > 1000000000000 ? 0.8 : 1.2; // Large caps less volatile
 
           // PROFESSIONAL REAL-TIME PRICE SIMULATION - Institutional-Grade Market Dynamics
@@ -2249,7 +2295,7 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={UI_CONSTANTS.chartHeight} key={`${stockData.ticker}-${chartKey}`}>
+                <ResponsiveContainer width="100%" height={isMobileDevice ? 250 : UI_CONSTANTS.chartHeight} key={`${stockData.ticker}-${chartKey}`}>
                   <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
                     <XAxis
@@ -2482,7 +2528,7 @@ const ATLStockExchange = () => {
                 <div className="flex justify-between">
                   <span className="text-sm">Price Change</span>
                   <span className={`font-bold ${percentChangeColor}`}>
-                    ${priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}
+                    {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -4444,7 +4490,7 @@ const ATLStockExchange = () => {
         </div>
 
         {/* Enhanced Stock Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className={`grid gap-4 ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'} ${isMobileDevice ? 'gap-3' : 'gap-6'}`}>
           {filteredStocks.map(stock => {
             // Calculate percentage from first price of the day (12:00 AM)
             const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
@@ -4456,7 +4502,7 @@ const ATLStockExchange = () => {
             return (
               <div
                 key={`${stock.ticker}-${stock.price}`}
-                className={`group relative p-6 rounded-2xl border-2 ${cardClass} cursor-pointer hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 ${percentChange >= 0 ? 'hover:border-green-400 hover:shadow-green-100' : 'hover:border-red-400 hover:shadow-red-100'
+                className={`group relative ${isMobileDevice ? 'p-4' : 'p-6'} rounded-2xl border-2 ${cardClass} cursor-pointer hover:shadow-2xl ${isMobileDevice ? 'hover:scale-[1.01]' : 'hover:scale-[1.02]'} transition-all duration-300 ${percentChange >= 0 ? 'hover:border-green-400 hover:shadow-green-100' : 'hover:border-red-400 hover:shadow-red-100'
                   } ${userHolding > 0 ? 'ring-2 ring-blue-400 ring-opacity-50' : ''}`}
                 onClick={() => setSelectedStock(stock)}
               >
@@ -4498,7 +4544,7 @@ const ATLStockExchange = () => {
 
                 {/* Enhanced Mini Chart */}
                 <div className="mb-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-3">
-                  <ResponsiveContainer width="100%" height={180} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
+                  <ResponsiveContainer width="100%" height={isMobileDevice ? 120 : 180} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
                     <AreaChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
                       <defs>
                         <linearGradient id={`gradient-${stock.ticker}`} x1="0" y1="0" x2="0" y2="1">
