@@ -773,285 +773,75 @@ const ATLStockExchange = () => {
 
     const interval = setInterval(() => {
       try {
-        const now = getEasternTime();
         const dayStartTime = getEasternTime();
         dayStartTime.setHours(0, 0, 0, 0);
 
-        const updatedStocks = stocks.map(stock => {
-          // Skip live updates for stocks that were recently traded (within 60 seconds)
-          const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
-          if (timeSinceLastTrade < 60000) {
-            return stock; // Don't update price if recently traded
-          }
+        const updatedStocks = stocks.map((stock, index) => {
+          // SIMPLE, BULLETPROOF PRICE UPDATE - IDENTICAL FOR ALL STOCKS
 
-          // Clear manual trade flag after protection period
-          if (stock.manualTrade && timeSinceLastTrade >= 60000) {
-            stock = { ...stock, manualTrade: false };
-          }
+          // Create unique, stable seed for each stock
+          const stockSeed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const timeSeed = Math.floor(Date.now() / 1000) + stockSeed + (index * 1000); // Use seconds, not milliseconds
+          let seed = (timeSeed * 9301 + 49297) % 233280; // Different algorithm to ensure uniqueness
 
-          // Enhanced realistic price movement algorithm with smooth start
-          const tickerSeed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const timeSeed = Date.now() + tickerSeed;
-          let seed = timeSeed % 1000000;
-          const simpleRandom = () => {
-            seed = (seed * 1664525 + 1013904223) % 4294967296;
-            return seed / 4294967296;
+          const random = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
           };
 
-          // Smooth market start - reduce volatility for first few minutes
-          const marketStartTime = stock.marketStartTime || Date.now();
-          if (!stock.marketStartTime) {
-            stock.marketStartTime = Date.now();
-          }
-          const timeSinceStart = Date.now() - marketStartTime;
-          const startSmoothingFactor = Math.min(1, timeSinceStart / (5 * 60 * 1000)); // 5 minutes to full volatility
+          // Simple, consistent price change for ALL stocks
+          const baseVolatility = 0.003; // 0.3% base volatility
+          const randomWalk = (random() - 0.5) * baseVolatility;
 
-          // More sophisticated price movements
-          const timeOfDay = now.getHours() + now.getMinutes() / 60;
-          const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+          // Simple momentum that works the same for all stocks
+          const currentMomentum = stock.lastMomentum || 0;
+          const newMomentum = currentMomentum * 0.8 + randomWalk * 0.2;
 
-          // Market activity varies by time and day
-          const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ?
-            (dayOfWeek >= 1 && dayOfWeek <= 5 ? MARKET_SIMULATION.volatilityMultiplier : 0.8) : 0.4;
+          // Calculate new price - SAME FORMULA FOR ALL STOCKS
+          const priceChange = randomWalk + (newMomentum * 0.3);
+          let newPrice = stock.price * (1 + priceChange);
 
-          // Base volatility with stock-specific characteristics and smooth start
-          const baseStockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
-          const smoothingFactor = Math.max(0.1, startSmoothingFactor); // Ensure minimum 10% volatility
-          const stockVolatility = baseStockVolatility * smoothingFactor; // Apply smooth start
-          const sectorVolatility = stock.marketCap > 1000000000000 ? 0.8 : 1.2; // Large caps less volatile
-
-          // PROFESSIONAL REAL-TIME PRICE SIMULATION - Institutional-Grade Market Dynamics
-          const priceHistory = stock.history || [];
-
-          // Initialize persistent market state for each stock
-          if (!stock.marketState) {
-            stock.marketState = {
-              orderBookImbalance: 0,
-              institutionalFlow: 0,
-              volatilityCluster: 1,
-              microTrend: 0,
-              lastVolatility: stockVolatility,
-              marketMakingSpread: 0.001,
-              liquidityDepth: 1,
-              newsImpact: 0,
-              algorithmicPressure: 0
-            };
+          // Ensure price is always valid
+          if (!isFinite(newPrice) || newPrice <= 0 || isNaN(newPrice)) {
+            newPrice = stock.price * (1 + (random() - 0.5) * 0.001); // Tiny fallback
           }
 
-          // Validate and sanitize market state - ensure all values are valid
-          const ms = stock.marketState;
-          ms.orderBookImbalance = isFinite(ms.orderBookImbalance) ? Math.max(-1, Math.min(1, ms.orderBookImbalance)) : 0;
-          ms.institutionalFlow = isFinite(ms.institutionalFlow) ? Math.max(-2, Math.min(2, ms.institutionalFlow)) : 0;
-          ms.volatilityCluster = isFinite(ms.volatilityCluster) ? Math.max(0.1, Math.min(4, ms.volatilityCluster)) : 1;
-          ms.microTrend = isFinite(ms.microTrend) ? Math.max(-0.01, Math.min(0.01, ms.microTrend)) : 0;
-          ms.liquidityDepth = isFinite(ms.liquidityDepth) ? Math.max(0.1, Math.min(2, ms.liquidityDepth)) : 1;
-          ms.newsImpact = isFinite(ms.newsImpact) ? Math.max(-0.05, Math.min(0.05, ms.newsImpact)) : 0;
-          ms.algorithmicPressure = isFinite(ms.algorithmicPressure) ? Math.max(-0.01, Math.min(0.01, ms.algorithmicPressure)) : 0;
+          // Final price with safety bounds
+          const finalPrice = Math.max(0.01, parseFloat(newPrice.toFixed(2)));
 
-          // Ensure market making spread is valid
-          ms.marketMakingSpread = isFinite(ms.marketMakingSpread) ? Math.max(0.0001, Math.min(0.01, ms.marketMakingSpread)) : 0.001;
-
-          // 1. Market Microstructure - Order Book Dynamics
-          const flowChange = (simpleRandom() - 0.5) * 0.4;
-          ms.orderBookImbalance = ms.orderBookImbalance * 0.97 + flowChange * 0.03;
-          ms.orderBookImbalance = Math.max(-1, Math.min(1, ms.orderBookImbalance));
-
-          // 2. Institutional Trading Patterns
-          if (simpleRandom() > 0.995) { // 0.5% chance of institutional block trade
-            ms.institutionalFlow = (simpleRandom() - 0.5) * 3;
-          }
-          ms.institutionalFlow *= 0.94; // Institutional impact decays
-
-          // 3. Advanced Volatility Clustering (GARCH-like)
-          const recentReturn = priceHistory.length > 0 ?
-            Math.abs(Math.log(stock.price / priceHistory[priceHistory.length - 1].price)) : stockVolatility;
-
-          // Validate recentReturn to prevent invalid calculations
-          const validRecentReturn = isFinite(recentReturn) && recentReturn > 0 ? recentReturn : stockVolatility;
-
-          ms.volatilityCluster = 0.05 + 0.90 * ms.volatilityCluster + 0.05 * (validRecentReturn / stockVolatility);
-          ms.volatilityCluster = Math.min(4, Math.max(0.1, ms.volatilityCluster)); // Ensure valid range
-
-          // 4. Multi-timeframe Momentum
-          let shortMomentum = 0, mediumMomentum = 0, longMomentum = 0;
-          if (priceHistory.length >= 5) {
-            const recent = priceHistory.slice(-5);
-            shortMomentum = (recent[4].price - recent[3].price) / recent[3].price;
-            mediumMomentum = (recent[4].price - recent[2].price) / recent[2].price / 2;
-            longMomentum = (recent[4].price - recent[0].price) / recent[0].price / 4;
-          }
-          ms.microTrend = ms.microTrend * 0.85 + (shortMomentum * 0.5 + mediumMomentum * 0.3 + longMomentum * 0.2) * 0.15;
-
-          // 5. Market Making and Liquidity Effects
-          const spreadPressure = ms.orderBookImbalance * ms.marketMakingSpread;
-          ms.liquidityDepth = 0.5 + 0.5 * Math.exp(-Math.abs(ms.orderBookImbalance) * 2);
-
-          // 6. News and Event Impact Simulation
-          if (simpleRandom() > 0.998) { // 0.2% chance of news event
-            ms.newsImpact = (simpleRandom() - 0.5) * 0.02;
-          }
-          ms.newsImpact *= 0.85; // News impact decays quickly
-
-          // 7. Algorithmic Trading Pressure
-          const priceDeviation = (stock.price - stock.open) / stock.open;
-          ms.algorithmicPressure = Math.tanh(priceDeviation * 10) * 0.0005; // Mean reversion algos
-
-          // 8. Time-of-day Effects
-          const hour = now.getHours();
-          const minute = now.getMinutes();
-          const sessionTime = hour + minute / 60;
-
-          let sessionMultiplier = 1;
-          if (sessionTime < 9.5 || sessionTime > 16) { // Pre/after market
-            sessionMultiplier = 0.3;
-          } else if (sessionTime < 10 || sessionTime > 15.5) { // Opening/closing hour
-            sessionMultiplier = 1.8;
-          } else if (sessionTime >= 12 && sessionTime <= 14) { // Lunch lull
-            sessionMultiplier = 0.7;
-          }
-
-          // 9. Advanced Random Walk with Fat Tails (with validation)
-          const normalRandom = () => {
-            const u1 = Math.max(0.0001, Math.min(0.9999, simpleRandom())); // Prevent edge cases
-            const u2 = Math.max(0.0001, Math.min(0.9999, simpleRandom()));
-            const result = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-            return isFinite(result) ? result : 0; // Fallback to 0 if invalid
-          };
-
-          // Student's t-distribution for realistic fat tails (with validation)
-          const fatTailRandom = () => {
-            const normal = normalRandom();
-            const u3 = Math.max(0.0001, Math.min(0.9999, simpleRandom()));
-            const chi2 = -2 * Math.log(u3);
-            const denominator = Math.sqrt(chi2 / 4);
-
-            if (!isFinite(denominator) || denominator === 0) {
-              return normal; // Fallback to normal distribution
-            }
-
-            const result = normal / denominator;
-            return isFinite(result) ? Math.max(-5, Math.min(5, result)) : 0; // Cap extreme values
-          };
-
-          // 10. Combine All Market Forces
-          const baseVolatility = stockVolatility * sectorVolatility;
-          const adjustedVolatility = baseVolatility * ms.volatilityCluster * sessionMultiplier / ms.liquidityDepth;
-
-          let priceChange =
-            fatTailRandom() * adjustedVolatility * 0.3 + // Random walk with fat tails
-            ms.orderBookImbalance * 0.0002 + // Order flow imbalance
-            ms.institutionalFlow * 0.0005 + // Institutional trading
-            ms.microTrend * 0.4 + // Multi-timeframe momentum
-            spreadPressure + // Market making effects
-            ms.newsImpact + // News impact
-            ms.algorithmicPressure + // Algorithmic pressure
-            (simpleRandom() - 0.5) * adjustedVolatility * 0.1; // Additional microstructure noise
-
-          // Validate price change
-          if (!isFinite(priceChange) || isNaN(priceChange)) {
-            priceChange = 0; // No change if invalid
-          }
-
-          // 11. Circuit Breakers and Realistic Constraints
-          const maxSingleMove = baseVolatility * 8; // 8x normal volatility max
-          const constrainedChange = Math.max(-maxSingleMove, Math.min(maxSingleMove, priceChange));
-
-          // 12. Daily Volatility Limits
-          const currentDailyChange = Math.abs((stock.price - stock.open) / stock.open);
-          const dailyVolatilityLimit = stockVolatility * 15; // 15x daily volatility limit
-          const dailyMultiplier = currentDailyChange > dailyVolatilityLimit ? 0.1 : 1;
-
-          let newPrice2 = stock.price * (1 + constrainedChange * dailyMultiplier);
-
-          // Comprehensive validation to prevent any invalid values
-          if (!isFinite(newPrice2) || newPrice2 <= 0 || isNaN(newPrice2)) {
-            newPrice2 = stock.price; // Fallback to current price
-          }
-
-          // Final safety bounds and update market state
-          const finalPrice = Math.max(0.01, parseFloat(newPrice2.toFixed(2)));
-
-          // Validate finalPrice one more time - be more lenient
-          if (!isFinite(finalPrice) || finalPrice <= 0 || isNaN(finalPrice)) {
-            // Use a small random change instead of no change
-            const fallbackChange = (Math.random() - 0.5) * 0.001; // ±0.1% change
-            const fallbackPrice = stock.price * (1 + fallbackChange);
-            const validFallbackPrice = Math.max(0.01, parseFloat(fallbackPrice.toFixed(2)));
-
-            return {
-              ...stock,
-              price: validFallbackPrice,
-              high: Math.max(stock.high, validFallbackPrice),
-              low: Math.min(stock.low, validFallbackPrice),
-              lastUpdate: Date.now()
-            };
-          }
-
-          stock.marketState = ms;
-
+          // Update high/low
           const newHigh = Math.max(stock.high, finalPrice);
           const newLow = Math.min(stock.low, finalPrice);
 
-          // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
-          const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
+          // Simple history update - SAME FOR ALL STOCKS
           let newHistory = [...(stock.history || [])];
-          let newOpen = stock.open;
 
-          // Clear bad data if history has too many points (old system)
-          if (newHistory.length > 300) {
-            newHistory = [];
-          }
-
-          if (isNewDay || newHistory.length === 0) {
-            // Generate fresh chart for new day AND reset open price
+          if (newHistory.length === 0) {
+            // Create initial history if missing
             newHistory = generateDailyChart(finalPrice, stock.ticker);
-            newOpen = stock.price; // Set today's opening price to current price
-          } else {
-            // Only add new point if we're exactly at a 5-minute boundary
-            const currentMinutes = now.getMinutes();
-            const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
-
-            const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
-            const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
-
-            if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
-              // Add new 5-minute point ONLY at exact 5-minute boundaries
-              const totalMinutes = (newHistory.length) * 5;
-              const hours = Math.floor(totalMinutes / 60);
-              const minutes = totalMinutes % 60;
-              let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-              let ampm = hours < 12 ? 'AM' : 'PM';
-              const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-
-              newHistory.push({
-                time: timeLabel,
-                price: finalPrice,
-                volume: Math.floor(Math.random() * 1000000 + 500000),
-                isLive: true
-              });
-            } else if (newHistory.length > 0) {
-              // ALWAYS update the last point with current live price (every 5 seconds)
-              const lastIndex = newHistory.length - 1;
-              newHistory[lastIndex] = {
-                ...newHistory[lastIndex],
-                price: finalPrice,
-                isLive: true
-              };
-            }
+          } else if (newHistory.length > 0) {
+            // Always update the last point with current price
+            const lastIndex = newHistory.length - 1;
+            newHistory[lastIndex] = {
+              ...newHistory[lastIndex],
+              price: finalPrice,
+              isLive: true
+            };
           }
 
+          // Update market cap
           const sharesOutstanding = stock.marketCap / stock.price;
           const newMarketCap = Math.max(50000000000, sharesOutstanding * finalPrice);
 
+          // Return updated stock - SAME STRUCTURE FOR ALL
           return {
             ...stock,
             price: finalPrice,
-            open: newOpen,
             high: newHigh,
             low: newLow,
             history: newHistory,
             marketCap: newMarketCap,
-            lastMomentum: ms.microTrend,
+            lastMomentum: newMomentum,
             lastUpdate: Date.now()
           };
         });
