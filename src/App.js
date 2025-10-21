@@ -16,7 +16,11 @@ const MARKET_HOURS = {
   lunchBreak: { start: 12, end: 13 } // Optional lunch break
 };
 
-
+const TRADING_FEES = {
+  commission: 0.005, // 0.5% commission
+  spread: 0.001, // 0.1% bid-ask spread
+  minimumFee: 1.00 // Minimum $1 fee
+};
 
 
 
@@ -67,6 +71,9 @@ const isMarketOpen = () => {
   return currentTime >= MARKET_HOURS.open && currentTime <= MARKET_HOURS.close;
 };
 
+const getMarketStatus = () => {
+  return 'OPEN'; // 24/7 trading
+};
 
 
 
@@ -82,74 +89,90 @@ const isMarketOpen = () => {
 
 
 
-
-// BRAND NEW CLEAN CHART SYSTEM
-function generateDailyChart(currentPrice, ticker, existingHistory = []) {
+// Enhanced price history generation with better performance and caching
+function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   const now = getEasternTime();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Create seed for consistent data
-  const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  let rng = seed + now.getDate();
-  const seededRandom = () => {
-    rng = (rng * 1664525 + 1013904223) % 4294967296;
-    return rng / 4294967296;
+  // Normalize parameters
+  let currentPrice = openPrice;
+  let seedKey = '';
+
+  if (typeof currentOrSeed === 'number') {
+    currentPrice = currentOrSeed;
+    seedKey = typeof maybeSeedKey === 'string' ? maybeSeedKey : '';
+  } else if (typeof currentOrSeed === 'string') {
+    seedKey = currentOrSeed;
+  }
+
+  // Validate inputs
+  if (!openPrice || openPrice <= 0) return [];
+  if (!currentPrice || currentPrice <= 0) currentPrice = openPrice;
+
+  // Generate data points from 12:00 AM to current time only
+  const data = [];
+
+  // Start at midnight (0 minutes) and go to current time
+  const intervalMinutes = 10; // Data point every 10 minutes
+  const totalPoints = Math.floor(currentMinutes / intervalMinutes) + 1;
+
+  // Seeded random for consistent data
+  const hashString = (str) => {
+    if (!str) return Math.floor(openPrice * 1000);
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h;
   };
 
-  // Generate data from 12:00 AM to current time in 5-minute intervals (288 points/day)
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const targetPoints = Math.floor(currentMinutes / 5) + 1; // Every 5 minutes
+  let seed = hashString(seedKey + now.toDateString());
+  const seededRandom = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
 
-  // Use existing history if available, otherwise start fresh
-  let data = [...existingHistory];
+  // Generate price progression from open to current
+  for (let i = 0; i < totalPoints; i++) {
+    const minutes = i * intervalMinutes;
+    const progress = i / (totalPoints - 1);
 
-  // Fill in missing points up to current time
-  while (data.length < targetPoints) {
-    const pointIndex = data.length;
-    const totalMinutes = pointIndex * 5; // Every 5 minutes
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
+    // Format time as 12-hour format
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    let displayHour = hours;
+    let ampm = 'AM';
 
-    // Format time
-    let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-    let ampm = hours < 12 ? 'AM' : 'PM';
-    const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-
-    // More realistic price progression
-    let price;
-    if (pointIndex === 0) {
-      // Start of day - slight variation from current price
-      price = currentPrice * (0.998 + seededRandom() * 0.004); // ±0.2% from current
+    if (hours === 0) {
+      displayHour = 12;
+    } else if (hours < 12) {
+      displayHour = hours;
+    } else if (hours === 12) {
+      displayHour = 12;
+      ampm = 'PM';
     } else {
-      // Build on previous price with realistic movement
-      const prevPrice = data[pointIndex - 1].price;
-
-      // Market activity varies by time of day
-      const hourOfDay = hours;
-      const isMarketHours = hourOfDay >= 9 && hourOfDay <= 16;
-      const activityMultiplier = isMarketHours ? 1.5 : 0.3;
-
-      // Realistic movements for 5-minute intervals
-      const baseVolatility = 0.0002 * activityMultiplier; // Appropriate for 5-minute intervals
-      const randomWalk = (seededRandom() - 0.5) * baseVolatility;
-
-      // Mean reversion for smooth progression
-      const meanReversion = (currentPrice - prevPrice) * 0.0005;
-
-      // Add momentum for smoother trends
-      const momentum = (data.length > 1 && pointIndex > 1) ? (prevPrice - data[pointIndex - 2].price) * 0.2 : 0;
-
-      price = prevPrice * (1 + randomWalk + meanReversion + momentum);
+      displayHour = hours - 12;
+      ampm = 'PM';
     }
+
+    const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
+
+    // Calculate price with some random variation but trending toward current price
+    const basePrice = openPrice + (currentPrice - openPrice) * progress;
+    const variation = (seededRandom() - 0.5) * 0.02 * basePrice; // 2% max variation
+    const price = Math.max(0.01, basePrice + variation);
 
     data.push({
       time: timeLabel,
       price: parseFloat(price.toFixed(2)),
-      volume: Math.floor(seededRandom() * 1000000 + 500000),
-      isLive: pointIndex === targetPoints - 1
+      volume: Math.floor((0.5 + seededRandom()) * 1000000), // Add volume data
+      bid: parseFloat((price - 0.01).toFixed(2)), // Bid price
+      ask: parseFloat((price + 0.01).toFixed(2))  // Ask price
     });
   }
 
   return data;
+
 }
 
 const ATLStockExchange = () => {
@@ -204,7 +227,7 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(5000); // Price update interval in ms - 5 seconds for live updates
+  const [updateSpeed, setUpdateSpeed] = useState(5000); // Price update interval in ms - very realistic
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
@@ -443,21 +466,21 @@ const ATLStockExchange = () => {
           setError(null);
         } else if (!initialized) {
           const initialStocks = [
-            { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: [] },
-            { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: [] },
-            { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: [] },
-            { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: [] },
-            { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: [] },
-            { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: [] },
-            { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: [] },
-            { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: [] },
-            { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: [] },
-            { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: [] },
-            { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: [] },
-            { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: [] },
-            { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: [] },
-            { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: [] },
-            { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: [] },
+            { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
+            { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
+            { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
+            { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
+            { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
+            { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
+            { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
+            { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
+            { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
+            { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
+            { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
+            { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
+            { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
+            { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
+            { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
           ];
           set(stocksRef, initialStocks);
         }
@@ -586,84 +609,119 @@ const ATLStockExchange = () => {
           return seed / 4294967296;
         };
 
-        // Ultra-realistic price movements like real stocks
+        // Very subtle, realistic price movements
         const timeOfDay = now.getHours() + now.getMinutes() / 60;
 
-        // Market activity varies by time of day (very subtle)
-        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.1 : 0.3;
+        // Market activity varies by time of day (much more subtle)
+        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.2 : 0.5;
 
-        // REALISTIC movements targeting ~1% per day
-        const baseVolatility = 0.00006 * marketActivityMultiplier; // ~0.006% per update for 1% daily movement
+        // Extremely small volatility for realistic movements
+        const baseVolatility = 0.00005 * marketActivityMultiplier; // 0.005% max change per update
 
-        // Smooth momentum-based movement
-        const momentum = stock.lastMomentum || 0;
+        // Very subtle random walk
         const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
 
-        // Momentum persistence for smooth trends
-        const newMomentum = momentum * 0.85 + randomComponent * 0.15;
-
-        // Regular movement for visible changes
-        const shouldMove = simpleRandom() > 0.3; // 70% chance of movement
-        const totalChange = shouldMove ? newMomentum : momentum * 0.9;
+        // Occasional tiny movements (most updates result in no change)
+        const shouldMove = simpleRandom() > 0.7; // Only move 30% of the time
+        const totalChange = shouldMove ? randomComponent : 0;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Reasonable bounds for visible but realistic movements
-        const minPrice = stock.price * 0.9995; // 0.05% down limit per update
-        const maxPrice = stock.price * 1.0005; // 0.05% up limit per update
+        // Very tight price bounds for realistic movements
+        const minPrice = stock.price * 0.99995; // 0.005% down limit per update
+        const maxPrice = stock.price * 1.00005; // 0.005% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
-        const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
+        // Reset history at start of new trading day (if it's early morning and history exists from previous day)
         let newHistory = [...(stock.history || [])];
-        let newOpen = stock.open;
+        const elapsedMs = now - dayStartTime;
 
-        if (isNewDay || newHistory.length === 0) {
-          // Generate fresh chart for new day AND reset open price
-          newHistory = generateDailyChart(newPrice2, stock.ticker);
-          newOpen = stock.price; // Set today's opening price to current price
-        } else {
-          // Only add new point if we're exactly at a 5-minute boundary
-          const currentMinutes = now.getMinutes();
-          const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
-
-          const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
-          const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
-
-          if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
-            // Add new 5-minute point ONLY at exact 5-minute boundaries
-            const totalMinutes = (newHistory.length) * 5;
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-            let ampm = hours < 12 ? 'AM' : 'PM';
-            const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-
-            newHistory.push({
-              time: timeLabel,
-              price: newPrice2,
-              volume: Math.floor(Math.random() * 1000000 + 500000),
-              isLive: true
-            });
-          } else if (newHistory.length > 0) {
-            // ALWAYS update the last point with current live price (every 5 seconds)
-            const lastIndex = newHistory.length - 1;
-            newHistory[lastIndex] = {
-              ...newHistory[lastIndex],
-              price: newPrice2,
-              isLive: true
-            };
+        // If it's early in the day (before 6 AM) and we have history, it might be from yesterday - reset it
+        if (now.getHours() < 6 && newHistory.length > 0) {
+          // Check if the last entry is from a different day by looking at elapsed time
+          const lastEntryTime = elapsedMs / 120000; // Convert to 2-minute intervals
+          if (lastEntryTime < 0 || newHistory.length > 200) { // Reset if negative time or too many entries
+            newHistory = [];
+            // Also reset daily high/low at start of new day
+            stock.high = stock.price;
+            stock.low = stock.price;
           }
+        }
+
+        // PROFESSIONAL CONTINUOUS CHART SYSTEM - NO MORE GAPS!
+        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // Ensure we have data points for EVERY minute from midnight to now
+        while (newHistory.length <= currentTotalMinutes) {
+          const minutesSinceMidnight = newHistory.length;
+          const hours = Math.floor(minutesSinceMidnight / 60);
+          const mins = minutesSinceMidnight % 60;
+
+          let displayHour = hours;
+          let ampm = 'AM';
+
+          if (hours === 0) {
+            displayHour = 12;
+          } else if (hours < 12) {
+            displayHour = hours;
+          } else if (hours === 12) {
+            displayHour = 12;
+            ampm = 'PM';
+          } else {
+            displayHour = hours - 12;
+            ampm = 'PM';
+          }
+
+          const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
+
+          // Use previous price if this is a backfill, otherwise use current price
+          const priceForThisMinute = minutesSinceMidnight === currentTotalMinutes ? newPrice2 :
+            (newHistory.length > 0 ? newHistory[newHistory.length - 1].price : stock.price);
+
+          newHistory.push({
+            time: timeLabel,
+            price: priceForThisMinute,
+            volume: Math.floor(Math.random() * 1000000 + 500000),
+            isLive: minutesSinceMidnight === currentTotalMinutes
+          });
+        }
+
+        // Always update the current minute with live price
+        if (newHistory.length > 0) {
+          const currentIndex = newHistory.length - 1;
+          const hour = now.getHours();
+          const min = now.getMinutes();
+          let displayHour = hour;
+          let ampm = 'AM';
+
+          if (hour === 0) {
+            displayHour = 12;
+          } else if (hour < 12) {
+            displayHour = hour;
+          } else if (hour === 12) {
+            displayHour = 12;
+            ampm = 'PM';
+          } else {
+            displayHour = hour - 12;
+            ampm = 'PM';
+          }
+
+          newHistory[currentIndex] = {
+            time: `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`,
+            price: newPrice2,
+            volume: Math.floor(Math.random() * 1000000 + 500000),
+            isLive: true
+          };
         }
 
         const sharesOutstanding = stock.marketCap / stock.price;
         const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
 
-        return { ...stock, price: newPrice2, open: newOpen, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap, lastMomentum: newMomentum };
+        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
       });
 
       const stocksRef = ref(database, 'stocks');
@@ -675,73 +733,316 @@ const ATLStockExchange = () => {
   }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
 
-
-
-  // SIMPLE CHART DATA FUNCTION
-  function getChartData(stockData, period) {
-    const currentPrice = stockData.price;
-    const ticker = stockData.ticker;
-
-    // For 1d, always use the live daily chart
-    if (period === '1d') {
-      return stockData.history && stockData.history.length > 0
-        ? stockData.history
-        : generateDailyChart(currentPrice, ticker);
-    }
-
-    // For other periods, generate simple synthetic data
-    return generateSimpleChart(currentPrice, period, ticker);
-  }
-
-  // Generate simple charts for non-1d periods
-  function generateSimpleChart(currentPrice, period, ticker) {
+  function generateExtendedHistory(basePrice, seedKey = '') {
     const data = [];
-    let points, timeUnit, maxChange;
 
-    switch (period) {
-      case '10m': points = 10; timeUnit = 'minutes'; maxChange = 0.002; break;
-      case '30m': points = 30; timeUnit = 'minutes'; maxChange = 0.005; break;
-      case '1h': points = 60; timeUnit = 'minutes'; maxChange = 0.01; break;
-      case '1w': points = 7; timeUnit = 'days'; maxChange = 0.05; break;
-      case '1m': points = 30; timeUnit = 'days'; maxChange = 0.15; break;
-      case '1y': points = 12; timeUnit = 'months'; maxChange = 0.3; break;
-      default: points = 24; timeUnit = 'hours'; maxChange = 0.02; break;
-    }
-
-    // Simple seed
-    let seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-    const seededRandom = () => {
-      seed = (seed * 1664525 + 1013904223) % 4294967296;
-      return seed / 4294967296;
+    // Simple seeded random number generator for consistent but natural randomness
+    const createSeededRandom = (seed) => {
+      let state = seed;
+      return () => {
+        state = (state * 1664525 + 1013904223) % 4294967296;
+        return state / 4294967296;
+      };
     };
 
-    let price = currentPrice * (1 - maxChange / 2 + seededRandom() * maxChange / 2);
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    const random = createSeededRandom(baseSeed);
 
-    for (let i = 0; i < points; i++) {
-      // Simple time labels
-      let timeLabel = '';
-      if (timeUnit === 'minutes') {
-        const mins = i;
-        timeLabel = `${mins}m ago`;
-      } else if (timeUnit === 'hours') {
-        timeLabel = `${i}h ago`;
-      } else if (timeUnit === 'days') {
-        timeLabel = `${i}d ago`;
-      } else if (timeUnit === 'months') {
-        timeLabel = `${i}mo ago`;
+    let price = basePrice * (0.92 + random() * 0.16); // More variation in starting price
+    let momentum = 0;
+
+    // Generate 7 days of data with hourly intervals for better resolution
+    for (let day = 0; day < 7; day++) {
+      for (let hour = 0; hour < 24; hour += 2) { // Every 2 hours for better detail
+        // Market behavior changes throughout the day
+        const timeOfDay = hour / 24;
+        const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
+
+        // Simple realistic randomization
+        const r1 = random();
+
+        // Random walk with momentum
+        const randomChange = (r1 - 0.5) * 2; // -1 to 1
+        momentum = momentum * 0.8 + randomChange * 0.2;
+
+        // Market activity affects volatility
+        const volatility = 0.01 + marketActivity * 0.005;
+
+        // Calculate price change
+        const change = momentum * volatility;
+
+        price = price * (1 + change);
+
+        // Keep within reasonable bounds but allow more movement
+        price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.35, price));
+
+        const date = getEasternTime();
+        date.setDate(date.getDate() - (7 - day));
+        date.setHours(hour);
+
+        let displayHour = hour;
+        let ampm = 'AM';
+        if (hour === 0) {
+          displayHour = 12;
+          ampm = 'AM';
+        } else if (hour < 12) {
+          displayHour = hour;
+          ampm = 'AM';
+        } else if (hour === 12) {
+          displayHour = 12;
+          ampm = 'PM';
+        } else {
+          displayHour = hour - 12;
+          ampm = 'PM';
+        }
+
+        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${displayHour}:00 ${ampm}`;
+
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+      }
+    }
+    return data;
+  }
+
+  function generateYearHistory(basePrice, seedKey = '') {
+    const data = [];
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let price = basePrice * (0.80 + seededRandom() * 0.40); // More variation in starting price
+    let longTermTrend = (seededRandom() - 0.5) * 0.03; // Overall yearly trend
+    let momentum = 0;
+
+    // Generate 12 months of data with more frequent intervals
+    for (let month = 0; month < 12; month++) {
+      for (let week = 0; week < 4; week++) {
+        // Seasonal effects (stronger in certain months)
+        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.015;
+
+        // Market cycles and events
+        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.008;
+
+        // Enhanced randomization
+        const random1 = seededRandom();
+        const random2 = seededRandom();
+        const random3 = seededRandom();
+
+        // Momentum over longer periods
+        momentum = momentum * 0.85 + (random1 - 0.5) * 0.8;
+
+        // Volatility varies by month (higher in certain periods)
+        const baseVolatility = 0.015 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.01;
+        const volatilityCluster = Math.abs(random2 - 0.5) * 0.012;
+        const totalVolatility = baseVolatility + volatilityCluster;
+
+        // Trend can shift quarterly
+        if (week === 0 && month % 3 === 0 && random3 > 0.7) {
+          longTermTrend = (seededRandom() - 0.5) * 0.03;
+        }
+
+        // Major market events (rare but impactful)
+        let eventImpact = 0;
+        if (random3 > 0.98) {
+          eventImpact = (seededRandom() - 0.5) * 0.15; // Major event
+        } else if (random3 > 0.95) {
+          eventImpact = (seededRandom() - 0.5) * 0.08; // Minor event
+        }
+
+        // Combine all factors
+        const noise = (seededRandom() - 0.5) * 2;
+        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.3 + totalVolatility * noise + eventImpact;
+
+        price = price * (1 + change);
+
+        // Keep within reasonable bounds but allow significant movement over a year
+        price = Math.max(basePrice * 0.40, Math.min(basePrice * 2.50, price));
+
+        const date = getEasternTime();
+        date.setMonth(date.getMonth() - (12 - month));
+        date.setDate(1 + week * 7);
+
+        // Ensure valid date
+        if (date.getDate() > 28) {
+          date.setDate(28);
+        }
+
+        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+      }
+    }
+    return data;
+  }
+
+  // Enhanced function to generate minute-by-minute data for short timeframes
+  function generateMinuteHistory(basePrice, minutes, seedKey = '') {
+    const data = [];
+    let price = basePrice;
+    const now = getEasternTime();
+    const startTime = new Date(now.getTime() - minutes * 60 * 1000);
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 1000);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter + minutes) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let momentum = 0;
+    let microTrend = (seededRandom() - 0.5) * 0.002;
+
+    for (let i = 0; i <= minutes; i += 1) {
+      // Enhanced short-term movement
+      const random1 = seededRandom();
+      const random2 = seededRandom();
+
+      // Momentum for smoother movement
+      momentum = momentum * 0.6 + (random1 - 0.5) * 0.8;
+
+      // Micro volatility with clustering
+      const baseVolatility = 0.003;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.002;
+      const totalVolatility = baseVolatility + volatilityCluster;
+
+      // Occasional micro trend shifts
+      if (seededRandom() > 0.97) {
+        microTrend = (seededRandom() - 0.5) * 0.002;
       }
 
-      // Smooth progression toward current price
-      const progress = i / (points - 1);
-      const targetPrice = price + (currentPrice - price) * progress;
-      const variation = (seededRandom() - 0.5) * maxChange * 0.1;
-      const finalPrice = targetPrice * (1 + variation);
+      const noise = (seededRandom() - 0.5) * 2;
+      const change = microTrend + momentum * 0.4 + totalVolatility * noise;
 
-      data.push({
-        time: timeLabel,
-        price: parseFloat(finalPrice.toFixed(2)),
-        volume: Math.floor(seededRandom() * 1000000 + 500000)
-      });
+      price = price * (1 + change);
+
+      // Tighter bounds for short timeframes
+      price = Math.max(basePrice * 0.985, Math.min(basePrice * 1.015, price));
+
+      const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
+      const hour = pointTime.getHours();
+      const min = pointTime.getMinutes().toString().padStart(2, '0');
+      let displayHour = hour;
+      let ampm = 'AM';
+
+      if (hour === 0) {
+        displayHour = 12;
+        ampm = 'AM';
+      } else if (hour < 12) {
+        displayHour = hour;
+        ampm = 'AM';
+      } else if (hour === 12) {
+        displayHour = 12;
+        ampm = 'PM';
+      } else {
+        displayHour = hour - 12;
+        ampm = 'PM';
+      }
+
+      data.push({ time: `${displayHour}:${min} ${ampm}`, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  // New function to generate monthly data (30 days)
+  function generateMonthHistory(basePrice, seedKey = '') {
+    const data = [];
+
+    // Use seeded randomization for consistency
+    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
+    let seedCounter = 0;
+    const seededRandom = () => {
+      seedCounter++;
+      const x = Math.sin(baseSeed + seedCounter) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let price = basePrice * (0.90 + seededRandom() * 0.20);
+    let trend = (seededRandom() - 0.5) * 0.025; // Monthly trend
+    let momentum = 0;
+
+    // Generate 30 days of data with daily intervals
+    for (let day = 0; day < 30; day++) {
+      // Enhanced randomization
+      const random1 = seededRandom();
+      const random2 = seededRandom();
+      const random3 = seededRandom();
+
+      // Weekly cycles
+      const weeklyEffect = Math.sin((day / 7) * Math.PI * 2) * 0.005;
+
+      // Momentum carries forward
+      momentum = momentum * 0.75 + (random1 - 0.5) * 0.7;
+
+      // Volatility with clustering
+      const baseVolatility = 0.012;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.008;
+      const totalVolatility = baseVolatility + volatilityCluster;
+
+      // Trend can shift weekly
+      if (day % 7 === 0 && random3 > 0.8) {
+        trend = (seededRandom() - 0.5) * 0.025;
+      }
+
+      // Combine factors
+      const noise = (seededRandom() - 0.5) * 2;
+      const change = trend + weeklyEffect + momentum * 0.35 + totalVolatility * noise;
+
+      price = price * (1 + change);
+
+      // Keep within reasonable bounds
+      price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.45, price));
+
+      const date = getEasternTime();
+      date.setDate(date.getDate() - (30 - day));
+      const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+
+      data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+    }
+    return data;
+  }
+
+  // Function to filter data based on timeframe
+  function getFilteredChartData(stockData, period) {
+    let data = [];
+
+    switch (period) {
+      case '10m':
+        data = generateMinuteHistory(stockData.price, 10, stockData.ticker);
+        break;
+      case '30m':
+        data = generateMinuteHistory(stockData.price, 30, stockData.ticker);
+        break;
+      case '1h':
+        data = generateMinuteHistory(stockData.price, 60, stockData.ticker);
+        break;
+      case '1d':
+        // Use live history if available, otherwise generate synthetic data
+        data = stockData.history && stockData.history.length > 0
+          ? stockData.history
+          : generatePriceHistory(stockData.open ?? stockData.price, stockData.price, stockData.ticker);
+        break;
+      case '1w':
+        // Generate fresh weekly data with proper seeding
+        data = generateExtendedHistory(stockData.price, stockData.ticker);
+        break;
+      case '1m':
+        // Generate monthly data (30 days) with daily intervals
+        data = generateMonthHistory(stockData.price, stockData.ticker);
+        break;
+      case '1y':
+        // Generate yearly data with proper seeding
+        data = generateYearHistory(stockData.price, stockData.ticker);
+        break;
+      default:
+        data = stockData.history || [];
     }
 
     return data;
@@ -901,8 +1202,11 @@ const ATLStockExchange = () => {
       return;
     }
 
-    // No trading fees - simple cost
-    const totalCost = selectedStock.price * quantity;
+    // Professional trading cost calculation with fees
+    const baseCost = selectedStock.price * quantity;
+    const commission = Math.max(TRADING_FEES.minimumFee, baseCost * TRADING_FEES.commission);
+    const spread = baseCost * TRADING_FEES.spread;
+    const totalCost = baseCost + commission + spread;
 
     // 24/7 trading - no market hours restrictions
 
@@ -914,7 +1218,7 @@ const ATLStockExchange = () => {
     }
 
     if (users[user].balance < totalCost) {
-      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(totalCost - users[user].balance)} more`]);
+      setNotifications(prev => [...prev, `💰 Insufficient funds. Need ${formatCurrency(totalCost - users[user].balance)} more (includes fees: ${formatCurrency(commission + spread)})`]);
       return;
     }
 
@@ -930,14 +1234,13 @@ const ATLStockExchange = () => {
 
       update(userRef, { balance: newBalance, portfolio: newPortfolio });
 
-      // SIMPLE PRICE IMPACT: 1% shares = 1% price increase
-      const totalShares = selectedStock.marketCap / selectedStock.price;
+      // Calculate and apply price impact
       const sharePercentage = sharesBought / totalShares;
-      const priceImpactPercent = sharePercentage * 100; // 1% shares = 1% price change
+      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price increase
       const priceImpact = (priceImpactPercent / 100) * selectedStock.price;
-      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2)));
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
 
-      // Update stock price with realistic impact
+      // Update stock price based on purchase
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -952,23 +1255,25 @@ const ATLStockExchange = () => {
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
 
-      // Success notification with price impact
-      const impactPercent = ((priceImpact / selectedStock.price) * 100);
-      const impactText = Math.abs(impactPercent) > 0.001 ? ` (+${impactPercent.toFixed(2)}%)` : '';
-      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(totalCost)}${impactText}`]);
+      // Success notification with detailed breakdown
+      setNotifications(prev => [...prev, `✅ Bought ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(baseCost)} + ${formatCurrency(commission + spread)} fees = ${formatCurrency(totalCost)} - Price impact: ${priceImpact > 0 ? '+' : ''}${((priceImpact / selectedStock.price) * 100).toFixed(2)}%`]);
       setBuyQuantity('');
 
-      // Record trade in history with impact
+      // Record professional trade in history
       const tradeRecord = {
         timestamp: Date.now(),
         type: 'buy',
         ticker: selectedStock.ticker,
         quantity: quantity,
         price: selectedStock.price,
+        baseCost: baseCost,
+        commission: commission,
+        spread: spread,
         total: totalCost,
         newPrice: newPrice,
         priceImpact: priceImpact,
-        impactPercent: ((priceImpact / selectedStock.price) * 100)
+        marketStatus: getMarketStatus(),
+
       };
       const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
       set(historyRef, tradeRecord);
@@ -1019,14 +1324,30 @@ const ATLStockExchange = () => {
       setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}`]);
       setSellQuantity('');
 
-      // SIMPLE SELL PRICE IMPACT: 1% shares = 1% price decrease
+      // Calculate price impact based on shares sold vs total shares outstanding
       const totalShares = selectedStock.marketCap / selectedStock.price;
-      const sharePercentage = quantity / totalShares;
-      const priceImpactPercent = sharePercentage * 100; // 1% shares = 1% price change
-      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price; // Negative for selling
-      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2)));
+      const sharesSold = quantity;
+      const sharePercentage = sharesSold / totalShares;
 
-      // Update stock price with realistic sell impact
+      // Price impact proportional to percentage of shares traded - no caps!
+      const priceImpactPercent = sharePercentage * 100; // 1% of shares = 1% price decrease
+      const priceImpact = -(priceImpactPercent / 100) * selectedStock.price; // Negative for selling
+      const newPrice = Math.max(0.01, parseFloat((selectedStock.price + priceImpact).toFixed(2))); // Prevent negative prices
+
+      // Record trade in history
+      const tradeRecord = {
+        timestamp: Date.now(),
+        type: 'sell',
+        ticker: selectedStock.ticker,
+        quantity: quantity,
+        price: selectedStock.price,
+        total: proceeds,
+        newPrice: newPrice,
+        priceImpact: priceImpact
+      };
+      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
+      set(historyRef, tradeRecord);
+
       const updatedStocks = stocks.map(s => {
         if (s.ticker === selectedStock.ticker) {
           const newHigh = Math.max(s.high, newPrice);
@@ -1040,26 +1361,6 @@ const ATLStockExchange = () => {
 
       const stocksRef = ref(database, 'stocks');
       set(stocksRef, updatedStocks);
-
-      // Sell notification with price impact
-      const impactPercent = ((priceImpact / selectedStock.price) * 100);
-      const impactText = Math.abs(impactPercent) > 0.001 ? ` (${impactPercent.toFixed(2)}%)` : '';
-      setNotifications(prev => [...prev, `✅ Sold ${quantity} shares of ${selectedStock.ticker} for ${formatCurrency(proceeds)}${impactText}`]);
-
-      // Record trade in history with realistic impact
-      const tradeRecord = {
-        timestamp: Date.now(),
-        type: 'sell',
-        ticker: selectedStock.ticker,
-        quantity: quantity,
-        price: selectedStock.price,
-        total: proceeds,
-        newPrice: newPrice,
-        priceImpact: priceImpact,
-        impactPercent: ((priceImpact / selectedStock.price) * 100)
-      };
-      const historyRef = ref(database, `tradingHistory/${user}/${Date.now()}`);
-      set(historyRef, tradeRecord);
     } catch (error) {
       setNotifications(prev => [...prev, '❌ Sale failed. Please try again.']);
     }
@@ -1087,7 +1388,9 @@ const ATLStockExchange = () => {
       low52w: low52w,
       dividend: dividend,
       qtrlyDiv: dividend / 4,
-      history: []
+      history: generatePriceHistory(parseFloat(newStockPrice), parseFloat(newStockPrice), newStockTicker || ''),
+      extendedHistory: generateExtendedHistory(parseFloat(newStockPrice), newStockTicker || ''),
+      yearHistory: generateYearHistory(parseFloat(newStockPrice), newStockTicker || '')
     };
 
     const stocksRef = ref(database, 'stocks');
@@ -1394,20 +1697,11 @@ const ATLStockExchange = () => {
 
   const getChartDomain = (data) => {
     if (!data || data.length === 0) return [0, 100];
-    const prices = data.map(d => d.price).filter(p => p && !isNaN(p));
-    if (prices.length === 0) return [0, 100];
-
+    const prices = data.map(d => d.price);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
-
-    // If min and max are the same (flat line), add small padding
-    if (min === max) {
-      const padding = min * 0.01; // 1% padding
-      return [parseFloat((min - padding).toFixed(2)), parseFloat((max + padding).toFixed(2))];
-    }
-
-    const padding = (max - min) * 0.05; // Reduced padding for better view
-    const paddedMin = Math.max(0, min - padding);
+    const padding = (max - min) * 0.15;
+    const paddedMin = min - padding;
     const paddedMax = max + padding;
     return [parseFloat(paddedMin.toFixed(2)), parseFloat(paddedMax.toFixed(2))];
   };
@@ -1515,8 +1809,8 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
 
-    // Use the clean chart data function
-    const chartData = getChartData(stockData, chartPeriod);
+    // Use the new filtered chart data function with live price
+    const chartData = getFilteredChartData(stockData, chartPeriod);
 
 
     const chartDomain = getChartDomain(chartData);
@@ -2216,21 +2510,21 @@ const ATLStockExchange = () => {
                     onClick={() => {
                       if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
                         const initialStocks = [
-                          { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: [] },
-                          { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: [] },
-                          { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: [] },
-                          { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: [] },
-                          { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: [] },
-                          { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: [] },
-                          { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: [] },
-                          { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: [] },
-                          { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: [] },
-                          { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: [] },
-                          { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: [] },
-                          { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: [] },
-                          { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: [] },
-                          { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: [] },
-                          { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: [] },
+                          { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
+                          { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
+                          { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
+                          { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
+                          { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
+                          { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
+                          { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
+                          { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
+                          { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
+                          { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
+                          { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
+                          { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
+                          { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
+                          { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
+                          { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
                         ];
                         const stocksRef = ref(database, 'stocks');
                         set(stocksRef, initialStocks);
@@ -3227,10 +3521,10 @@ const ATLStockExchange = () => {
                 </div>
 
                 <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)}>
+                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
                     <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)).length / 10))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generateDailyChart(stock.price, stock.ticker)))} />
+                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
+                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
                     <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
