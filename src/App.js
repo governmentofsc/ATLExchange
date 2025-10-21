@@ -95,8 +95,8 @@ const MARKET_SIMULATION = {
   momentumDecay: 0.85, // How quickly momentum fades
   meanReversionStrength: 0.00005, // Pull toward opening price
   maxDailyChange: 0.15, // Maximum 15% daily change
-  priceUpdateInterval: 2000, // 2 seconds for smoother updates
-  chartUpdateInterval: 5000 // 5 seconds for chart points
+  priceUpdateInterval: 5000, // 5 seconds for stability (reduced Firebase load)
+  chartUpdateInterval: 10000 // 10 seconds for chart points
 };
 
 // Professional trading interface constants
@@ -837,7 +837,15 @@ const ATLStockExchange = () => {
             };
           }
 
+          // Validate and sanitize market state
           const ms = stock.marketState;
+          ms.orderBookImbalance = isFinite(ms.orderBookImbalance) ? Math.max(-1, Math.min(1, ms.orderBookImbalance)) : 0;
+          ms.institutionalFlow = isFinite(ms.institutionalFlow) ? Math.max(-2, Math.min(2, ms.institutionalFlow)) : 0;
+          ms.volatilityCluster = isFinite(ms.volatilityCluster) ? Math.max(0.1, Math.min(4, ms.volatilityCluster)) : 1;
+          ms.microTrend = isFinite(ms.microTrend) ? Math.max(-0.01, Math.min(0.01, ms.microTrend)) : 0;
+          ms.liquidityDepth = isFinite(ms.liquidityDepth) ? Math.max(0.1, Math.min(2, ms.liquidityDepth)) : 1;
+          ms.newsImpact = isFinite(ms.newsImpact) ? Math.max(-0.05, Math.min(0.05, ms.newsImpact)) : 0;
+          ms.algorithmicPressure = isFinite(ms.algorithmicPressure) ? Math.max(-0.01, Math.min(0.01, ms.algorithmicPressure)) : 0;
 
           // 1. Market Microstructure - Order Book Dynamics
           const flowChange = (simpleRandom() - 0.5) * 0.4;
@@ -853,8 +861,12 @@ const ATLStockExchange = () => {
           // 3. Advanced Volatility Clustering (GARCH-like)
           const recentReturn = priceHistory.length > 0 ?
             Math.abs(Math.log(stock.price / priceHistory[priceHistory.length - 1].price)) : stockVolatility;
-          ms.volatilityCluster = 0.05 + 0.90 * ms.volatilityCluster + 0.05 * (recentReturn / stockVolatility);
-          ms.volatilityCluster = Math.min(4, ms.volatilityCluster);
+
+          // Validate recentReturn to prevent invalid calculations
+          const validRecentReturn = isFinite(recentReturn) && recentReturn > 0 ? recentReturn : stockVolatility;
+
+          ms.volatilityCluster = 0.05 + 0.90 * ms.volatilityCluster + 0.05 * (validRecentReturn / stockVolatility);
+          ms.volatilityCluster = Math.min(4, Math.max(0.1, ms.volatilityCluster)); // Ensure valid range
 
           // 4. Multi-timeframe Momentum
           let shortMomentum = 0, mediumMomentum = 0, longMomentum = 0;
@@ -894,25 +906,34 @@ const ATLStockExchange = () => {
             sessionMultiplier = 0.7;
           }
 
-          // 9. Advanced Random Walk with Fat Tails
+          // 9. Advanced Random Walk with Fat Tails (with validation)
           const normalRandom = () => {
-            const u1 = simpleRandom();
-            const u2 = simpleRandom();
-            return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            const u1 = Math.max(0.0001, Math.min(0.9999, simpleRandom())); // Prevent edge cases
+            const u2 = Math.max(0.0001, Math.min(0.9999, simpleRandom()));
+            const result = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            return isFinite(result) ? result : 0; // Fallback to 0 if invalid
           };
 
-          // Student's t-distribution for realistic fat tails
+          // Student's t-distribution for realistic fat tails (with validation)
           const fatTailRandom = () => {
             const normal = normalRandom();
-            const chi2 = -2 * Math.log(simpleRandom());
-            return normal / Math.sqrt(chi2 / 4); // t-distribution with 4 degrees of freedom
+            const u3 = Math.max(0.0001, Math.min(0.9999, simpleRandom()));
+            const chi2 = -2 * Math.log(u3);
+            const denominator = Math.sqrt(chi2 / 4);
+
+            if (!isFinite(denominator) || denominator === 0) {
+              return normal; // Fallback to normal distribution
+            }
+
+            const result = normal / denominator;
+            return isFinite(result) ? Math.max(-5, Math.min(5, result)) : 0; // Cap extreme values
           };
 
           // 10. Combine All Market Forces
           const baseVolatility = stockVolatility * sectorVolatility;
           const adjustedVolatility = baseVolatility * ms.volatilityCluster * sessionMultiplier / ms.liquidityDepth;
 
-          const priceChange =
+          let priceChange =
             fatTailRandom() * adjustedVolatility * 0.3 + // Random walk with fat tails
             ms.orderBookImbalance * 0.0002 + // Order flow imbalance
             ms.institutionalFlow * 0.0005 + // Institutional trading
@@ -921,6 +942,11 @@ const ATLStockExchange = () => {
             ms.newsImpact + // News impact
             ms.algorithmicPressure + // Algorithmic pressure
             (simpleRandom() - 0.5) * adjustedVolatility * 0.1; // Additional microstructure noise
+
+          // Validate price change
+          if (!isFinite(priceChange) || isNaN(priceChange)) {
+            priceChange = 0; // No change if invalid
+          }
 
           // 11. Circuit Breakers and Realistic Constraints
           const maxSingleMove = baseVolatility * 8; // 8x normal volatility max
@@ -931,10 +957,21 @@ const ATLStockExchange = () => {
           const dailyVolatilityLimit = stockVolatility * 15; // 15x daily volatility limit
           const dailyMultiplier = currentDailyChange > dailyVolatilityLimit ? 0.1 : 1;
 
-          const newPrice2 = stock.price * (1 + constrainedChange * dailyMultiplier);
+          let newPrice2 = stock.price * (1 + constrainedChange * dailyMultiplier);
+
+          // Comprehensive validation to prevent any invalid values
+          if (!isFinite(newPrice2) || newPrice2 <= 0 || isNaN(newPrice2)) {
+            newPrice2 = stock.price; // Fallback to current price
+          }
 
           // Final safety bounds and update market state
           const finalPrice = Math.max(0.01, parseFloat(newPrice2.toFixed(2)));
+
+          // Validate finalPrice one more time
+          if (!isFinite(finalPrice) || finalPrice <= 0 || isNaN(finalPrice)) {
+            return stock; // Return unchanged stock if price is invalid
+          }
+
           stock.marketState = ms;
 
           const newHigh = Math.max(stock.high, finalPrice);
@@ -1004,15 +1041,43 @@ const ATLStockExchange = () => {
           };
         });
 
-        const stocksRef = ref(database, 'stocks');
-        set(stocksRef, updatedStocks);
-        setStocks(updatedStocks); // Update local state immediately
+        // Validate data before writing to Firebase
+        const validatedStocks = updatedStocks.map(stock => {
+          // Ensure all numeric values are finite
+          const validatedStock = {
+            ...stock,
+            price: isFinite(stock.price) ? stock.price : stock.open || 100,
+            high: isFinite(stock.high) ? stock.high : stock.price,
+            low: isFinite(stock.low) ? stock.low : stock.price,
+            marketCap: isFinite(stock.marketCap) ? stock.marketCap : 100000000000,
+            pe: isFinite(stock.pe) ? stock.pe : 20,
+            dividend: isFinite(stock.dividend) ? stock.dividend : 0,
+            qtrlyDiv: isFinite(stock.qtrlyDiv) ? stock.qtrlyDiv : 0,
+            lastMomentum: isFinite(stock.lastMomentum) ? stock.lastMomentum : 0
+          };
 
-        // Performance monitoring removed to eliminate unused variables
+          // Validate history data
+          if (validatedStock.history) {
+            validatedStock.history = validatedStock.history.map(point => ({
+              ...point,
+              price: isFinite(point.price) ? point.price : validatedStock.price,
+              volume: isFinite(point.volume) ? point.volume : 100000
+            }));
+          }
+
+          return validatedStock;
+        });
+
+        const stocksRef = ref(database, 'stocks');
+        set(stocksRef, validatedStocks);
+        setStocks(validatedStocks); // Update local state immediately
 
       } catch (error) {
         console.error('Price update error:', error);
-        setNotifications(prev => [...prev, '⚠️ Price update failed - retrying...']);
+        // Only show notification occasionally to avoid spam
+        if (Math.random() < 0.1) { // 10% chance to show notification
+          setNotifications(prev => [...prev, '⚠️ Connection issue - retrying...']);
+        }
       }
     }, updateSpeed); // Use configurable update speed
 
