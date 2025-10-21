@@ -646,12 +646,13 @@ const ATLStockExchange = () => {
           }
         }
 
-        // PROFESSIONAL CONTINUOUS CHART SYSTEM - NO MORE GAPS!
+        // PROPER 1D CHART: 12:00 AM TO NOW WITH 10-MINUTE INTERVALS
         const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-
-        // Ensure we have data points for EVERY minute from midnight to now
-        while (newHistory.length <= currentTotalMinutes) {
-          const minutesSinceMidnight = newHistory.length;
+        const targetDataPoints = Math.floor(currentTotalMinutes / 10) + 1; // Every 10 minutes from midnight
+        
+        // Ensure we have the right number of data points from midnight to now
+        while (newHistory.length < targetDataPoints) {
+          const minutesSinceMidnight = newHistory.length * 10; // 10-minute intervals
           const hours = Math.floor(minutesSinceMidnight / 60);
           const mins = minutesSinceMidnight % 60;
 
@@ -672,23 +673,23 @@ const ATLStockExchange = () => {
 
           const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
 
-          // Use previous price if this is a backfill, otherwise use current price
-          const priceForThisMinute = minutesSinceMidnight === currentTotalMinutes ? newPrice2 :
+          // Use current price for the latest point, previous price for backfill
+          const priceForThisPoint = (newHistory.length === targetDataPoints - 1) ? newPrice2 : 
             (newHistory.length > 0 ? newHistory[newHistory.length - 1].price : stock.price);
 
           newHistory.push({
             time: timeLabel,
-            price: priceForThisMinute,
+            price: priceForThisPoint,
             volume: Math.floor(Math.random() * 1000000 + 500000),
-            isLive: minutesSinceMidnight === currentTotalMinutes
+            isLive: newHistory.length === targetDataPoints - 1
           });
         }
 
-        // Always update the current minute with live price
+        // Update the current time point with live price
         if (newHistory.length > 0) {
           const currentIndex = newHistory.length - 1;
           const hour = now.getHours();
-          const min = now.getMinutes();
+          const min = Math.floor(now.getMinutes() / 10) * 10; // Round to nearest 10 minutes
           let displayHour = hour;
           let ampm = 'AM';
 
@@ -964,10 +965,13 @@ const ATLStockExchange = () => {
         data = generateSmoothChart(currentPrice, 60, 'minutes', stockData.ticker);
         break;
       case '1d':
-        // Use live history if available, otherwise generate smooth daily data
-        data = stockData.history && stockData.history.length > 0
-          ? stockData.history
-          : generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
+        // Use live history but limit to reasonable amount
+        if (stockData.history && stockData.history.length > 0) {
+          // Take only the last 50 data points for better performance
+          data = stockData.history.slice(-50);
+        } else {
+          data = generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
+        }
         break;
       case '1w':
         data = generateSmoothChart(currentPrice, 7, 'days', stockData.ticker);
