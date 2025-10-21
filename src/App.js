@@ -153,82 +153,152 @@ const getMarketStatus = () => {
 
 
 // CLEAN DAILY CHART GENERATION - 5-minute intervals
+// ULTRA-REALISTIC INTRADAY CHART GENERATION - Professional Market Simulation
 function generateDailyChart(currentPrice, ticker, existingHistory = []) {
   const now = getEasternTime();
 
   // Safety check for input parameters
   if (!isFinite(currentPrice) || currentPrice <= 0) {
-    currentPrice = 100; // Default fallback price
+    currentPrice = 100;
   }
 
-  // Create seed for consistent data
+  // Advanced seeded random with multiple generators for different market factors
   const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  let rng = seed + now.getDate();
-  const seededRandom = () => {
-    rng = (rng * 1664525 + 1013904223) % 4294967296;
-    return rng / 4294967296;
-  };
+  let rng1 = seed + now.getDate();
+  let rng2 = seed * 31 + now.getMonth();
+  let rng3 = seed * 97 + now.getFullYear();
+  
+  const seededRandom1 = () => { rng1 = (rng1 * 1664525 + 1013904223) % 4294967296; return rng1 / 4294967296; };
+  const seededRandom2 = () => { rng2 = (rng2 * 1103515245 + 12345) % 4294967296; return rng2 / 4294967296; };
+  const seededRandom3 = () => { rng3 = (rng3 * 134775813 + 1) % 4294967296; return rng3 / 4294967296; };
 
-  // Generate data from 12:00 AM to current time in 5-minute intervals (288 points/day)
+  // Market microstructure parameters
+  const marketOpen = 9.5 * 60; // 9:30 AM in minutes
+  const marketClose = 16 * 60; // 4:00 PM in minutes
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const targetPoints = Math.floor(currentMinutes / 5) + 1; // Every 5 minutes
+  const targetPoints = Math.floor(currentMinutes / 5) + 1;
 
-  // Use existing history if available, otherwise start fresh
   let data = [...existingHistory];
+  let orderBookImbalance = 0; // Simulates buy/sell pressure
+  let institutionalFlow = 0; // Large player movements
+  let volatilityCluster = 1; // GARCH-like volatility clustering
+  let microTrend = 0; // Short-term momentum
 
-  // Fill in missing points up to current time
   while (data.length < targetPoints) {
     const pointIndex = data.length;
-    const totalMinutes = pointIndex * 5; // Every 5 minutes
+    const totalMinutes = pointIndex * 5;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
-    // Format time
+    // Professional time formatting
     let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     let ampm = hours < 12 ? 'AM' : 'PM';
     const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
-    // Realistic price progression
     let price;
     if (pointIndex === 0) {
-      // Start of day - slight variation from current price
-      price = currentPrice * (0.998 + seededRandom() * 0.004); // ±0.2% from current
-
-      // Safety check for initial price
-      if (!isFinite(price) || price <= 0) {
-        price = currentPrice || 100; // Fallback to current price or $100
-      }
+      // Opening price with realistic gap from previous close
+      const gapFactor = 0.995 + seededRandom1() * 0.01; // ±0.5% overnight gap
+      price = currentPrice * gapFactor;
     } else {
-      // Build on previous price with realistic movement
       const prevPrice = data[pointIndex - 1].price;
+      
+      // Market session effects
+      const isPreMarket = totalMinutes < marketOpen;
+      const isMarketHours = totalMinutes >= marketOpen && totalMinutes <= marketClose;
+      const isAfterHours = totalMinutes > marketClose;
+      
+      // Volume and volatility patterns
+      let volumeMultiplier, volatilityMultiplier;
+      if (isPreMarket) {
+        volumeMultiplier = 0.1 + seededRandom2() * 0.2;
+        volatilityMultiplier = 0.3;
+      } else if (isMarketHours) {
+        // U-shaped volume pattern (high at open/close, lower midday)
+        const sessionProgress = (totalMinutes - marketOpen) / (marketClose - marketOpen);
+        const uShape = Math.pow(Math.sin(sessionProgress * Math.PI), 0.3);
+        volumeMultiplier = 0.5 + uShape * 1.5 + seededRandom2() * 0.3;
+        volatilityMultiplier = 0.8 + uShape * 0.4;
+      } else {
+        volumeMultiplier = 0.05 + seededRandom2() * 0.1;
+        volatilityMultiplier = 0.2;
+      }
 
-      // Market activity varies by time of day
-      const hourOfDay = hours;
-      const isMarketHours = hourOfDay >= 9 && hourOfDay <= 16;
-      const activityMultiplier = isMarketHours ? 1.5 : 0.3;
-
-      // Realistic movements for 5-minute intervals
-      const baseVolatility = 0.0002 * activityMultiplier; // Appropriate for 5-minute intervals
-      const randomWalk = (seededRandom() - 0.5) * baseVolatility;
-
-      // Mean reversion for smooth progression
-      const meanReversion = (currentPrice - prevPrice) * 0.0005;
-
-      // Add momentum for smoother trends
-      const momentum = (data.length > 1 && pointIndex > 1) ? (prevPrice - data[pointIndex - 2].price) * 0.2 : 0;
-
-      price = prevPrice * (1 + randomWalk + meanReversion + momentum);
+      // Advanced market microstructure simulation
+      
+      // 1. Order flow imbalance (buy vs sell pressure)
+      const flowChange = (seededRandom1() - 0.5) * 0.3;
+      orderBookImbalance = orderBookImbalance * 0.95 + flowChange;
+      orderBookImbalance = Math.max(-1, Math.min(1, orderBookImbalance));
+      
+      // 2. Institutional trading patterns
+      if (seededRandom3() > 0.98) { // 2% chance of institutional activity
+        institutionalFlow = (seededRandom1() - 0.5) * 2;
+      }
+      institutionalFlow *= 0.92; // Decay institutional impact
+      
+      // 3. Volatility clustering (GARCH effect)
+      const prevReturn = Math.abs(Math.log(prevPrice / (data[Math.max(0, pointIndex - 2)]?.price || prevPrice)));
+      volatilityCluster = 0.1 + 0.85 * volatilityCluster + 0.05 * prevReturn;
+      volatilityCluster = Math.min(3, volatilityCluster);
+      
+      // 4. Microtrend momentum
+      if (pointIndex >= 3) {
+        const recentPrices = data.slice(-3).map(d => d.price);
+        const trend = (recentPrices[2] - recentPrices[0]) / recentPrices[0];
+        microTrend = microTrend * 0.8 + trend * 0.2;
+      }
+      
+      // 5. Mean reversion to fair value
+      const fairValueDistance = (currentPrice - prevPrice) / currentPrice;
+      const meanReversion = fairValueDistance * 0.001;
+      
+      // 6. Random walk component with realistic distribution
+      const normalRandom = () => {
+        // Box-Muller transform for normal distribution
+        const u1 = seededRandom1();
+        const u2 = seededRandom2();
+        return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      };
+      
+      // Combine all market forces
+      const baseVolatility = 0.0008; // 5-minute base volatility
+      const totalVolatility = baseVolatility * volatilityMultiplier * volatilityCluster;
+      
+      const priceChange = 
+        normalRandom() * totalVolatility * 0.4 + // Random component
+        orderBookImbalance * 0.0003 + // Order flow
+        institutionalFlow * 0.0008 + // Institutional impact
+        microTrend * 0.3 + // Momentum
+        meanReversion; // Mean reversion
+      
+      price = prevPrice * (1 + priceChange);
+      
+      // Realistic price constraints
+      const maxMove = prevPrice * 0.02; // 2% max move per 5min
+      price = Math.max(prevPrice - maxMove, Math.min(prevPrice + maxMove, price));
     }
 
-    // Safety checks to prevent Infinity or NaN values
+    // Safety checks
     if (!isFinite(price) || price <= 0) {
-      price = currentPrice; // Fallback to current price
+      price = pointIndex > 0 ? data[pointIndex - 1].price : currentPrice;
+    }
+
+    // Realistic volume simulation
+    let volume;
+    if (isMarketHours) {
+      const baseVolume = 800000;
+      const priceVolatility = pointIndex > 0 ? Math.abs(price - data[pointIndex - 1].price) / price : 0;
+      const volatilityBoost = 1 + priceVolatility * 50;
+      volume = Math.floor(baseVolume * volumeMultiplier * volatilityBoost * (0.7 + seededRandom3() * 0.6));
+    } else {
+      volume = Math.floor(50000 * volumeMultiplier * (0.5 + seededRandom3()));
     }
 
     data.push({
       time: timeLabel,
       price: parseFloat(price.toFixed(2)),
-      volume: Math.floor(seededRandom() * 1000000 + 500000),
+      volume: volume,
       isLive: pointIndex === targetPoints - 1
     });
   }
@@ -695,49 +765,126 @@ const ATLStockExchange = () => {
           const stockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
           const sectorVolatility = stock.marketCap > 1000000000000 ? 0.8 : 1.2; // Large caps less volatile
 
-          // Enhanced momentum calculation
+          // PROFESSIONAL REAL-TIME PRICE SIMULATION - Institutional-Grade Market Dynamics
           const priceHistory = stock.history || [];
-          let momentum = stock.lastMomentum || 0;
-          if (priceHistory.length >= 3) {
-            const recent = priceHistory.slice(-3);
-            const shortTrend = (recent[2].price - recent[1].price) / recent[1].price;
-            const mediumTrend = (recent[2].price - recent[0].price) / recent[0].price / 2;
-            momentum = (shortTrend * 0.7 + mediumTrend * 0.3) * MARKET_SIMULATION.momentumDecay;
-            momentum = Math.max(-0.002, Math.min(0.002, momentum)); // Cap momentum
+          
+          // Initialize persistent market state for each stock
+          if (!stock.marketState) {
+            stock.marketState = {
+              orderBookImbalance: 0,
+              institutionalFlow: 0,
+              volatilityCluster: 1,
+              microTrend: 0,
+              lastVolatility: stockVolatility,
+              marketMakingSpread: 0.001,
+              liquidityDepth: 1,
+              newsImpact: 0,
+              algorithmicPressure: 0
+            };
           }
-
-          // Random walk with volatility clustering
-          const randomComponent = (simpleRandom() - 0.5) * stockVolatility * sectorVolatility;
-
-          // Volatility clustering (periods of high/low volatility)
-          const volatilityCluster = Math.abs(simpleRandom() - 0.5) * stockVolatility * 0.5;
-
-          // Mean reversion (stronger for extreme moves)
-          const distanceFromOpen = (stock.price - stock.open) / stock.open;
-          const meanReversion = -distanceFromOpen * MARKET_SIMULATION.meanReversionStrength *
-            (1 + Math.abs(distanceFromOpen) * 10); // Stronger reversion for larger moves
-
-          // Market microstructure effects
-          const microstructureNoise = (simpleRandom() - 0.5) * stockVolatility * 0.1;
-
-          // Combine all factors
-          const totalChange = randomComponent + momentum + meanReversion + volatilityCluster + microstructureNoise;
-
-          // Apply daily change limits
+          
+          const ms = stock.marketState;
+          
+          // 1. Market Microstructure - Order Book Dynamics
+          const flowChange = (simpleRandom() - 0.5) * 0.4;
+          ms.orderBookImbalance = ms.orderBookImbalance * 0.97 + flowChange * 0.03;
+          ms.orderBookImbalance = Math.max(-1, Math.min(1, ms.orderBookImbalance));
+          
+          // 2. Institutional Trading Patterns
+          if (simpleRandom() > 0.995) { // 0.5% chance of institutional block trade
+            ms.institutionalFlow = (simpleRandom() - 0.5) * 3;
+          }
+          ms.institutionalFlow *= 0.94; // Institutional impact decays
+          
+          // 3. Advanced Volatility Clustering (GARCH-like)
+          const recentReturn = priceHistory.length > 0 ? 
+            Math.abs(Math.log(stock.price / priceHistory[priceHistory.length - 1].price)) : stockVolatility;
+          ms.volatilityCluster = 0.05 + 0.90 * ms.volatilityCluster + 0.05 * (recentReturn / stockVolatility);
+          ms.volatilityCluster = Math.min(4, ms.volatilityCluster);
+          
+          // 4. Multi-timeframe Momentum
+          let shortMomentum = 0, mediumMomentum = 0, longMomentum = 0;
+          if (priceHistory.length >= 5) {
+            const recent = priceHistory.slice(-5);
+            shortMomentum = (recent[4].price - recent[3].price) / recent[3].price;
+            mediumMomentum = (recent[4].price - recent[2].price) / recent[2].price / 2;
+            longMomentum = (recent[4].price - recent[0].price) / recent[0].price / 4;
+          }
+          ms.microTrend = ms.microTrend * 0.85 + (shortMomentum * 0.5 + mediumMomentum * 0.3 + longMomentum * 0.2) * 0.15;
+          
+          // 5. Market Making and Liquidity Effects
+          const spreadPressure = ms.orderBookImbalance * ms.marketMakingSpread;
+          ms.liquidityDepth = 0.5 + 0.5 * Math.exp(-Math.abs(ms.orderBookImbalance) * 2);
+          
+          // 6. News and Event Impact Simulation
+          if (simpleRandom() > 0.998) { // 0.2% chance of news event
+            ms.newsImpact = (simpleRandom() - 0.5) * 0.02;
+          }
+          ms.newsImpact *= 0.85; // News impact decays quickly
+          
+          // 7. Algorithmic Trading Pressure
+          const priceDeviation = (stock.price - stock.open) / stock.open;
+          ms.algorithmicPressure = Math.tanh(priceDeviation * 10) * 0.0005; // Mean reversion algos
+          
+          // 8. Time-of-day Effects
+          const hour = now.getHours();
+          const minute = now.getMinutes();
+          const sessionTime = hour + minute / 60;
+          
+          let sessionMultiplier = 1;
+          if (sessionTime < 9.5 || sessionTime > 16) { // Pre/after market
+            sessionMultiplier = 0.3;
+          } else if (sessionTime < 10 || sessionTime > 15.5) { // Opening/closing hour
+            sessionMultiplier = 1.8;
+          } else if (sessionTime >= 12 && sessionTime <= 14) { // Lunch lull
+            sessionMultiplier = 0.7;
+          }
+          
+          // 9. Advanced Random Walk with Fat Tails
+          const normalRandom = () => {
+            const u1 = simpleRandom();
+            const u2 = simpleRandom();
+            return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+          };
+          
+          // Student's t-distribution for realistic fat tails
+          const fatTailRandom = () => {
+            const normal = normalRandom();
+            const chi2 = -2 * Math.log(simpleRandom());
+            return normal / Math.sqrt(chi2 / 4); // t-distribution with 4 degrees of freedom
+          };
+          
+          // 10. Combine All Market Forces
+          const baseVolatility = stockVolatility * sectorVolatility;
+          const adjustedVolatility = baseVolatility * ms.volatilityCluster * sessionMultiplier / ms.liquidityDepth;
+          
+          const priceChange = 
+            fatTailRandom() * adjustedVolatility * 0.3 + // Random walk with fat tails
+            ms.orderBookImbalance * 0.0002 + // Order flow imbalance
+            ms.institutionalFlow * 0.0005 + // Institutional trading
+            ms.microTrend * 0.4 + // Multi-timeframe momentum
+            spreadPressure + // Market making effects
+            ms.newsImpact + // News impact
+            ms.algorithmicPressure + // Algorithmic pressure
+            (simpleRandom() - 0.5) * adjustedVolatility * 0.1; // Additional microstructure noise
+          
+          // 11. Circuit Breakers and Realistic Constraints
+          const maxSingleMove = baseVolatility * 8; // 8x normal volatility max
+          const constrainedChange = Math.max(-maxSingleMove, Math.min(maxSingleMove, priceChange));
+          
+          // 12. Daily Volatility Limits
           const currentDailyChange = Math.abs((stock.price - stock.open) / stock.open);
-          const changeMultiplier = currentDailyChange > MARKET_SIMULATION.maxDailyChange ? 0.1 : 1;
+          const dailyVolatilityLimit = stockVolatility * 15; // 15x daily volatility limit
+          const dailyMultiplier = currentDailyChange > dailyVolatilityLimit ? 0.1 : 1;
+          
+          const newPrice2 = stock.price * (1 + constrainedChange * dailyMultiplier);
+          
+          // Final safety bounds and update market state
+          const finalPrice = Math.max(0.01, parseFloat(newPrice2.toFixed(2)));
+          stock.marketState = ms;
 
-          const newPrice = stock.price * (1 + totalChange * changeMultiplier);
-
-          // Enhanced price bounds
-          const maxChangePerUpdate = stockVolatility * 10; // Allow larger single moves occasionally
-          const minPrice = stock.price * (1 - maxChangePerUpdate);
-          const maxPrice = stock.price * (1 + maxChangePerUpdate);
-          const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
-          const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
-
-          const newHigh = Math.max(stock.high, newPrice2);
-          const newLow = Math.min(stock.low, newPrice2);
+          const newHigh = Math.max(stock.high, finalPrice);
+          const newLow = Math.min(stock.low, finalPrice);
 
           // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
           const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
@@ -751,7 +898,7 @@ const ATLStockExchange = () => {
 
           if (isNewDay || newHistory.length === 0) {
             // Generate fresh chart for new day AND reset open price
-            newHistory = generateDailyChart(newPrice2, stock.ticker);
+            newHistory = generateDailyChart(finalPrice, stock.ticker);
             newOpen = stock.price; // Set today's opening price to current price
           } else {
             // Only add new point if we're exactly at a 5-minute boundary
@@ -772,7 +919,7 @@ const ATLStockExchange = () => {
 
               newHistory.push({
                 time: timeLabel,
-                price: newPrice2,
+                price: finalPrice,
                 volume: Math.floor(Math.random() * 1000000 + 500000),
                 isLive: true
               });
@@ -781,18 +928,18 @@ const ATLStockExchange = () => {
               const lastIndex = newHistory.length - 1;
               newHistory[lastIndex] = {
                 ...newHistory[lastIndex],
-                price: newPrice2,
+                price: finalPrice,
                 isLive: true
               };
             }
           }
 
           const sharesOutstanding = stock.marketCap / stock.price;
-          const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
+          const newMarketCap = Math.max(50000000000, sharesOutstanding * finalPrice);
 
           return {
             ...stock,
-            price: newPrice2,
+            price: finalPrice,
             open: newOpen,
             high: newHigh,
             low: newLow,
@@ -819,156 +966,315 @@ const ATLStockExchange = () => {
   }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
 
+  // PROFESSIONAL WEEKLY CHART GENERATION - Realistic Multi-Day Patterns
   function generateExtendedHistory(basePrice, seedKey = '') {
     const data = [];
 
     // Safety check for input parameters
     if (!isFinite(basePrice) || basePrice <= 0) {
-      basePrice = 100; // Default fallback price
+      basePrice = 100;
     }
 
-    // Simple seeded random number generator for consistent but natural randomness
-    const createSeededRandom = (seed) => {
-      let state = seed;
-      return () => {
-        state = (state * 1664525 + 1013904223) % 4294967296;
-        return state / 4294967296;
-      };
-    };
-
+    // Advanced multi-generator seeded random system
     const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    const random = createSeededRandom(baseSeed);
+    let rng1 = baseSeed;
+    let rng2 = baseSeed * 17;
+    let rng3 = baseSeed * 31;
+    let rng4 = baseSeed * 97;
+    
+    const seededRandom1 = () => { rng1 = (rng1 * 1664525 + 1013904223) % 4294967296; return rng1 / 4294967296; };
+    const seededRandom2 = () => { rng2 = (rng2 * 1103515245 + 12345) % 4294967296; return rng2 / 4294967296; };
+    const seededRandom3 = () => { rng3 = (rng3 * 134775813 + 1) % 4294967296; return rng3 / 4294967296; };
+    const seededRandom4 = () => { rng4 = (rng4 * 214013 + 2531011) % 4294967296; return rng4 / 4294967296; };
 
-    let price = basePrice * (0.92 + random() * 0.16); // More variation in starting price
-    let momentum = 0;
+    // Market state variables
+    let price = basePrice * (0.88 + seededRandom1() * 0.24); // ±12% starting variation
+    let weeklyTrend = (seededRandom2() - 0.5) * 0.02; // Weekly trend bias
+    let volatilityRegime = 0.8 + seededRandom3() * 0.4; // Volatility clustering
+    let marketSentiment = seededRandom4() - 0.5; // Overall market mood
+    let institutionalActivity = 0;
+    let newsImpact = 0;
 
-    // Generate 7 days of data with hourly intervals for better resolution
+    // Generate 7 days of realistic market data
     for (let day = 0; day < 7; day++) {
-      for (let hour = 0; hour < 24; hour += 2) { // Every 2 hours for better detail
-        // Market behavior changes throughout the day
-        const timeOfDay = hour / 24;
-        const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
+      const dayOfWeek = (getEasternTime().getDay() - 7 + day) % 7;
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      
+      // Weekend effects (reduced activity, gap potential)
+      if (isWeekend) {
+        // Minimal weekend activity, potential gaps
+        const weekendGap = (seededRandom1() - 0.5) * 0.005; // Small weekend gaps
+        price *= (1 + weekendGap);
+        
+        const date = getEasternTime();
+        date.setDate(date.getDate() - (7 - day));
+        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} Weekend`;
+        
+        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
+        continue;
+      }
 
-        // Simple realistic randomization
-        const r1 = random();
-
-        // Random walk with momentum
-        const randomChange = (r1 - 0.5) * 2; // -1 to 1
-        momentum = momentum * 0.8 + randomChange * 0.2;
-
-        // Market activity affects volatility
-        const volatility = 0.01 + marketActivity * 0.005;
-
-        // Calculate price change
-        const change = momentum * volatility;
-
-        price = price * (1 + change);
-
-        // Safety check to prevent Infinity or NaN values
-        if (!isFinite(price) || price <= 0) {
-          price = basePrice; // Reset to base price if invalid
+      // Weekday trading simulation - hourly intervals during market hours
+      for (let hour = 9; hour <= 16; hour++) {
+        const sessionProgress = (hour - 9) / 7; // 0 to 1 through trading day
+        
+        // Realistic intraday patterns
+        const openingVolatility = hour === 9 ? 1.8 : 1.0;
+        const closingVolatility = hour === 16 ? 1.5 : 1.0;
+        const lunchLull = hour >= 12 && hour <= 14 ? 0.7 : 1.0;
+        const intradayMultiplier = openingVolatility * closingVolatility * lunchLull;
+        
+        // Market microstructure effects
+        
+        // 1. Institutional flow (block trades, algorithmic trading)
+        if (seededRandom1() > 0.95) { // 5% chance of institutional activity
+          institutionalActivity = (seededRandom2() - 0.5) * 0.008;
         }
-
-        // Keep within reasonable bounds but allow more movement
-        price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.35, price));
+        institutionalActivity *= 0.85; // Decay institutional impact
+        
+        // 2. News and events simulation
+        if (seededRandom3() > 0.98) { // 2% chance of news impact
+          newsImpact = (seededRandom4() - 0.5) * 0.015;
+        }
+        newsImpact *= 0.7; // News impact decays quickly
+        
+        // 3. Market sentiment evolution
+        const sentimentChange = (seededRandom1() - 0.5) * 0.1;
+        marketSentiment = marketSentiment * 0.95 + sentimentChange * 0.05;
+        marketSentiment = Math.max(-1, Math.min(1, marketSentiment));
+        
+        // 4. Volatility clustering (GARCH-like behavior)
+        const recentVolatility = data.length > 0 ? Math.abs(Math.log(price / data[data.length - 1].price)) : 0;
+        volatilityRegime = 0.1 + 0.88 * volatilityRegime + 0.02 * recentVolatility;
+        volatilityRegime = Math.min(2.5, volatilityRegime);
+        
+        // 5. Weekly trend persistence
+        const trendDecay = 0.98;
+        weeklyTrend *= trendDecay;
+        if (seededRandom2() > 0.9) { // 10% chance of trend change
+          weeklyTrend += (seededRandom3() - 0.5) * 0.01;
+        }
+        
+        // 6. Advanced random walk with fat tails
+        const normalRandom = () => {
+          const u1 = seededRandom1();
+          const u2 = seededRandom2();
+          return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        };
+        
+        // Student's t-distribution for fat tails (more realistic than normal)
+        const fatTailRandom = () => {
+          const normal = normalRandom();
+          const chi2 = -2 * Math.log(seededRandom3()); // Chi-squared approximation
+          return normal / Math.sqrt(chi2 / 3); // t-distribution with 3 degrees of freedom
+        };
+        
+        // Combine all market forces
+        const baseHourlyVolatility = 0.003; // Base hourly volatility
+        const totalVolatility = baseHourlyVolatility * volatilityRegime * intradayMultiplier;
+        
+        const priceChange = 
+          fatTailRandom() * totalVolatility * 0.6 + // Random walk with fat tails
+          weeklyTrend * 0.3 + // Weekly trend
+          marketSentiment * 0.0005 + // Market sentiment
+          institutionalActivity + // Institutional flow
+          newsImpact + // News impact
+          (seededRandom4() - 0.5) * 0.001; // Additional noise
+        
+        price *= (1 + priceChange);
+        
+        // Realistic constraints
+        const maxHourlyMove = 0.05; // 5% max hourly move
+        const prevPrice = data.length > 0 ? data[data.length - 1].price : basePrice;
+        price = Math.max(prevPrice * (1 - maxHourlyMove), Math.min(prevPrice * (1 + maxHourlyMove), price));
+        
+        // Safety checks
+        if (!isFinite(price) || price <= 0) {
+          price = prevPrice || basePrice;
+        }
+        
+        // Keep within reasonable weekly bounds
+        price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.45, price));
 
         const date = getEasternTime();
         date.setDate(date.getDate() - (7 - day));
         date.setHours(hour);
 
-        let displayHour = hour;
-        let ampm = 'AM';
-        if (hour === 0) {
-          displayHour = 12;
-          ampm = 'AM';
-        } else if (hour < 12) {
-          displayHour = hour;
-          ampm = 'AM';
-        } else if (hour === 12) {
-          displayHour = 12;
-          ampm = 'PM';
-        } else {
-          displayHour = hour - 12;
-          ampm = 'PM';
-        }
+        let displayHour = hour > 12 ? hour - 12 : hour;
+        let ampm = hour >= 12 ? 'PM' : 'AM';
+        if (hour === 12) displayHour = 12;
 
         const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${displayHour}:00 ${ampm}`;
 
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
+    
     return data;
   }
 
+  // INSTITUTIONAL-GRADE YEARLY CHART GENERATION - Long-term Market Dynamics
   function generateYearHistory(basePrice, seedKey = '') {
     const data = [];
 
     // Safety check for input parameters
     if (!isFinite(basePrice) || basePrice <= 0) {
-      basePrice = 100; // Default fallback price
+      basePrice = 100;
     }
 
-    // Use seeded randomization for consistency
+    // Professional multi-seed random system for complex market simulation
     const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    let seedCounter = 0;
-    const seededRandom = () => {
-      seedCounter++;
-      const x = Math.sin(baseSeed + seedCounter) * 10000;
-      return x - Math.floor(x);
-    };
+    let rng1 = baseSeed;
+    let rng2 = baseSeed * 23;
+    let rng3 = baseSeed * 47;
+    let rng4 = baseSeed * 73;
+    let rng5 = baseSeed * 101;
+    
+    const seededRandom1 = () => { rng1 = (rng1 * 1664525 + 1013904223) % 4294967296; return rng1 / 4294967296; };
+    const seededRandom2 = () => { rng2 = (rng2 * 1103515245 + 12345) % 4294967296; return rng2 / 4294967296; };
+    const seededRandom3 = () => { rng3 = (rng3 * 134775813 + 1) % 4294967296; return rng3 / 4294967296; };
+    const seededRandom4 = () => { rng4 = (rng4 * 214013 + 2531011) % 4294967296; return rng4 / 4294967296; };
+    const seededRandom5 = () => { rng5 = (rng5 * 16807) % 2147483647; return rng5 / 2147483647; };
 
-    let price = basePrice * (0.80 + seededRandom() * 0.40); // More variation in starting price
-    let longTermTrend = (seededRandom() - 0.5) * 0.03; // Overall yearly trend
-    let momentum = 0;
+    // Long-term market state variables
+    let price = basePrice * (0.75 + seededRandom1() * 0.50); // ±25% starting variation
+    let fundamentalTrend = (seededRandom2() - 0.5) * 0.04; // Annual fundamental growth/decline
+    let marketCycle = seededRandom3() * 2 * Math.PI; // Market cycle phase
+    let volatilityRegime = 0.5 + seededRandom4() * 1.0; // Long-term volatility state
+    let economicSentiment = seededRandom5() - 0.5; // Macro economic sentiment
+    let sectorRotation = 0; // Sector-specific rotation effects
+    let institutionalPositioning = 0; // Large fund positioning
+    
+    // Macro-economic factors
+    let interestRateCycle = seededRandom1() * 2 * Math.PI;
+    let inflationExpectations = 0.02 + (seededRandom2() - 0.5) * 0.03;
+    let geopoliticalRisk = seededRandom3() * 0.5;
 
-    // Generate 12 months of data with more frequent intervals
+    // Generate 12 months of sophisticated market data
     for (let month = 0; month < 12; month++) {
+      // Monthly macro-economic updates
+      if (month % 3 === 0) { // Quarterly updates
+        // Interest rate cycle evolution
+        interestRateCycle += (seededRandom1() - 0.5) * 0.5;
+        
+        // Inflation expectations drift
+        inflationExpectations += (seededRandom2() - 0.5) * 0.005;
+        inflationExpectations = Math.max(0, Math.min(0.08, inflationExpectations));
+        
+        // Geopolitical risk updates
+        geopoliticalRisk = geopoliticalRisk * 0.8 + seededRandom3() * 0.2;
+        
+        // Economic sentiment shifts
+        const sentimentShock = seededRandom4() > 0.9 ? (seededRandom5() - 0.5) * 0.4 : 0;
+        economicSentiment = economicSentiment * 0.9 + sentimentShock;
+        economicSentiment = Math.max(-1, Math.min(1, economicSentiment));
+      }
+
       for (let week = 0; week < 4; week++) {
-        // Seasonal effects (stronger in certain months)
-        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.015;
-
-        // Market cycles and events
-        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.008;
-
-        // Enhanced randomization
-        const random1 = seededRandom();
-        const random2 = seededRandom();
-        const random3 = seededRandom();
-
-        // Momentum over longer periods
-        momentum = momentum * 0.85 + (random1 - 0.5) * 0.8;
-
-        // Volatility varies by month (higher in certain periods)
-        const baseVolatility = 0.015 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.01;
-        const volatilityCluster = Math.abs(random2 - 0.5) * 0.012;
-        const totalVolatility = baseVolatility + volatilityCluster;
-
-        // Trend can shift quarterly
-        if (week === 0 && month % 3 === 0 && random3 > 0.7) {
-          longTermTrend = (seededRandom() - 0.5) * 0.03;
+        const weekOfYear = month * 4 + week;
+        const yearProgress = weekOfYear / 48;
+        
+        // 1. Seasonal Effects (January effect, summer doldrums, year-end rallies)
+        let seasonalFactor = 0;
+        if (month === 0) seasonalFactor += 0.008; // January effect
+        if (month >= 5 && month <= 7) seasonalFactor -= 0.003; // Summer doldrums
+        if (month === 11) seasonalFactor += 0.005; // Year-end rally
+        seasonalFactor += Math.sin(month * Math.PI / 6) * 0.004; // General seasonal pattern
+        
+        // 2. Market Cycle Dynamics (Bull/Bear market phases)
+        marketCycle += (seededRandom1() - 0.5) * 0.1;
+        const cyclicalTrend = Math.sin(marketCycle) * 0.006;
+        
+        // 3. Volatility Clustering and Regime Changes
+        const recentVolatility = data.length > 0 ? 
+          Math.abs(Math.log(price / data[Math.max(0, data.length - 4)].price)) : 0.02;
+        volatilityRegime = 0.05 + 0.92 * volatilityRegime + 0.03 * recentVolatility;
+        volatilityRegime = Math.min(3.0, volatilityRegime);
+        
+        // Volatility regime shifts (bear market spikes)
+        if (seededRandom2() > 0.98) {
+          volatilityRegime *= 1.5 + seededRandom3();
         }
-
-        // Major market events (rare but impactful)
+        
+        // 4. Fundamental Trend Evolution
+        if (seededRandom4() > 0.95) { // 5% chance of fundamental shift
+          const trendShift = (seededRandom5() - 0.5) * 0.02;
+          fundamentalTrend = fundamentalTrend * 0.8 + trendShift * 0.2;
+          fundamentalTrend = Math.max(-0.06, Math.min(0.06, fundamentalTrend));
+        }
+        
+        // 5. Sector Rotation Effects
+        const sectorCycle = Math.sin(weekOfYear * 0.3) * 0.003;
+        sectorRotation = sectorRotation * 0.95 + sectorCycle * 0.05;
+        
+        // 6. Institutional Positioning (momentum and contrarian effects)
+        const momentumSignal = data.length >= 12 ? 
+          (price - data[data.length - 12].price) / data[data.length - 12].price : 0;
+        const institutionalResponse = Math.tanh(momentumSignal * 5) * 0.002; // Momentum following
+        institutionalPositioning = institutionalPositioning * 0.9 + institutionalResponse * 0.1;
+        
+        // 7. Major Market Events and Shocks
         let eventImpact = 0;
-        if (random3 > 0.98) {
-          eventImpact = (seededRandom() - 0.5) * 0.15; // Major event
-        } else if (random3 > 0.95) {
-          eventImpact = (seededRandom() - 0.5) * 0.08; // Minor event
+        const eventRoll = seededRandom1();
+        if (eventRoll > 0.995) { // 0.5% chance - Major crisis
+          eventImpact = (seededRandom2() - 0.7) * 0.25; // Bias toward negative
+        } else if (eventRoll > 0.985) { // 1% chance - Significant event
+          eventImpact = (seededRandom3() - 0.5) * 0.12;
+        } else if (eventRoll > 0.97) { // 1.5% chance - Minor event
+          eventImpact = (seededRandom4() - 0.5) * 0.06;
         }
-
-        // Combine all factors
-        const noise = (seededRandom() - 0.5) * 2;
-        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.3 + totalVolatility * noise + eventImpact;
-
-        price = price * (1 + change);
-
-        // Safety check to prevent Infinity or NaN values
+        
+        // 8. Macro-economic Impact
+        const interestRateImpact = -Math.sin(interestRateCycle) * 0.003; // Inverse relationship
+        const inflationImpact = (0.03 - inflationExpectations) * 0.1; // Optimal inflation around 3%
+        const geopoliticalImpact = -geopoliticalRisk * 0.002;
+        
+        // 9. Advanced Random Walk with Levy Flights (fat tails and jumps)
+        const normalRandom = () => {
+          const u1 = seededRandom1();
+          const u2 = seededRandom2();
+          return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        };
+        
+        // Levy stable distribution for realistic market returns
+        const levyRandom = () => {
+          if (seededRandom3() > 0.95) { // 5% chance of jump
+            return normalRandom() * 3; // Large move
+          }
+          return normalRandom(); // Normal move
+        };
+        
+        // 10. Combine All Market Forces
+        const baseWeeklyVolatility = 0.008; // Base weekly volatility
+        const totalVolatility = baseWeeklyVolatility * volatilityRegime;
+        
+        const weeklyReturn = 
+          levyRandom() * totalVolatility * 0.5 + // Random walk with jumps
+          fundamentalTrend / 52 + // Weekly fundamental trend
+          seasonalFactor + // Seasonal effects
+          cyclicalTrend + // Market cycle
+          sectorRotation + // Sector rotation
+          institutionalPositioning + // Institutional flow
+          economicSentiment * 0.001 + // Economic sentiment
+          interestRateImpact + // Interest rate impact
+          inflationImpact + // Inflation impact
+          geopoliticalImpact + // Geopolitical risk
+          eventImpact; // Event-driven moves
+        
+        price *= (1 + weeklyReturn);
+        
+        // Realistic constraints with circuit breakers
+        const maxWeeklyMove = 0.15; // 15% max weekly move
+        const prevPrice = data.length > 0 ? data[data.length - 1].price : basePrice;
+        price = Math.max(prevPrice * (1 - maxWeeklyMove), Math.min(prevPrice * (1 + maxWeeklyMove), price));
+        
+        // Safety checks
         if (!isFinite(price) || price <= 0) {
-          price = basePrice; // Reset to base price if invalid
+          price = prevPrice || basePrice;
         }
-
-        // Keep within reasonable bounds but allow significant movement over a year
-        price = Math.max(basePrice * 0.40, Math.min(basePrice * 2.50, price));
+        
+        // Long-term bounds (allow significant yearly movement)
+        price = Math.max(basePrice * 0.30, Math.min(basePrice * 3.50, price));
 
         const date = getEasternTime();
         date.setMonth(date.getMonth() - (12 - month));
@@ -979,11 +1285,13 @@ const ATLStockExchange = () => {
           date.setDate(28);
         }
 
-        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dateStr = `${monthNames[date.getMonth()]} ${date.getDate()}`;
 
         data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
       }
     }
+    
     return data;
   }
 
