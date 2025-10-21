@@ -781,7 +781,6 @@ const ATLStockExchange = () => {
           // Skip live updates for stocks that were recently traded (within 60 seconds)
           const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
           if (timeSinceLastTrade < 60000) {
-            // console.log(`Skipping live update for ${stock.ticker} - traded ${timeSinceLastTrade}ms ago`);
             return stock; // Don't update price if recently traded
           }
 
@@ -791,7 +790,8 @@ const ATLStockExchange = () => {
           }
 
           // Enhanced realistic price movement algorithm with smooth start
-          const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
+          const tickerSeed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const timeSeed = Date.now() + tickerSeed;
           let seed = timeSeed % 1000000;
           const simpleRandom = () => {
             seed = (seed * 1664525 + 1013904223) % 4294967296;
@@ -816,7 +816,8 @@ const ATLStockExchange = () => {
 
           // Base volatility with stock-specific characteristics and smooth start
           const baseStockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
-          const stockVolatility = baseStockVolatility * startSmoothingFactor; // Apply smooth start
+          const smoothingFactor = Math.max(0.1, startSmoothingFactor); // Ensure minimum 10% volatility
+          const stockVolatility = baseStockVolatility * smoothingFactor; // Apply smooth start
           const sectorVolatility = stock.marketCap > 1000000000000 ? 0.8 : 1.2; // Large caps less volatile
 
           // PROFESSIONAL REAL-TIME PRICE SIMULATION - Institutional-Grade Market Dynamics
@@ -837,7 +838,7 @@ const ATLStockExchange = () => {
             };
           }
 
-          // Validate and sanitize market state
+          // Validate and sanitize market state - ensure all values are valid
           const ms = stock.marketState;
           ms.orderBookImbalance = isFinite(ms.orderBookImbalance) ? Math.max(-1, Math.min(1, ms.orderBookImbalance)) : 0;
           ms.institutionalFlow = isFinite(ms.institutionalFlow) ? Math.max(-2, Math.min(2, ms.institutionalFlow)) : 0;
@@ -846,6 +847,9 @@ const ATLStockExchange = () => {
           ms.liquidityDepth = isFinite(ms.liquidityDepth) ? Math.max(0.1, Math.min(2, ms.liquidityDepth)) : 1;
           ms.newsImpact = isFinite(ms.newsImpact) ? Math.max(-0.05, Math.min(0.05, ms.newsImpact)) : 0;
           ms.algorithmicPressure = isFinite(ms.algorithmicPressure) ? Math.max(-0.01, Math.min(0.01, ms.algorithmicPressure)) : 0;
+
+          // Ensure market making spread is valid
+          ms.marketMakingSpread = isFinite(ms.marketMakingSpread) ? Math.max(0.0001, Math.min(0.01, ms.marketMakingSpread)) : 0.001;
 
           // 1. Market Microstructure - Order Book Dynamics
           const flowChange = (simpleRandom() - 0.5) * 0.4;
@@ -967,9 +971,20 @@ const ATLStockExchange = () => {
           // Final safety bounds and update market state
           const finalPrice = Math.max(0.01, parseFloat(newPrice2.toFixed(2)));
 
-          // Validate finalPrice one more time
+          // Validate finalPrice one more time - be more lenient
           if (!isFinite(finalPrice) || finalPrice <= 0 || isNaN(finalPrice)) {
-            return stock; // Return unchanged stock if price is invalid
+            // Use a small random change instead of no change
+            const fallbackChange = (Math.random() - 0.5) * 0.001; // ±0.1% change
+            const fallbackPrice = stock.price * (1 + fallbackChange);
+            const validFallbackPrice = Math.max(0.01, parseFloat(fallbackPrice.toFixed(2)));
+
+            return {
+              ...stock,
+              price: validFallbackPrice,
+              high: Math.max(stock.high, validFallbackPrice),
+              low: Math.min(stock.low, validFallbackPrice),
+              lastUpdate: Date.now()
+            };
           }
 
           stock.marketState = ms;
