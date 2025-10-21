@@ -84,27 +84,28 @@ const isMarketOpen = () => {
 
 
 // BRAND NEW CLEAN CHART SYSTEM
-function generateDailyChart(currentPrice, ticker) {
+function generateDailyChart(currentPrice, ticker, existingHistory = []) {
   const now = getEasternTime();
-  const data = [];
-
+  
   // Create seed for consistent data
   const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  let rng = seed + now.getDate(); // Different each day
+  let rng = seed + now.getDate();
   const seededRandom = () => {
     rng = (rng * 1664525 + 1013904223) % 4294967296;
     return rng / 4294967296;
   };
 
-  // Generate data from 12:00 AM to current time in 10-minute intervals
+  // Generate data from 12:00 AM to current time in 2-minute intervals
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const totalPoints = Math.floor(currentMinutes / 10) + 1;
-
-  // Start price (slight variation from current)
-  let price = currentPrice * (0.995 + seededRandom() * 0.01); // ±0.5% from current
-
-  for (let i = 0; i < totalPoints; i++) {
-    const minutes = i * 10; // Every 10 minutes
+  const targetPoints = Math.floor(currentMinutes / 2) + 1; // Every 2 minutes
+  
+  // Use existing history if available, otherwise start fresh
+  let data = [...existingHistory];
+  
+  // Fill in missing points up to current time
+  while (data.length < targetPoints) {
+    const pointIndex = data.length;
+    const minutes = pointIndex * 2; // Every 2 minutes
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
 
@@ -113,21 +114,35 @@ function generateDailyChart(currentPrice, ticker) {
     let ampm = hours < 12 ? 'AM' : 'PM';
     const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
 
-    // Realistic price movement - very small changes
-    if (i > 0) {
-      const change = (seededRandom() - 0.5) * 0.002; // ±0.1% max change per 10min
-      price = price * (1 + change);
-    }
-
-    // For the last point, use actual current price
-    if (i === totalPoints - 1) {
-      price = currentPrice;
+    // More realistic price progression
+    let price;
+    if (pointIndex === 0) {
+      // Start of day - slight variation from current price
+      price = currentPrice * (0.998 + seededRandom() * 0.004); // ±0.2% from current
+    } else {
+      // Build on previous price with realistic movement
+      const prevPrice = data[pointIndex - 1].price;
+      
+      // Market activity varies by time of day
+      const hourOfDay = hours;
+      const isMarketHours = hourOfDay >= 9 && hourOfDay <= 16;
+      const activityMultiplier = isMarketHours ? 1.5 : 0.3;
+      
+      // Very small realistic movements
+      const baseVolatility = 0.0003 * activityMultiplier; // 0.03% during market hours
+      const randomWalk = (seededRandom() - 0.5) * baseVolatility;
+      
+      // Slight mean reversion toward current price
+      const meanReversion = (currentPrice - prevPrice) * 0.001;
+      
+      price = prevPrice * (1 + randomWalk + meanReversion);
     }
 
     data.push({
       time: timeLabel,
       price: parseFloat(price.toFixed(2)),
-      volume: Math.floor(seededRandom() * 1000000 + 500000)
+      volume: Math.floor(seededRandom() * 1000000 + 500000),
+      isLive: pointIndex === targetPoints - 1
     });
   }
 
@@ -186,7 +201,7 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(8000); // Price update interval in ms - ultra realistic
+  const [updateSpeed, setUpdateSpeed] = useState(5000); // Price update interval in ms - 5 seconds for live updates
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
@@ -574,43 +589,73 @@ const ATLStockExchange = () => {
         // Market activity varies by time of day (very subtle)
         const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.1 : 0.3;
 
-        // Extremely tiny volatility for realistic movements
-        const baseVolatility = 0.00002 * marketActivityMultiplier; // 0.002% max change per update
+        // Ultra-realistic tiny volatility like real stocks
+        const baseVolatility = 0.000005 * marketActivityMultiplier; // 0.0005% max change per update
 
-        // Very subtle random walk
+        // Very subtle random walk with momentum
         const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
+        
+        // Add slight momentum for more realistic movement
+        const momentum = stock.lastMomentum || 0;
+        const newMomentum = momentum * 0.7 + randomComponent * 0.3;
 
-        // Most updates result in no change (like real stocks)
-        const shouldMove = simpleRandom() > 0.85; // Only move 15% of the time
-        const totalChange = shouldMove ? randomComponent : 0;
+        // Most updates result in tiny changes (like real stocks)
+        const shouldMove = simpleRandom() > 0.7; // 30% chance of movement
+        const totalChange = shouldMove ? (randomComponent + newMomentum) : newMomentum * 0.1;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Ultra-tight price bounds for realistic movements
-        const minPrice = stock.price * 0.99998; // 0.002% down limit per update
-        const maxPrice = stock.price * 1.00002; // 0.002% up limit per update
+        // Extremely tight bounds for ultra-realistic movements
+        const minPrice = stock.price * 0.9999; // 0.01% down limit per update
+        const maxPrice = stock.price * 1.0001; // 0.01% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        // CLEAN CHART SYSTEM: Reset at midnight, generate fresh daily chart
-        const isNewDay = now.getHours() === 0 && now.getMinutes() < 10;
-        let newHistory;
+        // IMPROVED CHART SYSTEM: 2-minute intervals, live updates every 5 seconds
+        const isNewDay = now.getHours() === 0 && now.getMinutes() < 2;
+        let newHistory = [...(stock.history || [])];
 
-        if (isNewDay || !stock.history || stock.history.length === 0) {
-          // Generate fresh chart for new day or if no history exists
+        if (isNewDay || newHistory.length === 0) {
+          // Generate fresh chart for new day
           newHistory = generateDailyChart(newPrice2, stock.ticker);
         } else {
-          // Update existing chart with current price
-          newHistory = generateDailyChart(newPrice2, stock.ticker);
+          // Check if we need a new 2-minute point
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          const expectedPoints = Math.floor(currentMinutes / 2) + 1;
+          
+          if (newHistory.length < expectedPoints) {
+            // Add new 2-minute point
+            const minutes = (newHistory.length) * 2;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+            let ampm = hours < 12 ? 'AM' : 'PM';
+            const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
+            
+            newHistory.push({
+              time: timeLabel,
+              price: newPrice2,
+              volume: Math.floor(Math.random() * 1000000 + 500000),
+              isLive: true
+            });
+          } else if (newHistory.length > 0) {
+            // Update the last point with current live price (every 5 seconds)
+            const lastIndex = newHistory.length - 1;
+            newHistory[lastIndex] = {
+              ...newHistory[lastIndex],
+              price: newPrice2,
+              isLive: true
+            };
+          }
         }
 
         const sharesOutstanding = stock.marketCap / stock.price;
         const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
 
-        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
+        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap, lastMomentum: newMomentum };
       });
 
       const stocksRef = ref(database, 'stocks');
