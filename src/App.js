@@ -227,7 +227,7 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(3000); // Price update interval in ms - more realistic
+  const [updateSpeed, setUpdateSpeed] = useState(5000); // Price update interval in ms - very realistic
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
@@ -466,14 +466,21 @@ const ATLStockExchange = () => {
           setError(null);
         } else if (!initialized) {
           const initialStocks = [
-            { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, volumeMultiplier: 0.3, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
-            { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, volumeMultiplier: 1.8, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
-            { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, volumeMultiplier: 0.7, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
-            { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, volumeMultiplier: 2.5, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
-            { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, volumeMultiplier: 1.2, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
-            { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, volumeMultiplier: 3.1, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
-            { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
-            { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 4.2, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
+            { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
+            { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
+            { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
+            { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
+            { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
+            { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
+            { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
+            { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
+            { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
+            { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
+            { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
+            { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
+            { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
+            { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
+            { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
           ];
           set(stocksRef, initialStocks);
         }
@@ -488,7 +495,7 @@ const ATLStockExchange = () => {
         setUsers(data);
       } else if (!initialized) {
         const initialUsers = {
-          'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
+          'demo': { password: 'demo', balance: 100000, portfolio: { HD: 10, KO: 25 } },
           'admin': { password: 'admin', balance: 1000000, portfolio: {} }
         };
         set(usersRef, initialUsers);
@@ -602,39 +609,27 @@ const ATLStockExchange = () => {
           return seed / 4294967296;
         };
 
-        // More realistic price movements with momentum and mean reversion
+        // Very subtle, realistic price movements
         const timeOfDay = now.getHours() + now.getMinutes() / 60;
 
-        // Market activity varies by time of day (higher during market hours)
-        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.5 : 0.3;
+        // Market activity varies by time of day (much more subtle)
+        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.2 : 0.5;
 
-        // Base volatility (much smaller for realism)
-        const baseVolatility = 0.0002 * marketActivityMultiplier; // 0.02% max change per update
+        // Extremely small volatility for realistic movements
+        const baseVolatility = 0.00005 * marketActivityMultiplier; // 0.005% max change per update
 
-        // Add some momentum (trending behavior)
-        const priceHistory = stock.history || [];
-        let momentum = 0;
-        if (priceHistory.length >= 2) {
-          const recent = priceHistory.slice(-2);
-          momentum = (recent[1].price - recent[0].price) / recent[0].price;
-          momentum = Math.max(-0.001, Math.min(0.001, momentum * 0.3)); // Dampen momentum
-        }
-
-        // Random walk component
+        // Very subtle random walk
         const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
 
-        // Mean reversion (tendency to return to opening price over time)
-        const distanceFromOpen = (stock.price - stock.open) / stock.open;
-        const meanReversion = -distanceFromOpen * 0.00001; // Very weak mean reversion
-
-        // Combine all factors
-        const totalChange = randomComponent + momentum + meanReversion;
+        // Occasional tiny movements (most updates result in no change)
+        const shouldMove = simpleRandom() > 0.7; // Only move 30% of the time
+        const totalChange = shouldMove ? randomComponent : 0;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Realistic price bounds (prevent extreme movements but allow natural fluctuation)
-        const minPrice = stock.price * 0.9995; // 0.05% down limit per update
-        const maxPrice = stock.price * 1.0005; // 0.05% up limit per update
+        // Very tight price bounds for realistic movements
+        const minPrice = stock.price * 0.99995; // 0.005% down limit per update
+        const maxPrice = stock.price * 1.00005; // 0.005% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
@@ -1192,6 +1187,18 @@ const ATLStockExchange = () => {
     if (sharesBought > availableShares) {
       const availablePercent = ((availableShares / totalShares) * 100).toFixed(2);
       setNotifications(prev => [...prev, `⚠️ Only ${Math.floor(availableShares)} shares available (${availablePercent}% of company). Total owned by all users: ${((totalOwnedShares / totalShares) * 100).toFixed(1)}%`]);
+      return;
+    }
+
+    // Check 30% ownership limit per user
+    const currentUserShares = (users[user].portfolio || {})[selectedStock.ticker] || 0;
+    const newUserShares = currentUserShares + sharesBought;
+    const newUserOwnershipPercent = (newUserShares / totalShares) * 100;
+
+    if (newUserOwnershipPercent > 30) {
+      const maxAllowedShares = Math.floor(totalShares * 0.3) - currentUserShares;
+      const currentOwnershipPercent = (currentUserShares / totalShares) * 100;
+      setNotifications(prev => [...prev, `⚠️ Cannot exceed 30% ownership of any stock. You currently own ${currentOwnershipPercent.toFixed(1)}%. Maximum additional shares you can buy: ${Math.max(0, maxAllowedShares)}`]);
       return;
     }
 
@@ -2503,14 +2510,21 @@ const ATLStockExchange = () => {
                     onClick={() => {
                       if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
                         const initialStocks = [
-                          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, volumeMultiplier: 0.3, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
-                          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, volumeMultiplier: 1.8, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
-                          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, volumeMultiplier: 0.7, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
-                          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, volumeMultiplier: 2.5, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
-                          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, volumeMultiplier: 1.2, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
-                          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, volumeMultiplier: 3.1, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
-                          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
-                          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 4.2, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
+                          { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
+                          { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
+                          { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
+                          { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
+                          { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
+                          { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
+                          { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
+                          { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
+                          { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
+                          { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
+                          { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
+                          { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
+                          { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
+                          { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
+                          { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
                         ];
                         const stocksRef = ref(database, 'stocks');
                         set(stocksRef, initialStocks);
