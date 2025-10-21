@@ -156,6 +156,11 @@ const getMarketStatus = () => {
 function generateDailyChart(currentPrice, ticker, existingHistory = []) {
   const now = getEasternTime();
 
+  // Safety check for input parameters
+  if (!isFinite(currentPrice) || currentPrice <= 0) {
+    currentPrice = 100; // Default fallback price
+  }
+
   // Create seed for consistent data
   const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   let rng = seed + now.getDate();
@@ -188,6 +193,11 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
     if (pointIndex === 0) {
       // Start of day - slight variation from current price
       price = currentPrice * (0.998 + seededRandom() * 0.004); // ±0.2% from current
+
+      // Safety check for initial price
+      if (!isFinite(price) || price <= 0) {
+        price = currentPrice || 100; // Fallback to current price or $100
+      }
     } else {
       // Build on previous price with realistic movement
       const prevPrice = data[pointIndex - 1].price;
@@ -208,6 +218,11 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
       const momentum = (data.length > 1 && pointIndex > 1) ? (prevPrice - data[pointIndex - 2].price) * 0.2 : 0;
 
       price = prevPrice * (1 + randomWalk + meanReversion + momentum);
+    }
+
+    // Safety checks to prevent Infinity or NaN values
+    if (!isFinite(price) || price <= 0) {
+      price = currentPrice; // Fallback to current price
     }
 
     data.push({
@@ -807,6 +822,11 @@ const ATLStockExchange = () => {
   function generateExtendedHistory(basePrice, seedKey = '') {
     const data = [];
 
+    // Safety check for input parameters
+    if (!isFinite(basePrice) || basePrice <= 0) {
+      basePrice = 100; // Default fallback price
+    }
+
     // Simple seeded random number generator for consistent but natural randomness
     const createSeededRandom = (seed) => {
       let state = seed;
@@ -844,6 +864,11 @@ const ATLStockExchange = () => {
 
         price = price * (1 + change);
 
+        // Safety check to prevent Infinity or NaN values
+        if (!isFinite(price) || price <= 0) {
+          price = basePrice; // Reset to base price if invalid
+        }
+
         // Keep within reasonable bounds but allow more movement
         price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.35, price));
 
@@ -877,6 +902,11 @@ const ATLStockExchange = () => {
 
   function generateYearHistory(basePrice, seedKey = '') {
     const data = [];
+
+    // Safety check for input parameters
+    if (!isFinite(basePrice) || basePrice <= 0) {
+      basePrice = 100; // Default fallback price
+    }
 
     // Use seeded randomization for consistency
     const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
@@ -931,6 +961,11 @@ const ATLStockExchange = () => {
         const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.3 + totalVolatility * noise + eventImpact;
 
         price = price * (1 + change);
+
+        // Safety check to prevent Infinity or NaN values
+        if (!isFinite(price) || price <= 0) {
+          price = basePrice; // Reset to base price if invalid
+        }
 
         // Keep within reasonable bounds but allow significant movement over a year
         price = Math.max(basePrice * 0.40, Math.min(basePrice * 2.50, price));
