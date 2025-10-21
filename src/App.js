@@ -277,7 +277,7 @@ const ATLStockExchange = () => {
   const [adminSharesQuantity, setAdminSharesQuantity] = useState('');
   const [splitStock, setSplitStock] = useState('');
   const [splitRatio, setSplitRatio] = useState('');
-  const [initialized, setInitialized] = useState(false);
+  const [, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
   const [updateSpeed, setUpdateSpeed] = useState(MARKET_SIMULATION.priceUpdateInterval);
@@ -512,6 +512,9 @@ const ATLStockExchange = () => {
 
 
   useEffect(() => {
+    // Test Firebase connection first
+    console.log('Initializing Firebase connection...');
+
     const stocksRef = ref(database, 'stocks');
     const usersRef = ref(database, 'users');
     const marketStateRef = ref(database, 'marketState');
@@ -522,7 +525,8 @@ const ATLStockExchange = () => {
         if (data) {
           setStocks(data);
           setError(null);
-        } else if (!initialized) {
+        } else {
+          console.log('Database is empty, generating initial stock data...');
           const initialStocks = [
             { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, volumeMultiplier: 0.3, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
             { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, volumeMultiplier: 1.8, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
@@ -536,7 +540,8 @@ const ATLStockExchange = () => {
           set(stocksRef, initialStocks);
         }
       } catch (error) {
-        setError('Failed to load stock data');
+        console.error('Firebase connection error:', error);
+        setError(`Connection Error: ${error.message || 'Failed to load stock data'}`);
       }
     });
 
@@ -544,7 +549,8 @@ const ATLStockExchange = () => {
       const data = snapshot.val();
       if (data) {
         setUsers(data);
-      } else if (!initialized) {
+      } else {
+        console.log('Generating initial user data...');
         const initialUsers = {
           'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
           'admin': { password: 'admin', balance: 1000000, portfolio: {} }
@@ -558,7 +564,8 @@ const ATLStockExchange = () => {
       const data = snapshot.val();
       if (data) {
         setMarketRunning(data.running !== false); // Default to true if not set
-      } else if (!initialized) {
+      } else {
+        console.log('Initializing market state...');
         // Initialize market state as running
         set(marketStateRef, { running: true });
       }
@@ -566,7 +573,7 @@ const ATLStockExchange = () => {
 
     setInitialized(true);
     setLoading(false);
-  }, [initialized]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Listen for trading history
   useEffect(() => {
