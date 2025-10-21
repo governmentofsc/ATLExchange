@@ -86,7 +86,7 @@ const isMarketOpen = () => {
 // BRAND NEW CLEAN CHART SYSTEM
 function generateDailyChart(currentPrice, ticker, existingHistory = []) {
   const now = getEasternTime();
-  
+
   // Create seed for consistent data
   const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   let rng = seed + now.getDate();
@@ -95,24 +95,24 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
     return rng / 4294967296;
   };
 
-  // Generate data from 12:00 AM to current time in 2-minute intervals
+  // Generate data from 12:00 AM to current time in 5-minute intervals (288 points/day)
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const targetPoints = Math.floor(currentMinutes / 2) + 1; // Every 2 minutes
-  
+  const targetPoints = Math.floor(currentMinutes / 5) + 1; // Every 5 minutes
+
   // Use existing history if available, otherwise start fresh
   let data = [...existingHistory];
-  
+
   // Fill in missing points up to current time
   while (data.length < targetPoints) {
     const pointIndex = data.length;
-    const minutes = pointIndex * 2; // Every 2 minutes
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const totalMinutes = pointIndex * 5; // Every 5 minutes
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
 
     // Format time
     let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     let ampm = hours < 12 ? 'AM' : 'PM';
-    const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
+    const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
     // More realistic price progression
     let price;
@@ -122,20 +122,23 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
     } else {
       // Build on previous price with realistic movement
       const prevPrice = data[pointIndex - 1].price;
-      
+
       // Market activity varies by time of day
       const hourOfDay = hours;
       const isMarketHours = hourOfDay >= 9 && hourOfDay <= 16;
       const activityMultiplier = isMarketHours ? 1.5 : 0.3;
-      
-      // Very small realistic movements
-      const baseVolatility = 0.0003 * activityMultiplier; // 0.03% during market hours
+
+      // Realistic movements for 5-minute intervals
+      const baseVolatility = 0.0002 * activityMultiplier; // Appropriate for 5-minute intervals
       const randomWalk = (seededRandom() - 0.5) * baseVolatility;
-      
-      // Slight mean reversion toward current price
-      const meanReversion = (currentPrice - prevPrice) * 0.001;
-      
-      price = prevPrice * (1 + randomWalk + meanReversion);
+
+      // Mean reversion for smooth progression
+      const meanReversion = (currentPrice - prevPrice) * 0.0005;
+
+      // Add momentum for smoother trends
+      const momentum = (data.length > 1 && pointIndex > 1) ? (prevPrice - data[pointIndex - 2].price) * 0.2 : 0;
+
+      price = prevPrice * (1 + randomWalk + meanReversion + momentum);
     }
 
     data.push({
@@ -589,52 +592,57 @@ const ATLStockExchange = () => {
         // Market activity varies by time of day (very subtle)
         const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.1 : 0.3;
 
-        // Ultra-realistic tiny volatility like real stocks
-        const baseVolatility = 0.000005 * marketActivityMultiplier; // 0.0005% max change per update
+        // REALISTIC movements targeting ~1% per day
+        const baseVolatility = 0.00006 * marketActivityMultiplier; // ~0.006% per update for 1% daily movement
 
-        // Very subtle random walk with momentum
-        const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
-        
-        // Add slight momentum for more realistic movement
+        // Smooth momentum-based movement
         const momentum = stock.lastMomentum || 0;
-        const newMomentum = momentum * 0.7 + randomComponent * 0.3;
+        const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
 
-        // Most updates result in tiny changes (like real stocks)
-        const shouldMove = simpleRandom() > 0.7; // 30% chance of movement
-        const totalChange = shouldMove ? (randomComponent + newMomentum) : newMomentum * 0.1;
+        // Momentum persistence for smooth trends
+        const newMomentum = momentum * 0.85 + randomComponent * 0.15;
+
+        // Regular movement for visible changes
+        const shouldMove = simpleRandom() > 0.3; // 70% chance of movement
+        const totalChange = shouldMove ? newMomentum : momentum * 0.9;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Extremely tight bounds for ultra-realistic movements
-        const minPrice = stock.price * 0.9999; // 0.01% down limit per update
-        const maxPrice = stock.price * 1.0001; // 0.01% up limit per update
+        // Reasonable bounds for visible but realistic movements
+        const minPrice = stock.price * 0.9995; // 0.05% down limit per update
+        const maxPrice = stock.price * 1.0005; // 0.05% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        // IMPROVED CHART SYSTEM: 2-minute intervals, live updates every 5 seconds
-        const isNewDay = now.getHours() === 0 && now.getMinutes() < 2;
+        // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
+        const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
         let newHistory = [...(stock.history || [])];
+        let newOpen = stock.open;
 
         if (isNewDay || newHistory.length === 0) {
-          // Generate fresh chart for new day
+          // Generate fresh chart for new day AND reset open price
           newHistory = generateDailyChart(newPrice2, stock.ticker);
+          newOpen = stock.price; // Set today's opening price to current price
         } else {
-          // Check if we need a new 2-minute point
-          const currentMinutes = now.getHours() * 60 + now.getMinutes();
-          const expectedPoints = Math.floor(currentMinutes / 2) + 1;
-          
-          if (newHistory.length < expectedPoints) {
-            // Add new 2-minute point
-            const minutes = (newHistory.length) * 2;
-            const hours = Math.floor(minutes / 60);
-            const mins = minutes % 60;
+          // Only add new point if we're exactly at a 5-minute boundary
+          const currentMinutes = now.getMinutes();
+          const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
+
+          const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
+          const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
+
+          if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
+            // Add new 5-minute point ONLY at exact 5-minute boundaries
+            const totalMinutes = (newHistory.length) * 5;
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
             let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
             let ampm = hours < 12 ? 'AM' : 'PM';
-            const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
-            
+            const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
             newHistory.push({
               time: timeLabel,
               price: newPrice2,
@@ -642,7 +650,7 @@ const ATLStockExchange = () => {
               isLive: true
             });
           } else if (newHistory.length > 0) {
-            // Update the last point with current live price (every 5 seconds)
+            // ALWAYS update the last point with current live price (every 5 seconds)
             const lastIndex = newHistory.length - 1;
             newHistory[lastIndex] = {
               ...newHistory[lastIndex],
@@ -655,7 +663,7 @@ const ATLStockExchange = () => {
         const sharesOutstanding = stock.marketCap / stock.price;
         const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
 
-        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap, lastMomentum: newMomentum };
+        return { ...stock, price: newPrice2, open: newOpen, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap, lastMomentum: newMomentum };
       });
 
       const stocksRef = ref(database, 'stocks');
