@@ -3,14 +3,14 @@ import { getDatabase } from 'firebase/database';
 
 // Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyB52IpHPC3L9rd0EO1Dg1rZpZ-5NhwqNQU",
-  authDomain: "atlstockexchange.firebaseapp.com",
-  databaseURL: "https://atlstockexchange-default-rtdb.firebaseio.com",
-  projectId: "atlstockexchange",
-  storageBucket: "atlstockexchange.firebasestorage.app",
-  messagingSenderId: "873696554973",
-  appId: "1:873696554973:web:1001a16efce42faf195034",
-  measurementId: "G-GBREH8T2Z4"
+  apiKey: "AIzaSyBOcH6M-JMBzROkK4F_-eHQing7ngz9xis",
+  authDomain: "project-5b536.firebaseapp.com",
+  databaseURL: "https://project-5b536-default-rtdb.firebaseio.com",
+  projectId: "project-5b536",
+  storageBucket: "project-5b536.firebasestorage.app",
+  messagingSenderId: "18490330325",
+  appId: "1:18490330325:web:dd336aab1cc2899783a65c",
+  measurementId: "G-L1NZSG10D0"
 };
 
 const app = initializeApp(firebaseConfig);
