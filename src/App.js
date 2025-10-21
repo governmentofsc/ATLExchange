@@ -295,8 +295,12 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
       const priceVolatility = pointIndex > 0 ? Math.abs(price - data[pointIndex - 1].price) / price : 0;
       const volatilityBoost = 1 + priceVolatility * 50;
       volume = Math.floor(baseVolume * volumeMultiplier * volatilityBoost * (0.7 + seededRandom3() * 0.6));
+    } else if (isPreMarket || isAfterHours) {
+      // Pre-market and after-hours have different volume patterns
+      const baseVolume = isPreMarket ? 30000 : 20000; // Pre-market slightly higher than after-hours
+      volume = Math.floor(baseVolume * volumeMultiplier * (0.5 + seededRandom3()));
     } else {
-      volume = Math.floor(50000 * volumeMultiplier * (0.5 + seededRandom3()));
+      volume = Math.floor(10000 * volumeMultiplier * (0.3 + seededRandom3() * 0.4));
     }
 
     data.push({
@@ -1022,11 +1026,12 @@ const ATLStockExchange = () => {
       for (let hour = 9; hour <= 16; hour++) {
         const sessionProgress = (hour - 9) / 7; // 0 to 1 through trading day
 
-        // Realistic intraday patterns
+        // Realistic intraday patterns using session progress
         const openingVolatility = hour === 9 ? 1.8 : 1.0;
         const closingVolatility = hour === 16 ? 1.5 : 1.0;
         const lunchLull = hour >= 12 && hour <= 14 ? 0.7 : 1.0;
-        const intradayMultiplier = openingVolatility * closingVolatility * lunchLull;
+        const sessionEffect = 1 + Math.sin(sessionProgress * Math.PI) * 0.2; // U-shaped activity
+        const intradayMultiplier = openingVolatility * closingVolatility * lunchLull * sessionEffect;
 
         // Market microstructure effects
 
@@ -1184,6 +1189,7 @@ const ATLStockExchange = () => {
         if (month >= 5 && month <= 7) seasonalFactor -= 0.003; // Summer doldrums
         if (month === 11) seasonalFactor += 0.005; // Year-end rally
         seasonalFactor += Math.sin(month * Math.PI / 6) * 0.004; // General seasonal pattern
+        seasonalFactor += Math.sin(yearProgress * 2 * Math.PI) * 0.002; // Year-long cycle effect
 
         // 2. Market Cycle Dynamics (Bull/Bear market phases)
         marketCycle += (seededRandom1() - 0.5) * 0.1;
