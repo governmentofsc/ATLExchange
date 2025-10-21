@@ -664,8 +664,7 @@ const ATLStockExchange = () => {
       } else {
         console.log('Generating initial user data...');
         const initialUsers = {
-          'demo': { password: 'demo', balance: 100000, portfolio: { GFI: 10, ATL: 5 } },
-          'admin': { password: 'admin', balance: 1000000, portfolio: {} }
+          'admin': { password: 'hashed_admin_password', balance: 1000000, portfolio: {} }
         };
         set(usersRef, initialUsers);
       }
@@ -1418,14 +1417,20 @@ const ATLStockExchange = () => {
     return data;
   }
 
+  // Secure admin credentials (use environment variables in production)
+  const ADMIN_CREDENTIALS = {
+    username: process.env.REACT_APP_ADMIN_USERNAME || 'admin',
+    password: process.env.REACT_APP_ADMIN_PASSWORD || 'SecureAdmin2024!'
+  };
+
   const handleLogin = () => {
-    if (loginUsername === 'admin' && loginPassword === 'admin') {
+    // Check for admin login with secure credentials
+    if (loginUsername === ADMIN_CREDENTIALS.username && loginPassword === ADMIN_CREDENTIALS.password) {
       // Ensure admin has proper data structure
       if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
-        // console.log('Initializing admin data');
         const usersRef = ref(database, `users/admin`);
         set(usersRef, {
-          password: 'admin',
+          password: 'hashed_admin_password', // Don't store real password
           balance: 1000000,
           portfolio: {}
         });
@@ -1436,11 +1441,11 @@ const ATLStockExchange = () => {
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
+      setLoginError('');
     } else if (users[loginUsername] && users[loginUsername].password === loginPassword) {
-      // Ensure user has proper data structure
+      // Regular user login
       const userData = users[loginUsername];
       if (!userData.balance || !userData.portfolio) {
-        // console.log('Initializing user data for:', loginUsername);
         const usersRef = ref(database, `users/${loginUsername}`);
         set(usersRef, {
           password: userData.password || loginPassword,
@@ -1454,6 +1459,7 @@ const ATLStockExchange = () => {
       setShowLoginModal(false);
       setLoginUsername('');
       setLoginPassword('');
+      setLoginError('');
     } else {
       setLoginError('Invalid username or password');
     }
@@ -1475,7 +1481,7 @@ const ATLStockExchange = () => {
     }
 
     const usersRef = ref(database, `users/${signupUsername}`);
-    set(usersRef, { password: signupPassword, balance: 50000, portfolio: {} });
+    set(usersRef, { password: signupPassword, balance: 10000, portfolio: {} });
 
     setUser(signupUsername);
     setIsAdmin(false);
@@ -2774,9 +2780,8 @@ const ATLStockExchange = () => {
             </div>
 
             <div className={`mt-6 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <p className="text-xs font-medium mb-2">Demo Accounts:</p>
-              <p className="text-xs opacity-75">Demo User: <code>demo</code> / <code>demo</code></p>
-              <p className="text-xs opacity-75">Admin: <code>admin</code> / <code>admin</code></p>
+              <p className="text-xs font-medium mb-2">Create Account:</p>
+              <p className="text-xs opacity-75">Sign up to start trading with $10,000 starting balance</p>
             </div>
           </div>
         </div>
