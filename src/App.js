@@ -83,90 +83,55 @@ const isMarketOpen = () => {
 
 
 
-// Enhanced price history generation with better performance and caching
-function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
+// BRAND NEW CLEAN CHART SYSTEM
+function generateDailyChart(currentPrice, ticker) {
   const now = getEasternTime();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  // Normalize parameters
-  let currentPrice = openPrice;
-  let seedKey = '';
-
-  if (typeof currentOrSeed === 'number') {
-    currentPrice = currentOrSeed;
-    seedKey = typeof maybeSeedKey === 'string' ? maybeSeedKey : '';
-  } else if (typeof currentOrSeed === 'string') {
-    seedKey = currentOrSeed;
-  }
-
-  // Validate inputs
-  if (!openPrice || openPrice <= 0) return [];
-  if (!currentPrice || currentPrice <= 0) currentPrice = openPrice;
-
-  // Generate data points from 12:00 AM to current time only
   const data = [];
 
-  // Start at midnight (0 minutes) and go to current time
-  const intervalMinutes = 10; // Data point every 10 minutes
-  const totalPoints = Math.floor(currentMinutes / intervalMinutes) + 1;
-
-  // Seeded random for consistent data
-  const hashString = (str) => {
-    if (!str) return Math.floor(openPrice * 1000);
-    let h = 0;
-    for (let i = 0; i < str.length; i++) {
-      h = (h * 31 + str.charCodeAt(i)) >>> 0;
-    }
-    return h;
-  };
-
-  let seed = hashString(seedKey + now.toDateString());
+  // Create seed for consistent data
+  const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  let rng = seed + now.getDate(); // Different each day
   const seededRandom = () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
+    rng = (rng * 1664525 + 1013904223) % 4294967296;
+    return rng / 4294967296;
   };
 
-  // Generate price progression from open to current
-  for (let i = 0; i < totalPoints; i++) {
-    const minutes = i * intervalMinutes;
-    const progress = i / (totalPoints - 1);
+  // Generate data from 12:00 AM to current time in 10-minute intervals
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const totalPoints = Math.floor(currentMinutes / 10) + 1;
 
-    // Format time as 12-hour format
+  // Start price (slight variation from current)
+  let price = currentPrice * (0.995 + seededRandom() * 0.01); // ±0.5% from current
+
+  for (let i = 0; i < totalPoints; i++) {
+    const minutes = i * 10; // Every 10 minutes
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    let displayHour = hours;
-    let ampm = 'AM';
 
-    if (hours === 0) {
-      displayHour = 12;
-    } else if (hours < 12) {
-      displayHour = hours;
-    } else if (hours === 12) {
-      displayHour = 12;
-      ampm = 'PM';
-    } else {
-      displayHour = hours - 12;
-      ampm = 'PM';
-    }
-
+    // Format time
+    let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    let ampm = hours < 12 ? 'AM' : 'PM';
     const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
 
-    // Much more realistic price movements
-    const basePrice = openPrice + (currentPrice - openPrice) * progress;
-    const variation = (seededRandom() - 0.5) * 0.002 * basePrice; // 0.2% max variation - much more realistic
-    const price = Math.max(0.01, basePrice + variation);
+    // Realistic price movement - very small changes
+    if (i > 0) {
+      const change = (seededRandom() - 0.5) * 0.002; // ±0.1% max change per 10min
+      price = price * (1 + change);
+    }
+
+    // For the last point, use actual current price
+    if (i === totalPoints - 1) {
+      price = currentPrice;
+    }
 
     data.push({
       time: timeLabel,
       price: parseFloat(price.toFixed(2)),
-      volume: Math.floor((0.5 + seededRandom()) * 1000000), // Add volume data
-      bid: parseFloat((price - 0.01).toFixed(2)), // Bid price
-      ask: parseFloat((price + 0.01).toFixed(2))  // Ask price
+      volume: Math.floor(seededRandom() * 1000000 + 500000)
     });
   }
 
   return data;
-
 }
 
 const ATLStockExchange = () => {
@@ -460,21 +425,21 @@ const ATLStockExchange = () => {
           setError(null);
         } else if (!initialized) {
           const initialStocks = [
-            { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: generatePriceHistory(387.45, 387.45, 'HD'), extendedHistory: generateExtendedHistory(387.45, 'HD'), yearHistory: generateYearHistory(387.45, 'HD') },
-            { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: generatePriceHistory(132.85, 132.85, 'UPS'), extendedHistory: generateExtendedHistory(132.85, 'UPS'), yearHistory: generateYearHistory(132.85, 'UPS') },
-            { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: generatePriceHistory(62.15, 62.15, 'KO'), extendedHistory: generateExtendedHistory(62.15, 'KO'), yearHistory: generateYearHistory(62.15, 'KO') },
-            { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(158.90, 158.90, 'ICE'), extendedHistory: generateExtendedHistory(158.90, 'ICE'), yearHistory: generateYearHistory(158.90, 'ICE') },
-            { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: generatePriceHistory(98.75, 98.75, 'AFL'), extendedHistory: generateExtendedHistory(98.75, 'AFL'), yearHistory: generateYearHistory(98.75, 'AFL') },
-            { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: generatePriceHistory(145.20, 145.20, 'GPC'), extendedHistory: generateExtendedHistory(145.20, 'GPC'), yearHistory: generateYearHistory(145.20, 'GPC') },
-            { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: generatePriceHistory(85.40, 85.40, 'SO'), extendedHistory: generateExtendedHistory(85.40, 'SO'), yearHistory: generateYearHistory(85.40, 'SO') },
-            { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: generatePriceHistory(118.65, 118.65, 'PHM'), extendedHistory: generateExtendedHistory(118.65, 'PHM'), yearHistory: generateYearHistory(118.65, 'PHM') },
-            { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: generatePriceHistory(267.80, 267.80, 'EFX'), extendedHistory: generateExtendedHistory(267.80, 'EFX'), yearHistory: generateYearHistory(267.80, 'EFX') },
-            { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: generatePriceHistory(16.85, 16.85, 'IVZ'), extendedHistory: generateExtendedHistory(16.85, 'IVZ'), yearHistory: generateYearHistory(16.85, 'IVZ') },
-            { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: generatePriceHistory(89.30, 89.30, 'SCA'), extendedHistory: generateExtendedHistory(89.30, 'SCA'), yearHistory: generateYearHistory(89.30, 'SCA') },
-            { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: generatePriceHistory(248.75, 248.75, 'NSC'), extendedHistory: generateExtendedHistory(248.75, 'NSC'), yearHistory: generateYearHistory(248.75, 'NSC') },
-            { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: generatePriceHistory(44.20, 44.20, 'ROL'), extendedHistory: generateExtendedHistory(44.20, 'ROL'), yearHistory: generateYearHistory(44.20, 'ROL') },
-            { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
-            { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') },
+            { ticker: 'HD', name: 'Home Depot Inc.', price: 387.45, open: 387.45, high: 392.10, low: 384.20, marketCap: 197100000000, pe: 24.8, high52w: 415.00, low52w: 295.00, dividend: 2.1, qtrlyDiv: 2.09, volumeMultiplier: 0.8, history: [] },
+            { ticker: 'UPS', name: 'United Parcel Service Inc.', price: 132.85, open: 132.85, high: 135.40, low: 130.90, marketCap: 33660000000, pe: 18.2, high52w: 165.00, low52w: 115.00, dividend: 3.8, qtrlyDiv: 1.63, volumeMultiplier: 1.2, history: [] },
+            { ticker: 'KO', name: 'Coca Cola', price: 62.15, open: 62.15, high: 63.20, low: 61.50, marketCap: 194540000000, pe: 26.4, high52w: 68.50, low52w: 52.30, dividend: 3.2, qtrlyDiv: 0.48, volumeMultiplier: 1.5, history: [] },
+            { ticker: 'ICE', name: 'Intercontinental Exchange Inc.', price: 158.90, open: 158.90, high: 161.25, low: 157.10, marketCap: 78890000000, pe: 22.1, high52w: 175.00, low52w: 125.00, dividend: 1.4, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: [] },
+            { ticker: 'AFL', name: 'Aflac Inc.', price: 98.75, open: 98.75, high: 100.20, low: 97.80, marketCap: 38170000000, pe: 15.8, high52w: 115.00, low52w: 82.00, dividend: 2.8, qtrlyDiv: 0.42, volumeMultiplier: 1.1, history: [] },
+            { ticker: 'GPC', name: 'Genuine Parts Co.', price: 145.20, open: 145.20, high: 147.85, low: 143.60, marketCap: 18330000000, pe: 19.3, high52w: 165.00, low52w: 125.00, dividend: 3.5, qtrlyDiv: 0.895, volumeMultiplier: 0.7, history: [] },
+            { ticker: 'SO', name: 'Southern Co.', price: 85.40, open: 85.40, high: 86.75, low: 84.30, marketCap: 64460000000, pe: 21.7, high52w: 92.00, low52w: 68.50, dividend: 4.2, qtrlyDiv: 0.72, volumeMultiplier: 1.3, history: [] },
+            { ticker: 'PHM', name: 'Pulte Group Inc.', price: 118.65, open: 118.65, high: 120.90, low: 117.20, marketCap: 24320000000, pe: 12.4, high52w: 135.00, low52w: 85.00, dividend: 1.8, qtrlyDiv: 0.17, volumeMultiplier: 1.4, history: [] },
+            { ticker: 'EFX', name: 'Equifax Inc.', price: 267.80, open: 267.80, high: 271.45, low: 265.10, marketCap: 18610000000, pe: 28.9, high52w: 295.00, low52w: 195.00, dividend: 1.6, qtrlyDiv: 0.39, volumeMultiplier: 0.8, history: [] },
+            { ticker: 'IVZ', name: 'Invesco Inc.', price: 16.85, open: 16.85, high: 17.20, low: 16.50, marketCap: 10190000000, pe: 14.2, high52w: 22.50, low52w: 13.80, dividend: 4.8, qtrlyDiv: 0.188, volumeMultiplier: 2.1, history: [] },
+            { ticker: 'SCA', name: 'South Carolina Airways Inc.', price: 89.30, open: 89.30, high: 90.85, low: 88.15, marketCap: 21190000000, pe: 16.7, high52w: 105.00, low52w: 72.00, dividend: 2.4, qtrlyDiv: 0.54, volumeMultiplier: 1.0, history: [] },
+            { ticker: 'NSC', name: 'Norfolk Southern Corp.', price: 248.75, open: 248.75, high: 252.40, low: 246.90, marketCap: 51250000000, pe: 20.5, high52w: 275.00, low52w: 195.00, dividend: 2.8, qtrlyDiv: 1.24, volumeMultiplier: 0.9, history: [] },
+            { ticker: 'ROL', name: 'Rollins Inc.', price: 44.20, open: 44.20, high: 44.95, low: 43.75, marketCap: 18170000000, pe: 32.8, high52w: 52.00, low52w: 38.50, dividend: 2.1, qtrlyDiv: 0.12, volumeMultiplier: 1.2, history: [] },
+            { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 16110000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: [] },
+            { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 19160000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: [] },
           ];
           set(stocksRef, initialStocks);
         }
@@ -630,87 +595,16 @@ const ATLStockExchange = () => {
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        // Reset history at start of new trading day (if it's early morning and history exists from previous day)
-        let newHistory = [...(stock.history || [])];
-        const elapsedMs = now - dayStartTime;
+        // CLEAN CHART SYSTEM: Reset at midnight, generate fresh daily chart
+        const isNewDay = now.getHours() === 0 && now.getMinutes() < 10;
+        let newHistory;
 
-        // If it's early in the day (before 6 AM) and we have history, it might be from yesterday - reset it
-        if (now.getHours() < 6 && newHistory.length > 0) {
-          // Check if the last entry is from a different day by looking at elapsed time
-          const lastEntryTime = elapsedMs / 120000; // Convert to 2-minute intervals
-          if (lastEntryTime < 0 || newHistory.length > 200) { // Reset if negative time or too many entries
-            newHistory = [];
-            // Also reset daily high/low at start of new day
-            stock.high = stock.price;
-            stock.low = stock.price;
-          }
-        }
-
-        // PROPER 1D CHART: 12:00 AM TO NOW WITH 10-MINUTE INTERVALS
-        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-        const targetDataPoints = Math.floor(currentTotalMinutes / 10) + 1; // Every 10 minutes from midnight
-        
-        // Ensure we have the right number of data points from midnight to now
-        while (newHistory.length < targetDataPoints) {
-          const minutesSinceMidnight = newHistory.length * 10; // 10-minute intervals
-          const hours = Math.floor(minutesSinceMidnight / 60);
-          const mins = minutesSinceMidnight % 60;
-
-          let displayHour = hours;
-          let ampm = 'AM';
-
-          if (hours === 0) {
-            displayHour = 12;
-          } else if (hours < 12) {
-            displayHour = hours;
-          } else if (hours === 12) {
-            displayHour = 12;
-            ampm = 'PM';
-          } else {
-            displayHour = hours - 12;
-            ampm = 'PM';
-          }
-
-          const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
-
-          // Use current price for the latest point, previous price for backfill
-          const priceForThisPoint = (newHistory.length === targetDataPoints - 1) ? newPrice2 : 
-            (newHistory.length > 0 ? newHistory[newHistory.length - 1].price : stock.price);
-
-          newHistory.push({
-            time: timeLabel,
-            price: priceForThisPoint,
-            volume: Math.floor(Math.random() * 1000000 + 500000),
-            isLive: newHistory.length === targetDataPoints - 1
-          });
-        }
-
-        // Update the current time point with live price
-        if (newHistory.length > 0) {
-          const currentIndex = newHistory.length - 1;
-          const hour = now.getHours();
-          const min = Math.floor(now.getMinutes() / 10) * 10; // Round to nearest 10 minutes
-          let displayHour = hour;
-          let ampm = 'AM';
-
-          if (hour === 0) {
-            displayHour = 12;
-          } else if (hour < 12) {
-            displayHour = hour;
-          } else if (hour === 12) {
-            displayHour = 12;
-            ampm = 'PM';
-          } else {
-            displayHour = hour - 12;
-            ampm = 'PM';
-          }
-
-          newHistory[currentIndex] = {
-            time: `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`,
-            price: newPrice2,
-            volume: Math.floor(Math.random() * 1000000 + 500000),
-            isLive: true
-          };
+        if (isNewDay || !stock.history || stock.history.length === 0) {
+          // Generate fresh chart for new day or if no history exists
+          newHistory = generateDailyChart(newPrice2, stock.ticker);
+        } else {
+          // Update existing chart with current price
+          newHistory = generateDailyChart(newPrice2, stock.ticker);
         }
 
         const sharesOutstanding = stock.marketCap / stock.price;
@@ -728,76 +622,7 @@ const ATLStockExchange = () => {
   }, [stocks, updateSpeed, isMarketController, marketRunning]);
 
 
-  function generateExtendedHistory(basePrice, seedKey = '') {
-    const data = [];
 
-    // Simple seeded random number generator for consistent but natural randomness
-    const createSeededRandom = (seed) => {
-      let state = seed;
-      return () => {
-        state = (state * 1664525 + 1013904223) % 4294967296;
-        return state / 4294967296;
-      };
-    };
-
-    const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
-    const random = createSeededRandom(baseSeed);
-
-    let price = basePrice * (0.98 + random() * 0.04); // Much smaller starting variation
-    let momentum = 0;
-
-    // Generate 7 days of data with hourly intervals for better resolution
-    for (let day = 0; day < 7; day++) {
-      for (let hour = 0; hour < 24; hour += 2) { // Every 2 hours for better detail
-        // Market behavior changes throughout the day
-        const timeOfDay = hour / 24;
-        const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
-
-        // Much more realistic randomization
-        const r1 = random();
-
-        // Very subtle random walk with momentum
-        const randomChange = (r1 - 0.5) * 0.2; // Much smaller changes
-        momentum = momentum * 0.9 + randomChange * 0.1;
-
-        // Much smaller volatility for realistic movements
-        const volatility = 0.001 + marketActivity * 0.0005; // 0.1% to 0.15% max
-
-        // Calculate price change
-        const change = momentum * volatility;
-
-        price = price * (1 + change);
-
-        // Much tighter bounds for realistic stock movements
-        price = Math.max(basePrice * 0.95, Math.min(basePrice * 1.05, price));
-
-        const date = getEasternTime();
-        date.setDate(date.getDate() - (7 - day));
-        date.setHours(hour);
-
-        let displayHour = hour;
-        let ampm = 'AM';
-        if (hour === 0) {
-          displayHour = 12;
-          ampm = 'AM';
-        } else if (hour < 12) {
-          displayHour = hour;
-          ampm = 'AM';
-        } else if (hour === 12) {
-          displayHour = 12;
-          ampm = 'PM';
-        } else {
-          displayHour = hour - 12;
-          ampm = 'PM';
-        }
-
-        const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${displayHour}:00 ${ampm}`;
-
-        data.push({ time: dateStr, price: parseFloat(price.toFixed(2)) });
-      }
-    }
-    return data;
-  }
 
   function generateYearHistory(basePrice, seedKey = '') {
     const data = [];
@@ -949,41 +774,71 @@ const ATLStockExchange = () => {
 
   // New function to generate monthly data (30 days)
 
-  // Function to filter data based on timeframe
-  function getFilteredChartData(stockData, period) {
-    let data = [];
+  // SIMPLE CHART DATA FUNCTION
+  function getChartData(stockData, period) {
     const currentPrice = stockData.price;
+    const ticker = stockData.ticker;
+
+    // For 1d, always use the live daily chart
+    if (period === '1d') {
+      return stockData.history && stockData.history.length > 0
+        ? stockData.history
+        : generateDailyChart(currentPrice, ticker);
+    }
+
+    // For other periods, generate simple synthetic data
+    return generateSimpleChart(currentPrice, period, ticker);
+  }
+
+  // Generate simple charts for non-1d periods
+  function generateSimpleChart(currentPrice, period, ticker) {
+    const data = [];
+    let points, timeUnit, maxChange;
 
     switch (period) {
-      case '10m':
-        data = generateSmoothChart(currentPrice, 10, 'minutes', stockData.ticker);
-        break;
-      case '30m':
-        data = generateSmoothChart(currentPrice, 30, 'minutes', stockData.ticker);
-        break;
-      case '1h':
-        data = generateSmoothChart(currentPrice, 60, 'minutes', stockData.ticker);
-        break;
-      case '1d':
-        // Use live history but limit to reasonable amount
-        if (stockData.history && stockData.history.length > 0) {
-          // Take only the last 50 data points for better performance
-          data = stockData.history.slice(-50);
-        } else {
-          data = generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
-        }
-        break;
-      case '1w':
-        data = generateSmoothChart(currentPrice, 7, 'days', stockData.ticker);
-        break;
-      case '1m':
-        data = generateSmoothChart(currentPrice, 30, 'days', stockData.ticker);
-        break;
-      case '1y':
-        data = generateSmoothChart(currentPrice, 12, 'months', stockData.ticker);
-        break;
-      default:
-        data = generateSmoothChart(currentPrice, 24, 'hours', stockData.ticker);
+      case '10m': points = 10; timeUnit = 'minutes'; maxChange = 0.002; break;
+      case '30m': points = 30; timeUnit = 'minutes'; maxChange = 0.005; break;
+      case '1h': points = 60; timeUnit = 'minutes'; maxChange = 0.01; break;
+      case '1w': points = 7; timeUnit = 'days'; maxChange = 0.05; break;
+      case '1m': points = 30; timeUnit = 'days'; maxChange = 0.15; break;
+      case '1y': points = 12; timeUnit = 'months'; maxChange = 0.3; break;
+      default: points = 24; timeUnit = 'hours'; maxChange = 0.02; break;
+    }
+
+    // Simple seed
+    let seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    const seededRandom = () => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+
+    let price = currentPrice * (1 - maxChange / 2 + seededRandom() * maxChange / 2);
+
+    for (let i = 0; i < points; i++) {
+      // Simple time labels
+      let timeLabel = '';
+      if (timeUnit === 'minutes') {
+        const mins = i;
+        timeLabel = `${mins}m ago`;
+      } else if (timeUnit === 'hours') {
+        timeLabel = `${i}h ago`;
+      } else if (timeUnit === 'days') {
+        timeLabel = `${i}d ago`;
+      } else if (timeUnit === 'months') {
+        timeLabel = `${i}mo ago`;
+      }
+
+      // Smooth progression toward current price
+      const progress = i / (points - 1);
+      const targetPrice = price + (currentPrice - price) * progress;
+      const variation = (seededRandom() - 0.5) * maxChange * 0.1;
+      const finalPrice = targetPrice * (1 + variation);
+
+      data.push({
+        time: timeLabel,
+        price: parseFloat(finalPrice.toFixed(2)),
+        volume: Math.floor(seededRandom() * 1000000 + 500000)
+      });
     }
 
     return data;
@@ -1759,8 +1614,8 @@ const ATLStockExchange = () => {
     const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
 
-    // Use the new filtered chart data function with live price
-    const chartData = getFilteredChartData(stockData, chartPeriod);
+    // Use the clean chart data function
+    const chartData = getChartData(stockData, chartPeriod);
 
 
     const chartDomain = getChartDomain(chartData);
