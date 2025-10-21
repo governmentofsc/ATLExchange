@@ -1,11 +1,77 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Menu, X, Moon, Sun, LogOut, TrendingUp, TrendingDown, DollarSign, Activity, AlertCircle,
-  BarChart3, PieChart, Download, Filter, Share2
+  BarChart3, PieChart, Download, Filter, Share2, Eye, EyeOff, Zap, Target, Bell, Settings,
+  RefreshCw, Users, Globe, Smartphone, Monitor, Tablet
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart as RechartsPieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, Legend
+} from 'recharts';
 import { database } from './firebase';
 import { ref, set, onValue, update } from 'firebase/database';
+
+// Add custom CSS animations
+const customStyles = `
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  
+  @keyframes slide-down {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  @keyframes scale-in {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
+  }
+  
+  .animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
+  .animate-slide-down { animation: slide-down 0.3s ease-out; }
+  .animate-scale-in { animation: scale-in 0.3s ease-out; }
+  .animate-pulse-glow { animation: pulse-glow 2s infinite; }
+  
+  .glass-effect {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .dark .glass-effect {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .gradient-text {
+    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = customStyles;
+  document.head.appendChild(styleSheet);
+}
 
 // Advanced Constants - Professional Stock Exchange Settings
 const MARKET_HOURS = {
@@ -26,7 +92,27 @@ const TRADING_FEES = {
 
 
 
-const CHART_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00', '#ff0000'];
+const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316'];
+
+// Enhanced market simulation constants
+const MARKET_SIMULATION = {
+  volatilityBase: 0.0001, // Base volatility per update
+  volatilityMultiplier: 1.5, // Market hours multiplier
+  momentumDecay: 0.85, // How quickly momentum fades
+  meanReversionStrength: 0.00005, // Pull toward opening price
+  maxDailyChange: 0.15, // Maximum 15% daily change
+  priceUpdateInterval: 2000, // 2 seconds for smoother updates
+  chartUpdateInterval: 5000 // 5 seconds for chart points
+};
+
+// Professional trading interface constants
+const UI_CONSTANTS = {
+  maxNotifications: 5,
+  notificationDuration: 8000,
+  animationDuration: 300,
+  chartHeight: 400,
+  mobileBreakpoint: 768
+};
 
 // Utility functions
 const getEasternTime = (date = new Date()) => {
@@ -217,14 +303,24 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(3000); // Price update interval in ms - more realistic
-  const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
+  const [updateSpeed, setUpdateSpeed] = useState(MARKET_SIMULATION.priceUpdateInterval);
+  const [chartUpdateSpeed, setChartUpdateSpeed] = useState(MARKET_SIMULATION.chartUpdateInterval);
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
+  const [connectionStatus, setConnectionStatus] = useState('connected');
+  const [performanceStats, setPerformanceStats] = useState({
+    updateCount: 0,
+    avgUpdateTime: 0,
+    lastUpdateTime: 0
+  });
 
-
-  // const [showOrderBook, setShowOrderBook] = useState(false);
+  // Enhanced state management
   const [marketEvents, setMarketEvents] = useState([]);
+  const [systemHealth, setSystemHealth] = useState({
+    cpu: 'good',
+    memory: 'good',
+    network: 'good'
+  });
 
   // MASSIVE NEW FEATURES
 
@@ -427,13 +523,20 @@ const ATLStockExchange = () => {
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  // Auto-dismiss notifications after 10 seconds
+  // Enhanced notification management
   useEffect(() => {
     if (notifications.length > 0) {
       const timer = setTimeout(() => {
         setNotifications(prev => prev.slice(1));
-      }, 10000);
+      }, UI_CONSTANTS.notificationDuration);
       return () => clearTimeout(timer);
+    }
+  }, [notifications]);
+
+  // Limit notifications to prevent memory issues
+  useEffect(() => {
+    if (notifications.length > UI_CONSTANTS.maxNotifications) {
+      setNotifications(prev => prev.slice(-UI_CONSTANTS.maxNotifications));
     }
   }, [notifications]);
 
@@ -567,127 +670,178 @@ const ATLStockExchange = () => {
     }
 
     const interval = setInterval(() => {
-      const now = getEasternTime();
-      const dayStartTime = getEasternTime();
-      dayStartTime.setHours(0, 0, 0, 0);
+      const updateStartTime = performance.now();
 
-      const updatedStocks = stocks.map(stock => {
-        // Skip live updates for stocks that were recently traded (within 60 seconds)
-        const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
-        if (timeSinceLastTrade < 60000) {
-          // console.log(`Skipping live update for ${stock.ticker} - traded ${timeSinceLastTrade}ms ago`);
-          return stock; // Don't update price if recently traded
-        }
+      try {
+        const now = getEasternTime();
+        const dayStartTime = getEasternTime();
+        dayStartTime.setHours(0, 0, 0, 0);
 
-        // Clear manual trade flag after protection period
-        if (stock.manualTrade && timeSinceLastTrade >= 60000) {
-          stock = { ...stock, manualTrade: false };
-        }
-
-        // Realistic price movement algorithm
-        const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
-        let seed = timeSeed % 1000000;
-        const simpleRandom = () => {
-          seed = (seed * 1664525 + 1013904223) % 4294967296;
-          return seed / 4294967296;
-        };
-
-        // More realistic price movements with momentum and mean reversion
-        const timeOfDay = now.getHours() + now.getMinutes() / 60;
-
-        // Market activity varies by time of day (higher during market hours)
-        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.5 : 0.3;
-
-        // Base volatility (much smaller for realism)
-        const baseVolatility = 0.0002 * marketActivityMultiplier; // 0.02% max change per update
-
-        // Add some momentum (trending behavior)
-        const priceHistory = stock.history || [];
-        let momentum = 0;
-        if (priceHistory.length >= 2) {
-          const recent = priceHistory.slice(-2);
-          momentum = (recent[1].price - recent[0].price) / recent[0].price;
-          momentum = Math.max(-0.001, Math.min(0.001, momentum * 0.3)); // Dampen momentum
-        }
-
-        // Random walk component
-        const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
-
-        // Mean reversion (tendency to return to opening price over time)
-        const distanceFromOpen = (stock.price - stock.open) / stock.open;
-        const meanReversion = -distanceFromOpen * 0.00001; // Very weak mean reversion
-
-        // Combine all factors
-        const totalChange = randomComponent + momentum + meanReversion;
-
-        const newPrice = stock.price * (1 + totalChange);
-
-        // Realistic price bounds (prevent extreme movements but allow natural fluctuation)
-        const minPrice = stock.price * 0.9995; // 0.05% down limit per update
-        const maxPrice = stock.price * 1.0005; // 0.05% up limit per update
-        const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
-        const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
-
-        const newHigh = Math.max(stock.high, newPrice2);
-        const newLow = Math.min(stock.low, newPrice2);
-
-        // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
-        const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
-        let newHistory = [...(stock.history || [])];
-        let newOpen = stock.open;
-
-        // Clear bad data if history has too many points (old system)
-        if (newHistory.length > 300) {
-          newHistory = [];
-        }
-
-        if (isNewDay || newHistory.length === 0) {
-          // Generate fresh chart for new day AND reset open price
-          newHistory = generateDailyChart(newPrice2, stock.ticker);
-          newOpen = stock.price; // Set today's opening price to current price
-        } else {
-          // Only add new point if we're exactly at a 5-minute boundary
-          const currentMinutes = now.getMinutes();
-          const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
-
-          const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
-          const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
-
-          if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
-            // Add new 5-minute point ONLY at exact 5-minute boundaries
-            const totalMinutes = (newHistory.length) * 5;
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-            let ampm = hours < 12 ? 'AM' : 'PM';
-            const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-
-            newHistory.push({
-              time: timeLabel,
-              price: newPrice2,
-              volume: Math.floor(Math.random() * 1000000 + 500000),
-              isLive: true
-            });
-          } else if (newHistory.length > 0) {
-            // ALWAYS update the last point with current live price (every 5 seconds)
-            const lastIndex = newHistory.length - 1;
-            newHistory[lastIndex] = {
-              ...newHistory[lastIndex],
-              price: newPrice2,
-              isLive: true
-            };
+        const updatedStocks = stocks.map(stock => {
+          // Skip live updates for stocks that were recently traded (within 60 seconds)
+          const timeSinceLastTrade = Date.now() - (stock.lastTradeTime || 0);
+          if (timeSinceLastTrade < 60000) {
+            // console.log(`Skipping live update for ${stock.ticker} - traded ${timeSinceLastTrade}ms ago`);
+            return stock; // Don't update price if recently traded
           }
+
+          // Clear manual trade flag after protection period
+          if (stock.manualTrade && timeSinceLastTrade >= 60000) {
+            stock = { ...stock, manualTrade: false };
+          }
+
+          // Enhanced realistic price movement algorithm
+          const timeSeed = Date.now() + stock.ticker.charCodeAt(0);
+          let seed = timeSeed % 1000000;
+          const simpleRandom = () => {
+            seed = (seed * 1664525 + 1013904223) % 4294967296;
+            return seed / 4294967296;
+          };
+
+          // More sophisticated price movements
+          const timeOfDay = now.getHours() + now.getMinutes() / 60;
+          const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+
+          // Market activity varies by time and day
+          const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ?
+            (dayOfWeek >= 1 && dayOfWeek <= 5 ? MARKET_SIMULATION.volatilityMultiplier : 0.8) : 0.4;
+
+          // Base volatility with stock-specific characteristics
+          const stockVolatility = MARKET_SIMULATION.volatilityBase * marketActivityMultiplier;
+          const sectorVolatility = stock.marketCap > 1000000000000 ? 0.8 : 1.2; // Large caps less volatile
+
+          // Enhanced momentum calculation
+          const priceHistory = stock.history || [];
+          let momentum = stock.lastMomentum || 0;
+          if (priceHistory.length >= 3) {
+            const recent = priceHistory.slice(-3);
+            const shortTrend = (recent[2].price - recent[1].price) / recent[1].price;
+            const mediumTrend = (recent[2].price - recent[0].price) / recent[0].price / 2;
+            momentum = (shortTrend * 0.7 + mediumTrend * 0.3) * MARKET_SIMULATION.momentumDecay;
+            momentum = Math.max(-0.002, Math.min(0.002, momentum)); // Cap momentum
+          }
+
+          // Random walk with volatility clustering
+          const randomComponent = (simpleRandom() - 0.5) * stockVolatility * sectorVolatility;
+
+          // Volatility clustering (periods of high/low volatility)
+          const volatilityCluster = Math.abs(simpleRandom() - 0.5) * stockVolatility * 0.5;
+
+          // Mean reversion (stronger for extreme moves)
+          const distanceFromOpen = (stock.price - stock.open) / stock.open;
+          const meanReversion = -distanceFromOpen * MARKET_SIMULATION.meanReversionStrength *
+            (1 + Math.abs(distanceFromOpen) * 10); // Stronger reversion for larger moves
+
+          // Market microstructure effects
+          const microstructureNoise = (simpleRandom() - 0.5) * stockVolatility * 0.1;
+
+          // Combine all factors
+          const totalChange = randomComponent + momentum + meanReversion + volatilityCluster + microstructureNoise;
+
+          // Apply daily change limits
+          const currentDailyChange = Math.abs((stock.price - stock.open) / stock.open);
+          const changeMultiplier = currentDailyChange > MARKET_SIMULATION.maxDailyChange ? 0.1 : 1;
+
+          const newPrice = stock.price * (1 + totalChange * changeMultiplier);
+
+          // Enhanced price bounds
+          const maxChangePerUpdate = stockVolatility * 10; // Allow larger single moves occasionally
+          const minPrice = stock.price * (1 - maxChangePerUpdate);
+          const maxPrice = stock.price * (1 + maxChangePerUpdate);
+          const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
+          const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
+
+          const newHigh = Math.max(stock.high, newPrice2);
+          const newLow = Math.min(stock.low, newPrice2);
+
+          // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
+          const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
+          let newHistory = [...(stock.history || [])];
+          let newOpen = stock.open;
+
+          // Clear bad data if history has too many points (old system)
+          if (newHistory.length > 300) {
+            newHistory = [];
+          }
+
+          if (isNewDay || newHistory.length === 0) {
+            // Generate fresh chart for new day AND reset open price
+            newHistory = generateDailyChart(newPrice2, stock.ticker);
+            newOpen = stock.price; // Set today's opening price to current price
+          } else {
+            // Only add new point if we're exactly at a 5-minute boundary
+            const currentMinutes = now.getMinutes();
+            const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
+
+            const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
+            const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
+
+            if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
+              // Add new 5-minute point ONLY at exact 5-minute boundaries
+              const totalMinutes = (newHistory.length) * 5;
+              const hours = Math.floor(totalMinutes / 60);
+              const minutes = totalMinutes % 60;
+              let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+              let ampm = hours < 12 ? 'AM' : 'PM';
+              const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
+              newHistory.push({
+                time: timeLabel,
+                price: newPrice2,
+                volume: Math.floor(Math.random() * 1000000 + 500000),
+                isLive: true
+              });
+            } else if (newHistory.length > 0) {
+              // ALWAYS update the last point with current live price (every 5 seconds)
+              const lastIndex = newHistory.length - 1;
+              newHistory[lastIndex] = {
+                ...newHistory[lastIndex],
+                price: newPrice2,
+                isLive: true
+              };
+            }
+          }
+
+          const sharesOutstanding = stock.marketCap / stock.price;
+          const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
+
+          return {
+            ...stock,
+            price: newPrice2,
+            open: newOpen,
+            high: newHigh,
+            low: newLow,
+            history: newHistory,
+            marketCap: newMarketCap,
+            lastMomentum: momentum,
+            lastUpdate: Date.now()
+          };
+        });
+
+        const stocksRef = ref(database, 'stocks');
+        set(stocksRef, updatedStocks);
+        setStocks(updatedStocks); // Update local state immediately
+
+        // Performance monitoring
+        const updateEndTime = performance.now();
+        const updateDuration = updateEndTime - updateStartTime;
+
+        setPerformanceStats(prev => ({
+          updateCount: prev.updateCount + 1,
+          avgUpdateTime: (prev.avgUpdateTime * prev.updateCount + updateDuration) / (prev.updateCount + 1),
+          lastUpdateTime: updateDuration
+        }));
+
+        // Health check
+        if (updateDuration > 100) { // If update takes more than 100ms
+          console.warn(`Slow update detected: ${updateDuration.toFixed(2)}ms`);
         }
 
-        const sharesOutstanding = stock.marketCap / stock.price;
-        const newMarketCap = Math.max(50000000000, sharesOutstanding * newPrice2);
-
-        return { ...stock, price: newPrice2, high: newHigh, low: newLow, history: newHistory, marketCap: newMarketCap };
-      });
-
-      const stocksRef = ref(database, 'stocks');
-      set(stocksRef, updatedStocks);
-      setStocks(updatedStocks); // Update local state immediately
+      } catch (error) {
+        console.error('Price update error:', error);
+        setConnectionStatus('error');
+        setNotifications(prev => [...prev, '⚠️ Price update failed - retrying...']);
+      }
     }, updateSpeed); // Use configurable update speed
 
     return () => clearInterval(interval);
@@ -1795,55 +1949,291 @@ const ATLStockExchange = () => {
               </div>
 
               {chartData && chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400} key={`${stockData.ticker}-${chartKey}`}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} angle={-45} textAnchor="end" height={80} interval={Math.max(0, Math.floor(chartData.length / 14))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} domain={chartDomain} type="number" ticks={getYAxisTicks(chartDomain)} />
-                    <Tooltip contentStyle={{ backgroundColor: darkMode ? '#444' : '#fff', border: `1px solid ${darkMode ? '#666' : '#ccc'}` }} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
+                <ResponsiveContainer width="100%" height={UI_CONSTANTS.chartHeight} key={`${stockData.ticker}-${chartKey}`}>
+                  <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
+                    <XAxis
+                      dataKey="time"
+                      stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                      fontSize={12}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      domain={chartDomain}
+                      stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                      fontSize={12}
+                      tickFormatter={(value) => `$${value.toFixed(2)}`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: darkMode ? '#1F2937' : '#FFFFFF',
+                        border: `1px solid ${darkMode ? '#374151' : '#E5E7EB'}`,
+                        borderRadius: '8px',
+                        color: darkMode ? '#F9FAFB' : '#111827'
+                      }}
+                      formatter={(value) => [`$${value.toFixed(2)}`, 'Price']}
+                      labelStyle={{ color: darkMode ? '#D1D5DB' : '#6B7280' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="price"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#3B82F6' }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-96 flex items-center justify-center text-gray-500">No chart data available</div>
+                <div className="h-96 flex items-center justify-center text-gray-500">
+                  <div className="text-center">
+                    <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p>Loading chart data...</p>
+                  </div>
+                </div>
               )}
             </div>
 
+            {/* ENHANCED TRADING PANEL */}
             <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4 text-lg">Stock Information</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span>Open:</span><span className="font-bold">${stockData.open.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>High:</span><span className="font-bold">${stockData.high.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Low:</span><span className="font-bold">${stockData.low.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Market Cap:</span><span className="font-bold">${(stockData.marketCap / 1000000000).toFixed(2)}B</span></div>
-                <div className="flex justify-between"><span>P/E Ratio:</span><span className="font-bold">{stockData.pe.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>52-wk High:</span><span className="font-bold">${stockData.high52w.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>52-wk Low:</span><span className="font-bold">${stockData.low52w.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Dividend:</span><span className="font-bold">{stockData.dividend.toFixed(2)}%</span></div>
-                <div className="flex justify-between"><span>Quarterly Div:</span><span className="font-bold">${stockData.qtrlyDiv.toFixed(2)}</span></div>
-                {user && <>
-                  <div className="border-t pt-3 flex justify-between"><span>Your Holdings:</span><span className="font-bold">{userHolding} shares</span></div>
-                  <div className="flex justify-between"><span>Portfolio Value:</span><span className="font-bold">${portfolioValue.toFixed(2)}</span></div>
-                </>}
-              </div>
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5 text-blue-600" />
+                Trading Panel
+              </h3>
+
+              {user ? (
+                <div className="space-y-4">
+                  {/* Portfolio Summary */}
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">Your Position</span>
+                      <span className="text-lg font-bold text-blue-600">{userHolding} shares</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Portfolio Value</span>
+                      <span className="font-bold">{formatCurrency(portfolioValue)}</span>
+                    </div>
+                  </div>
+
+                  {/* Buy Section */}
+                  <div className={`p-4 rounded-lg border ${darkMode ? 'border-green-600 bg-green-900/10' : 'border-green-300 bg-green-50'}`}>
+                    <h4 className="font-bold text-green-600 mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Buy {stockData.ticker}
+                    </h4>
+                    <div className="space-y-3">
+                      <input
+                        type="number"
+                        placeholder="Quantity"
+                        value={buyQuantity}
+                        onChange={(e) => setBuyQuantity(e.target.value)}
+                        className={`w-full p-3 rounded-lg border-2 ${inputClass} focus:ring-2 focus:ring-green-400`}
+                        min="1"
+                      />
+                      {buyQuantity && (
+                        <div className="text-sm space-y-1">
+                          <div className="flex justify-between">
+                            <span>Base Cost:</span>
+                            <span>{formatCurrency(stockData.price * parseInt(buyQuantity || 0))}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-500">
+                            <span>Fees:</span>
+                            <span>{formatCurrency(Math.max(TRADING_FEES.minimumFee, (stockData.price * parseInt(buyQuantity || 0)) * (TRADING_FEES.commission + TRADING_FEES.spread)))}</span>
+                          </div>
+                          <div className="flex justify-between font-bold border-t pt-1">
+                            <span>Total:</span>
+                            <span>{formatCurrency((stockData.price * parseInt(buyQuantity || 0)) + Math.max(TRADING_FEES.minimumFee, (stockData.price * parseInt(buyQuantity || 0)) * (TRADING_FEES.commission + TRADING_FEES.spread)))}</span>
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={buyStock}
+                        disabled={!buyQuantity || parseInt(buyQuantity) <= 0}
+                        className="w-full bg-green-600 text-white p-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        Buy Shares
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sell Section */}
+                  {userHolding > 0 && (
+                    <div className={`p-4 rounded-lg border ${darkMode ? 'border-red-600 bg-red-900/10' : 'border-red-300 bg-red-50'}`}>
+                      <h4 className="font-bold text-red-600 mb-3 flex items-center gap-2">
+                        <TrendingDown className="w-4 h-4" />
+                        Sell {stockData.ticker}
+                      </h4>
+                      <div className="space-y-3">
+                        <input
+                          type="number"
+                          placeholder="Quantity"
+                          value={sellQuantity}
+                          onChange={(e) => setSellQuantity(e.target.value)}
+                          className={`w-full p-3 rounded-lg border-2 ${inputClass} focus:ring-2 focus:ring-red-400`}
+                          min="1"
+                          max={userHolding}
+                        />
+                        {sellQuantity && (
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span>Proceeds:</span>
+                              <span>{formatCurrency(stockData.price * parseInt(sellQuantity || 0))}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-500">
+                              <span>Available:</span>
+                              <span>{userHolding} shares</span>
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={sellStock}
+                          disabled={!sellQuantity || parseInt(sellQuantity) <= 0 || parseInt(sellQuantity) > userHolding}
+                          className="w-full bg-red-600 text-white p-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          Sell Shares
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setBuyQuantity('1')}
+                      className={`p-2 rounded-lg text-sm font-medium ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
+                    >
+                      Buy 1
+                    </button>
+                    <button
+                      onClick={() => setBuyQuantity('10')}
+                      className={`p-2 rounded-lg text-sm font-medium ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
+                    >
+                      Buy 10
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-2">Login Required</p>
+                  <p className="text-sm opacity-75 mb-4">Please login to start trading</p>
+                  <button
+                    onClick={() => setShowLoginModal(true)}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors"
+                  >
+                    Login Now
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {user && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ENHANCED STOCK DETAILS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {/* Key Metrics */}
             <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4">Buy {stockData.ticker}</h3>
-              <input type="number" placeholder="Quantity" value={buyQuantity} onChange={(e) => setBuyQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <p className="mb-3">Cost: ${((parseInt(buyQuantity) || 0) * stockData.price).toFixed(2)}</p>
-              <button onClick={buyStock} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Buy</button>
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                Key Metrics
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm">Market Cap</span>
+                  <span className="font-bold">{formatNumber(stockData.marketCap)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">P/E Ratio</span>
+                  <span className="font-bold">{stockData.pe?.toFixed(2) || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Day High</span>
+                  <span className="font-bold text-green-600">${stockData.high.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Day Low</span>
+                  <span className="font-bold text-red-600">${stockData.low.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">52W High</span>
+                  <span className="font-bold">${stockData.high52w?.toFixed(2) || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">52W Low</span>
+                  <span className="font-bold">${stockData.low52w?.toFixed(2) || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Dividend</span>
+                  <span className="font-bold">${stockData.dividend?.toFixed(2) || '0.00'}</span>
+                </div>
+              </div>
             </div>
 
+            {/* Trading Activity */}
             <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-              <h3 className="font-bold mb-4">Sell {stockData.ticker}</h3>
-              <input type="number" placeholder="Quantity" value={sellQuantity} onChange={(e) => setSellQuantity(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-              <p className="mb-3">Proceeds: ${((parseInt(sellQuantity) || 0) * stockData.price).toFixed(2)}</p>
-              <button onClick={sellStock} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Sell</button>
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                Trading Activity
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm">Opening Price</span>
+                  <span className="font-bold">${stockData.open.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Price Change</span>
+                  <span className={`font-bold ${percentChangeColor}`}>
+                    ${priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">% Change</span>
+                  <span className={`font-bold ${percentChangeColor}`}>
+                    {percentChange >= 0 ? '+' : ''}{percentChange}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Shares Outstanding</span>
+                  <span className="font-bold">{formatNumber(stockData.marketCap / stockData.price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm">Market Status</span>
+                  <span className="font-bold text-green-600">OPEN 24/7</span>
+                </div>
+              </div>
             </div>
-          </div>}
+
+            {/* Recent Trades */}
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-blue-600" />
+                Recent Trades
+              </h3>
+              {tradingHistory.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {tradingHistory
+                    .filter(trade => trade.ticker === stockData.ticker)
+                    .slice(0, 5)
+                    .map((trade, idx) => (
+                      <div key={idx} className={`p-2 rounded text-sm ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`font-bold ${trade.type === 'buy' ? 'text-green-600' : 'text-red-600'}`}>
+                            {trade.type.toUpperCase()} {trade.quantity}
+                          </span>
+                          <span className="font-bold">${trade.price.toFixed(2)}</span>
+                        </div>
+                        <div className="text-xs opacity-75">
+                          {new Date(trade.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <p className="text-sm">No recent trades</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1851,49 +2241,60 @@ const ATLStockExchange = () => {
 
   return (
     <div className={`min-h-screen ${bgClass}`}>
-      {/* PROFESSIONAL HEADER - COMPLETELY REDESIGNED */}
-      <div className={`${theme.card} border-b-2 ${theme.accent} p-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-opacity-95`}>
+      {/* ENHANCED PROFESSIONAL HEADER */}
+      <div className={`${theme.card} border-b-2 ${theme.accent} p-4 flex justify-between items-center sticky top-0 z-50 backdrop-blur-md bg-opacity-95 shadow-lg`}>
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 ${theme.button} rounded-xl flex items-center justify-center shadow-lg`}>
-            <span className="text-white font-bold text-lg">ASE</span>
+          <div className={`w-12 h-12 ${theme.button} rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform`}>
+            <span className="text-white font-bold text-xl">ASE</span>
           </div>
           <div className="flex flex-col">
             <h1 className={`text-2xl font-bold ${theme.accent} tracking-tight`}>Atlanta Stock Exchange</h1>
             <div className="flex items-center gap-4 text-sm">
-              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.success}`}>
+              <span className={`flex items-center gap-1 px-3 py-1 rounded-full ${theme.success} shadow-sm`}>
                 <TrendingUp className="w-4 h-4" />
                 {marketStats.gainers} Gainers
               </span>
-              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.danger}`}>
+              <span className={`flex items-center gap-1 px-3 py-1 rounded-full ${theme.danger} shadow-sm`}>
                 <TrendingDown className="w-4 h-4" />
                 {marketStats.losers} Losers
               </span>
-              <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${theme.warning}`}>
+              <span className={`flex items-center gap-1 px-3 py-1 rounded-full ${theme.warning} shadow-sm`}>
                 <DollarSign className="w-4 h-4" />
                 {formatNumber(marketStats.totalMarketCap)}
               </span>
-
+              <span className={`flex items-center gap-1 px-3 py-1 rounded-full ${marketRunning ? theme.success : theme.danger} shadow-sm`}>
+                <div className={`w-2 h-2 rounded-full ${marketRunning ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+                {marketRunning ? 'LIVE' : 'PAUSED'}
+              </span>
             </div>
           </div>
+
+          {/* Enhanced Notifications */}
           {notifications.length > 0 && (
-            <div className="relative animate-bounce">
-              <AlertCircle className="w-7 h-7 text-yellow-500 drop-shadow-lg" />
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-lg">
-                {notifications.length}
-              </span>
+            <div className="relative">
+              <div className="animate-bounce">
+                <Bell className="w-7 h-7 text-yellow-500 drop-shadow-lg" />
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-lg min-w-[20px] text-center">
+                  {notifications.length}
+                </span>
+              </div>
             </div>
           )}
         </div>
+
         <div className="flex items-center gap-3">
-          {/* ADVANCED SEARCH */}
-          <div className="relative">
+          {/* Enhanced Search */}
+          <div className="relative hidden md:block">
             <input
               type="text"
-              placeholder="🔍 Search stocks, news, alerts..."
+              placeholder="🔍 Search stocks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`${inputClass} px-4 py-2 rounded-xl text-sm w-64 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all`}
+              className={`${inputClass} px-4 py-2 rounded-xl text-sm w-64 shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all pl-10`}
             />
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <Activity className="w-4 h-4" />
+            </div>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
@@ -1904,45 +2305,45 @@ const ATLStockExchange = () => {
             )}
           </div>
 
-
-
-          {/* USER PORTFOLIO DISPLAY */}
+          {/* Enhanced Portfolio Display */}
           {user && users[user] && performanceMetrics.totalValue && (
-            <div className="flex items-center gap-3">
-              <div className={`${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger} px-4 py-2 rounded-xl shadow-lg`}>
-                <div className="text-xs opacity-75">Portfolio</div>
+            <div className="hidden lg:flex items-center gap-3">
+              <div className={`${performanceMetrics.dayChange >= 0 ? theme.success : theme.danger} px-4 py-2 rounded-xl shadow-lg border-2`}>
+                <div className="text-xs opacity-75 font-medium">Portfolio</div>
                 <div className="font-bold text-lg">{formatCurrency(performanceMetrics.totalValue)}</div>
-                <div className="text-xs">
+                <div className="text-xs font-medium">
                   {performanceMetrics.dayChange >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%
                 </div>
               </div>
             </div>
           )}
-          {/* PROFESSIONAL CONTROLS */}
+
+          {/* Enhanced Controls */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className={`${theme.button} p-3 rounded-xl shadow-lg hover:scale-105 transition-all`}
+              className={`${theme.button} p-3 rounded-xl shadow-lg hover:scale-105 transition-all duration-200`}
+              title="Toggle Dark Mode"
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
 
+            {/* Admin Badge */}
             {isAdmin && (
-              <span className="bg-gradient-to-r from-red-500 to-pink-500 px-3 py-2 rounded-xl text-xs font-bold text-white animate-pulse shadow-lg hidden md:inline">
-                👑 ADMIN
-              </span>
+              <div className="hidden md:flex items-center gap-2">
+                <span className="bg-gradient-to-r from-red-500 to-pink-500 px-3 py-2 rounded-xl text-xs font-bold text-white animate-pulse shadow-lg">
+                  👑 ADMIN
+                </span>
+                {isMarketController && (
+                  <span className="bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-lg">
+                    🎮 CONTROLLER
+                  </span>
+                )}
+              </div>
             )}
 
-            {isAdmin && isMarketController && (
-              <span className="bg-gradient-to-r from-green-500 to-emerald-500 px-3 py-2 rounded-xl text-xs font-bold text-white shadow-lg hidden md:inline">
-                🎮 CONTROLLER
-              </span>
-            )}
-
-
-
-            {/* LIVE CLOCK */}
-            <div className={`${theme.card} px-4 py-2 rounded-xl text-sm font-bold shadow-lg border-2 hidden md:flex`}>
+            {/* Live Clock */}
+            <div className={`${theme.card} px-4 py-2 rounded-xl text-sm font-bold shadow-lg border-2 hidden lg:flex`}>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                 {getEasternTime().toLocaleTimeString('en-US', {
@@ -1954,906 +2355,1194 @@ const ATLStockExchange = () => {
               </div>
             </div>
           </div>
+
+          {/* User Actions */}
           {user ? (
-            <button onClick={handleLogout} className="p-2 hover:bg-blue-700 rounded text-white hidden md:inline-block"><LogOut className="w-5 h-5" /></button>
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline text-sm font-medium">
+                {user} • {formatCurrency(users[user]?.balance || 0)}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="p-2 hover:bg-red-600 rounded-xl text-white transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           ) : (
-            <button onClick={() => setShowLoginModal(true)} className="px-4 py-2 bg-white text-blue-600 rounded-lg font-bold hover:bg-gray-100 text-sm transition-colors shadow-md">Login</button>
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="px-6 py-2 bg-white text-blue-600 rounded-xl font-bold hover:bg-gray-100 text-sm transition-colors shadow-md"
+            >
+              Login
+            </button>
           )}
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white">
-            {mobileMenuOpen ? <X /> : <Menu />}
+
+          {/* Mobile Menu */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
+      {/* Enhanced Mobile Menu */}
       {mobileMenuOpen && (
-        <div className={`md:hidden p-4 ${cardClass} border-b`}>
-          {user && users[user] && <p className="mb-2"><strong>Balance:</strong> {formatCurrency(users[user].balance)}</p>}
-          <button onClick={() => setDarkMode(!darkMode)} className="mb-2 w-full text-left p-2">{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button>
-          {isAdmin && <span className="block bg-red-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">ADMIN</span>}
-          {isAdmin && isMarketController && <span className="block bg-green-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">MARKET CONTROLLER</span>}
-          <span className={`block px-2 py-1 rounded text-xs mb-2 w-fit ${marketRunning ? 'bg-green-600' : 'bg-red-600'} text-white`}>
-            MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
-          </span>
-          <span className="block bg-blue-600 text-white px-2 py-1 rounded text-xs mb-2 w-fit">
-            {getEasternTime().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })} ET
-          </span>
-          {user ? (
-            <button onClick={handleLogout} className="text-red-600">Logout</button>
-          ) : (
-            <button onClick={() => setShowLoginModal(true)} className="text-blue-600 font-bold">Login</button>
-          )}
-        </div>
-      )}
-
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
-            <h1 className="text-3xl font-bold mb-2 text-blue-600">Atlanta Stock Exchange</h1>
-            <p className="text-sm mb-6 opacity-75">Login</p>
-            <input type="text" placeholder="Username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            {loginError && <p className="text-red-600 text-sm mb-3">{loginError}</p>}
-            <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Login</button>
-            <button onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
-            <button onClick={() => setShowLoginModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
-            <p className="text-xs mt-4 opacity-50">Demo: demo/demo | Admin: admin/admin</p>
-          </div>
-        </div>
-      )}
-
-      {showSignupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`p-8 rounded-lg border-2 ${cardClass} w-full max-w-sm`}>
-            <h1 className="text-3xl font-bold mb-2 text-blue-600">Create Account</h1>
-            <p className="text-sm mb-6 opacity-75">Sign Up</p>
-            {signupError && <p className="text-red-600 text-sm mb-4">{signupError}</p>}
-            <input type="text" placeholder="Username" value={signupUsername} onChange={(e) => setSignupUsername(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} className={`w-full p-2 mb-3 border rounded ${inputClass}`} />
-            <input type="password" placeholder="Confirm Password" value={signupConfirmPassword} onChange={(e) => setSignupConfirmPassword(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={handleSignup} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">Sign Up</button>
-            <button onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">Back to Login</button>
-            <button onClick={() => setShowSignupModal(false)} className="w-full bg-gray-400 text-white p-2 rounded font-bold hover:bg-gray-500">Close</button>
-            <p className="text-xs mt-4 opacity-50">Starting balance: $50,000</p>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className={`bg-blue-700 text-white p-4 flex gap-4 overflow-x-auto`}>
-          <button onClick={() => setAdminTab('create')} className={`px-4 py-2 rounded ${adminTab === 'create' ? 'bg-white text-blue-600' : ''}`}>Create Stock</button>
-          <button onClick={() => setAdminTab('adjust')} className={`px-4 py-2 rounded ${adminTab === 'adjust' ? 'bg-white text-blue-600' : ''}`}>Adjust Price</button>
-          <button onClick={() => setAdminTab('money')} className={`px-4 py-2 rounded ${adminTab === 'money' ? 'bg-white text-blue-600' : ''}`}>Adjust Money</button>
-          <button onClick={() => setAdminTab('shares')} className={`px-4 py-2 rounded ${adminTab === 'shares' ? 'bg-white text-blue-600' : ''}`}>Buy/Sell Shares</button>
-          <button onClick={() => setAdminTab('splits')} className={`px-4 py-2 rounded ${adminTab === 'splits' ? 'bg-white text-blue-600' : ''}`}>Stock Splits</button>
-          <button onClick={() => setAdminTab('speed')} className={`px-4 py-2 rounded ${adminTab === 'speed' ? 'bg-white text-blue-600' : ''}`}>Speed Settings</button>
-          <button onClick={() => setAdminTab('market')} className={`px-4 py-2 rounded ${adminTab === 'market' ? 'bg-white text-blue-600' : ''}`}>Market Control</button>
-          <button onClick={() => setAdminTab('users')} className={`px-4 py-2 rounded ${adminTab === 'users' ? 'bg-white text-blue-600' : ''}`}>User Management</button>
-          <button onClick={() => setAdminTab('analytics')} className={`px-4 py-2 rounded ${adminTab === 'analytics' ? 'bg-white text-blue-600' : ''}`}>Analytics</button>
-          <button onClick={() => setAdminTab('system')} className={`px-4 py-2 rounded ${adminTab === 'system' ? 'bg-white text-blue-600' : ''}`}>System Settings</button>
-          <button onClick={() => setAdminTab('bulk')} className={`px-4 py-2 rounded ${adminTab === 'bulk' ? 'bg-white text-blue-600' : ''}`}>Bulk Operations</button>
-          <button onClick={() => setAdminTab('trading')} className={`px-4 py-2 rounded ${adminTab === 'trading' ? 'bg-white text-blue-600' : ''}`}>Trading Monitor</button>
-          <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded ${adminTab === 'portfolio' ? 'bg-white text-blue-600' : ''}`}>Portfolio Manager</button>
-          <button onClick={() => setAdminTab('alerts')} className={`px-4 py-2 rounded ${adminTab === 'alerts' ? 'bg-white text-blue-600' : ''}`}>Price Alerts</button>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'create' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Create New Stock</h2>
-            <input type="text" placeholder="Stock Name" value={newStockName} onChange={(e) => setNewStockName(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="text" placeholder="Ticker" value={newStockTicker} onChange={(e) => setNewStockTicker(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Price" value={newStockPrice} onChange={(e) => setNewStockPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Market Cap (optional, e.g. 500000000000)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={createStock} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Create Stock</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'adjust' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Adjust Stock Price</h2>
-            <select value={selectedStockForAdmin} onChange={(e) => setSelectedStockForAdmin(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select Stock</option>
-              {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
-            </select>
-            <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
-
-            <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
-            <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'money' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Adjust User Balance</h2>
-            <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select User</option>
-              {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <input type="number" placeholder="Amount to Add/Remove" value={adjustMoney} onChange={(e) => setAdjustMoney(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <button onClick={adjustMoneySetter} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust Money</button>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'shares' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Buy/Sell Shares for User</h2>
-            <select value={adminSharesUser} onChange={(e) => setAdminSharesUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select User</option>
-              {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <select value={adminSharesStock} onChange={(e) => setAdminSharesStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-              <option value="">Select Stock</option>
-              {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
-            </select>
-            <input type="number" placeholder="Quantity" value={adminSharesQuantity} onChange={(e) => setAdminSharesQuantity(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={adminGiveShares} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Give Shares</button>
-              <button onClick={adminRemoveShares} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Remove Shares</button>
+        <div className={`md:hidden ${cardClass} border-b shadow-lg animate-slide-down`}>
+          <div className="p-4 space-y-4">
+            {/* Mobile Search */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="🔍 Search stocks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`${inputClass} w-full px-4 py-2 rounded-lg`}
+              />
             </div>
-          </div>
-        </div>
-      )}
 
-      {isAdmin && adminTab === 'splits' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Stock Splits</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold mb-2">Select Stock</label>
-                <select value={splitStock} onChange={(e) => setSplitStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-                  <option value="">Select Stock</option>
-                  {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker}) - ${s.price.toFixed(2)}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold mb-2">Split Ratio</label>
-                <input
-                  type="number"
-                  placeholder="e.g., 2 for 2-for-1 split"
-                  value={splitRatio}
-                  onChange={(e) => setSplitRatio(e.target.value)}
-                  className={`w-full p-2 mb-4 border rounded ${inputClass}`}
-                  min="0.1"
-                  step="0.1"
-                />
-                <p className="text-sm text-gray-600 mb-4">
-                  Enter the split ratio (e.g., 2 for 2-for-1 split, 0.5 for reverse split)
-                </p>
-              </div>
-
-              {splitStock && splitRatio && (
-                <div className="bg-blue-50 p-4 rounded mb-4">
-                  <h3 className="font-bold mb-2">Split Preview:</h3>
-                  <p className="text-sm">
-                    <strong>{stocks.find(s => s.ticker === splitStock)?.name}</strong> will split {splitRatio}x-for-1
-                  </p>
-                  <p className="text-sm">
-                    Current price: <strong>${stocks.find(s => s.ticker === splitStock)?.price.toFixed(2)}</strong> →
-                    New price: <strong>${(stocks.find(s => s.ticker === splitStock)?.price / parseFloat(splitRatio)).toFixed(2)}</strong>
-                  </p>
-                  <p className="text-sm">
-                    All shareholders will receive {splitRatio}x more shares at the adjusted price
-                  </p>
+            {/* User Info */}
+            {user && users[user] && (
+              <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold">{user}</span>
+                  <span className="font-bold text-blue-600">{formatCurrency(users[user].balance)}</span>
                 </div>
-              )}
+                {performanceMetrics.totalValue && (
+                  <div className="text-sm mt-1">
+                    <span>Portfolio: {formatCurrency(performanceMetrics.totalValue)}</span>
+                    <span className={`ml-2 ${performanceMetrics.dayChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ({performanceMetrics.dayChange >= 0 ? '+' : ''}{performanceMetrics.dayChangePercent.toFixed(2)}%)
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
+            {/* Mobile Controls */}
+            <div className="flex items-center justify-between">
               <button
-                onClick={executeStockSplit}
-                disabled={!splitStock || !splitRatio}
-                className={`w-full p-2 rounded font-bold ${!splitStock || !splitRatio ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                onClick={() => setDarkMode(!darkMode)}
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
-                Execute Stock Split
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
               </button>
 
-              <div className="bg-yellow-50 p-4 rounded">
-                <h3 className="font-bold mb-2">⚠️ Important:</h3>
-                <ul className="text-sm space-y-1">
-                  <li>• Stock splits are irreversible</li>
-                  <li>• All prices will be adjusted proportionally</li>
-                  <li>• All user portfolios will be updated automatically</li>
-                  <li>• This action affects all users immediately</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'speed' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Speed Settings</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold mb-2">Price Update Speed (milliseconds)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={updateSpeed}
-                    onChange={(e) => setUpdateSpeed(parseInt(e.target.value) || 1000)}
-                    className={`flex-1 p-2 border rounded ${inputClass}`}
-                    min="500"
-                    max="10000"
-                    step="500"
-                  />
-                  <button
-                    onClick={() => setUpdateSpeed(1000)}
-                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Reset (1s)
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">
-                  Current: {updateSpeed}ms ({1000 / updateSpeed}x speed)
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold mb-2">Chart Update Speed (milliseconds)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={chartUpdateSpeed}
-                    onChange={(e) => setChartUpdateSpeed(parseInt(e.target.value) || 5000)}
-                    className={`flex-1 p-2 border rounded ${inputClass}`}
-                    min="1000"
-                    max="30000"
-                    step="1000"
-                  />
-                  <button
-                    onClick={() => setChartUpdateSpeed(5000)}
-                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    Reset (5s)
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">
-                  Current: {chartUpdateSpeed}ms - Updates last chart point every {chartUpdateSpeed / 1000}s
-                </p>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded">
-                <h3 className="font-bold mb-2">How it works:</h3>
-                <ul className="text-sm space-y-1">
-                  <li>• <strong>Price Update Speed:</strong> How often stock prices change (affects all price calculations)</li>
-                  <li>• <strong>Chart Update Speed:</strong> How often the last chart point updates (shows real-time movement)</li>
-                  <li>• <strong>New chart points:</strong> Added every 2 minutes regardless of speed settings</li>
-                  <li>• <strong>Rolling updates:</strong> Last point updates continuously, keeping charts responsive</li>
-                  <li>• <strong>Market Controller:</strong> Only one admin tab controls price updates to ensure synchronization</li>
-                  <li>• <strong>Real-time Sync:</strong> All users see the same prices and updates across all tabs/devices</li>
-                </ul>
-              </div>
-
-              {isAdmin && (
-                <div className={`p-4 rounded ${isMarketController ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
-                  <h3 className="font-bold mb-2">
-                    Market Controller Status: {isMarketController ? '✅ ACTIVE' : '⏳ WAITING'}
-                  </h3>
-                  <p className="text-sm">
-                    {isMarketController
-                      ? 'This tab is controlling market updates. All other tabs will sync to your changes.'
-                      : 'Another admin tab is controlling market updates. This tab will sync to those changes.'
-                    }
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'market' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Market Control</h2>
-            <div className="space-y-4">
-              <div className={`p-4 rounded ${marketRunning ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                <h3 className="font-bold mb-2">
-                  Market Status: {marketRunning ? '🟢 RUNNING' : '🔴 STOPPED'}
-                </h3>
-                <p className="text-sm mb-4">
-                  {marketRunning
-                    ? 'The market is currently active and prices are updating automatically.'
-                    : 'The market is stopped. Prices will not update until you start it.'
-                  }
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={startMarket}
-                    disabled={marketRunning}
-                    className={`px-4 py-2 rounded font-bold ${marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white`}
-                  >
-                    Start Market
-                  </button>
-                  <button
-                    onClick={stopMarket}
-                    disabled={!marketRunning}
-                    className={`px-4 py-2 rounded font-bold ${!marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white`}
-                  >
-                    Stop Market
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded">
-                <h3 className="font-bold mb-2">How it works:</h3>
-                <ul className="text-sm space-y-1">
-                  <li>• <strong>Automatic Operation:</strong> Market runs automatically without requiring admin presence</li>
-                  <li>• <strong>Start/Stop Control:</strong> Only admins can start or stop the market</li>
-                  <li>• <strong>Persistent State:</strong> Market state is saved and persists across all tabs/devices</li>
-                  <li>• <strong>Real-time Sync:</strong> All users see the same market state immediately</li>
-                  <li>• <strong>Independent Operation:</strong> Market continues running even if no admin is logged in</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'users' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">User Management</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
-                  <tr>
-                    <th className="p-2 text-left">Username</th>
-                    <th className="p-2 text-right">Balance</th>
-                    <th className="p-2 text-right">Holdings Value</th>
-                    <th className="p-2 text-right">Total Value</th>
-                    <th className="p-2 text-right">Trades</th>
-                    <th className="p-2 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(users).map(([username, userData]) => {
-                    const holdingsValue = Object.entries(userData.portfolio || {}).reduce((sum, [ticker, qty]) => {
-                      const stock = stocks.find(s => s.ticker === ticker);
-                      return sum + (qty * (stock?.price || 0));
-                    }, 0);
-                    const totalValue = userData.balance + holdingsValue;
-                    const userTrades = tradingHistory.filter(t => t.user === username).length;
-
-                    return (
-                      <tr key={username} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
-                        <td className="p-2 font-bold">{username}</td>
-                        <td className="p-2 text-right">${userData.balance.toFixed(2)}</td>
-                        <td className="p-2 text-right">${holdingsValue.toFixed(2)}</td>
-                        <td className="p-2 text-right font-bold">${totalValue.toFixed(2)}</td>
-                        <td className="p-2 text-right">{userTrades}</td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              setTargetUser(username);
-                              setAdjustMoney('');
-                            }}
-                            className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 mr-1"
-                          >
-                            Adjust
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Reset ${username}'s account? This will set balance to $50,000 and clear portfolio.`)) {
-                                const userRef = ref(database, `users/${username}`);
-                                update(userRef, { balance: 50000, portfolio: {} });
-                              }
-                            }}
-                            className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-                          >
-                            Reset
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'analytics' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">System Analytics</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Market Overview</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Total Stocks:</span>
-                    <span className="font-bold">{stocks.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Users:</span>
-                    <span className="font-bold">{Object.keys(users).length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Market Cap:</span>
-                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Avg Stock Price:</span>
-                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Trading Activity</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Total Trades:</span>
-                    <span className="font-bold">{tradingHistory.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Buy Orders:</span>
-                    <span className="font-bold text-green-600">{tradingHistory.filter(t => t.type === 'buy').length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Sell Orders:</span>
-                    <span className="font-bold text-red-600">{tradingHistory.filter(t => t.type === 'sell').length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Volume:</span>
-                    <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + t.total, 0).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">System Health</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Market Status:</span>
-                    <span className={`font-bold ${marketRunning ? 'text-green-600' : 'text-red-600'}`}>
-                      {marketRunning ? 'RUNNING' : 'STOPPED'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Update Speed:</span>
-                    <span className="font-bold">{updateSpeed}ms</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Chart Updates:</span>
-                    <span className="font-bold">{chartUpdateSpeed}ms</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Controller:</span>
-                    <span className={`font-bold ${isMarketController ? 'text-green-600' : 'text-yellow-600'}`}>
-                      {isMarketController ? 'ACTIVE' : 'STANDBY'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'system' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">System Settings</h2>
-            <div className="space-y-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-2">Database Management</h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
-                        const initialStocks = [
-                          { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, volumeMultiplier: 0.3, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
-                          { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, volumeMultiplier: 1.8, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
-                          { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, volumeMultiplier: 0.7, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
-                          { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, volumeMultiplier: 2.5, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
-                          { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, volumeMultiplier: 1.2, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
-                          { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, volumeMultiplier: 3.1, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
-                          { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
-                          { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 4.2, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
-                        ];
-                        const stocksRef = ref(database, 'stocks');
-                        set(stocksRef, initialStocks);
-                      }
-                    }}
-                    className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
-                  >
-                    Reset Stocks
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Clear all trading history? This action cannot be undone.')) {
-                        const historyRef = ref(database, 'tradingHistory');
-                        set(historyRef, {});
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
-                  >
-                    Clear History
-                  </button>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-2">Market Configuration</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-bold">Market Hours:</label>
-                    <select className={`p-1 border rounded ${inputClass}`}>
-                      <option>24/7 (Current)</option>
-                      <option>9 AM - 5 PM EST</option>
-                      <option>9 AM - 4 PM EST</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-bold">Price Volatility:</label>
-                    <select className={`p-1 border rounded ${inputClass}`}>
-                      <option>Normal (Current)</option>
-                      <option>Low</option>
-                      <option>High</option>
-                      <option>Extreme</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'bulk' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Bulk Operations</h2>
-            <div className="space-y-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-2">Bulk Price Adjustments</h3>
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="Percentage change (%)"
-                      className={`flex-1 p-2 border rounded ${inputClass}`}
-                    />
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
-                      Apply to All Stocks
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="Fixed amount change"
-                      className={`flex-1 p-2 border rounded ${inputClass}`}
-                    />
-                    <button className="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700">
-                      Apply to All Stocks
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-2">Bulk User Operations</h3>
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="Amount to add to all users"
-                      className={`flex-1 p-2 border rounded ${inputClass}`}
-                    />
-                    <button className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">
-                      Add to All Users
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="Multiplier (e.g., 1.1 for 10% increase)"
-                      className={`flex-1 p-2 border rounded ${inputClass}`}
-                    />
-                    <button className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">
-                      Multiply All Balances
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h3 className="font-bold mb-2">Market Reset</h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Reset all stock prices to opening prices? This will reset highs, lows, and current prices.')) {
-                        const updatedStocks = stocks.map(s => ({
-                          ...s,
-                          price: s.open,
-                          high: s.open,
-                          low: s.open
-                        }));
-                        const stocksRef = ref(database, 'stocks');
-                        set(stocksRef, updatedStocks);
-                      }
-                    }}
-                    className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
-                  >
-                    Reset All Prices to Open
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Reset all user balances to $50,000 and clear portfolios? This will affect ALL users.')) {
-                        const updatedUsers = {};
-                        Object.keys(users).forEach(username => {
-                          updatedUsers[username] = { ...users[username], balance: 50000, portfolio: {} };
-                        });
-                        const usersRef = ref(database, 'users');
-                        set(usersRef, updatedUsers);
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
-                  >
-                    Reset All Users
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'trading' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Live Trading Monitor</h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Recent Trades</h4>
-                <div className="space-y-2 text-sm max-h-64 overflow-y-auto">
-                  {Object.entries(users).flatMap(([username, userData]) =>
-                    Object.entries(userData.portfolio || {}).map(([ticker, qty]) => ({
-                      user: username,
-                      ticker,
-                      qty,
-                      value: qty * (stocks.find(s => s.ticker === ticker)?.price || 0)
-                    }))
-                  ).sort((a, b) => b.value - a.value).slice(0, 10).map((trade, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
-                      <span className="font-bold">{trade.user}</span>
-                      <span>{trade.ticker}</span>
-                      <span>{trade.qty} shares</span>
-                      <span className="text-green-600">${trade.value.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Top Movers</h4>
-                <div className="space-y-2 text-sm">
-                  {stocks.sort((a, b) => Math.abs((b.price - b.open) / b.open) - Math.abs((a.price - a.open) / a.open)).slice(0, 5).map(stock => {
-                    const change = ((stock.price - stock.open) / stock.open * 100);
-                    return (
-                      <div key={stock.ticker} className="flex justify-between items-center">
-                        <span className="font-bold">{stock.ticker}</span>
-                        <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {change >= 0 ? '+' : ''}{change.toFixed(2)}%
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Market Stats</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Active Users:</span>
-                    <span className="font-bold">{Object.keys(users).length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Trades Today:</span>
-                    <span className="font-bold">{Object.values(users).reduce((sum, u) => sum + Object.keys(u.portfolio || {}).length, 0)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Market Cap:</span>
-                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Avg Price:</span>
-                    <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'portfolio' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Portfolio Manager</h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Force Portfolio Rebalance</h4>
-                <select className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
-                  <option value="">Select User</option>
-                  {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-                <button className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">
-                  Auto-Rebalance Portfolio
-                </button>
-                <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">
-                  Optimize Holdings
-                </button>
-                <button className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">
-                  Generate Report
-                </button>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Portfolio Analytics</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Most Diversified:</span>
-                    <span className="font-bold">
-                      {Object.entries(users).sort((a, b) => Object.keys(b[1].portfolio || {}).length - Object.keys(a[1].portfolio || {}).length)[0]?.[0] || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Highest Value:</span>
-                    <span className="font-bold">
-                      {Object.entries(users).sort((a, b) => {
-                        const aValue = a[1].balance + Object.entries(a[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
-                          const stock = stocks.find(s => s.ticker === ticker);
-                          return sum + (qty * (stock?.price || 0));
-                        }, 0);
-                        const bValue = b[1].balance + Object.entries(b[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
-                          const stock = stocks.find(s => s.ticker === ticker);
-                          return sum + (qty * (stock?.price || 0));
-                        }, 0);
-                        return bValue - aValue;
-                      })[0]?.[0] || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Most Active:</span>
-                    <span className="font-bold">
-                      {Object.entries(users).sort((a, b) => Object.values(b[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0) - Object.values(a[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0))[0]?.[0] || 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && adminTab === 'alerts' && (
-        <div className="max-w-7xl mx-auto p-4">
-          <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
-            <h2 className="text-xl font-bold mb-4">Price Alerts & Notifications</h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Create Price Alert</h4>
-                <select
-                  value={alertStock}
-                  onChange={(e) => setAlertStock(e.target.value)}
-                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
-                >
-                  <option value="">Select Stock</option>
-                  {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
-                </select>
-                <input
-                  type="number"
-                  placeholder="Alert Price"
-                  value={alertPrice}
-                  onChange={(e) => setAlertPrice(e.target.value)}
-                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
-                />
-                <select
-                  value={alertType}
-                  onChange={(e) => setAlertType(e.target.value)}
-                  className={`w-full p-2 mb-2 border rounded ${inputClass}`}
-                >
-                  <option value="above">Alert when price goes above</option>
-                  <option value="below">Alert when price goes below</option>
-                </select>
+              {user ? (
                 <button
-                  onClick={createPriceAlert}
-                  className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700"
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 p-2 text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                 >
-                  Create Alert
+                  <LogOut className="w-5 h-5" />
+                  <span>Logout</span>
                 </button>
-              </div>
-
-              <div className={`p-4 rounded border-2 ${cardClass}`}>
-                <h4 className="font-bold mb-2">Market Alerts</h4>
-                <div className="space-y-2">
-                  <button className="w-full bg-yellow-600 text-white p-2 rounded font-bold hover:bg-yellow-700">
-                    Alert: High Volatility Detected
-                  </button>
-                  <button className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">
-                    Alert: Large Price Movement
-                  </button>
-                  <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">
-                    Alert: Trading Volume Spike
-                  </button>
-                </div>
-              </div>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="flex items-center gap-2 p-2 text-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                >
+                  <Users className="w-5 h-5" />
+                  <span>Login</span>
+                </button>
+              )}
             </div>
 
-            <div className={`p-4 rounded border-2 ${cardClass}`}>
-              <h4 className="font-bold mb-2">Active Alerts</h4>
-              <div className="text-sm text-gray-500 text-center py-4">
-                No active alerts. Create some alerts above to monitor price movements.
-              </div>
+            {/* Status Indicators */}
+            <div className="flex flex-wrap gap-2">
+              {isAdmin && (
+                <span className="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">ADMIN</span>
+              )}
+              {isAdmin && isMarketController && (
+                <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">CONTROLLER</span>
+              )}
+              <span className={`px-2 py-1 rounded text-xs font-bold text-white ${marketRunning ? 'bg-green-600' : 'bg-red-600'}`}>
+                MARKET {marketRunning ? 'RUNNING' : 'STOPPED'}
+              </span>
             </div>
           </div>
         </div>
       )}
 
+      {/* Enhanced Notifications Panel */}
       {notifications.length > 0 && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <Activity className="w-4 h-4" />
-                Live Updates
-              </h4>
-              <button
-                onClick={() => setNotifications([])}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        <div className="fixed top-20 right-4 z-40 space-y-2 max-w-sm">
+          {notifications.slice(0, UI_CONSTANTS.maxNotifications).map((notification, idx) => {
+            const isSuccess = notification.includes('✅');
+            const isError = notification.includes('❌');
+            const isWarning = notification.includes('⚠️');
+
+            return (
+              <div
+                key={idx}
+                className={`p-4 rounded-xl shadow-lg border-2 backdrop-blur-md animate-slide-in-right ${isSuccess ? theme.success :
+                  isError ? theme.danger :
+                    isWarning ? theme.warning :
+                      theme.card
+                  } transition-all duration-300 hover:scale-105`}
               >
-                <X className="w-4 h-4" />
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium flex-1">{notification}</p>
+                  <button
+                    onClick={() => setNotifications(prev => prev.filter((_, i) => i !== idx))}
+                    className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Enhanced Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className={`p-8 rounded-2xl border-2 ${cardClass} w-full max-w-md shadow-2xl animate-scale-in`}>
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 ${theme.button} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`}>
+                <span className="text-white font-bold text-2xl">ASE</span>
+              </div>
+              <h1 className="text-3xl font-bold mb-2 text-blue-600">Welcome Back</h1>
+              <p className="text-sm opacity-75">Login to Atlanta Stock Exchange</p>
+            </div>
+
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Username"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                className={`w-full p-4 border-2 rounded-xl ${inputClass} focus:ring-2 focus:ring-blue-400 transition-all`}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className={`w-full p-4 border-2 rounded-xl ${inputClass} focus:ring-2 focus:ring-blue-400 transition-all`}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+              />
+
+              {loginError && (
+                <div className={`p-3 rounded-lg ${theme.danger} text-sm font-medium`}>
+                  {loginError}
+                </div>
+              )}
+
+              <button
+                onClick={handleLogin}
+                className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                Login
+              </button>
+
+              <button
+                onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }}
+                className="w-full bg-green-600 text-white p-4 rounded-xl font-bold hover:bg-green-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                Create Account
+              </button>
+
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="w-full bg-gray-400 text-white p-4 rounded-xl font-bold hover:bg-gray-500 transition-all"
+              >
+                Cancel
               </button>
             </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {notifications.slice(-5).reverse().map((notification, idx) => {
-                const isSuccess = notification.includes('✅');
-                const isWarning = notification.includes('⚠️');
-                const isError = notification.includes('❌');
 
-                return (
-                  <div
-                    key={idx}
-                    className={`text-sm p-2 rounded ${isSuccess ? 'bg-green-50 text-green-800 border border-green-200' :
-                      isWarning ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' :
-                        isError ? 'bg-red-50 text-red-800 border border-red-200' :
-                          'bg-blue-50 text-blue-800 border border-blue-200'
+            <div className={`mt-6 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <p className="text-xs font-medium mb-2">Demo Accounts:</p>
+              <p className="text-xs opacity-75">Demo User: <code>demo</code> / <code>demo</code></p>
+              <p className="text-xs opacity-75">Admin: <code>admin</code> / <code>admin</code></p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Signup Modal */}
+      {showSignupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className={`p-8 rounded-2xl border-2 ${cardClass} w-full max-w-md shadow-2xl animate-scale-in`}>
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 ${theme.button} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`}>
+                <span className="text-white font-bold text-2xl">ASE</span>
+              </div>
+              <h1 className="text-3xl font-bold mb-2 text-green-600">Join ASE</h1>
+              <p className="text-sm opacity-75">Create your trading account</p>
+            </div>
+
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Choose Username"
+                value={signupUsername}
+                onChange={(e) => setSignupUsername(e.target.value)}
+                className={`w-full p-4 border-2 rounded-xl ${inputClass} focus:ring-2 focus:ring-green-400 transition-all`}
+                onKeyPress={(e) => e.key === 'Enter' && handleSignup()}
+              />
+              <input
+                type="password"
+                placeholder="Create Password"
+                value={signupPassword}
+                onChange={(e) => setSignupPassword(e.target.value)}
+                className={`w-full p-4 border-2 rounded-xl ${inputClass} focus:ring-2 focus:ring-green-400 transition-all`}
+                onKeyPress={(e) => e.key === 'Enter' && handleSignup()}
+              />
+              <input
+                type="password"
+                placeholder="Confirm Password"
+                value={signupConfirmPassword}
+                onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                className={`w-full p-4 border-2 rounded-xl ${inputClass} focus:ring-2 focus:ring-green-400 transition-all`}
+                onKeyPress={(e) => e.key === 'Enter' && handleSignup()}
+              />
+
+              {signupError && (
+                <div className={`p-3 rounded-lg ${theme.danger} text-sm font-medium`}>
+                  {signupError}
+                </div>
+              )}
+
+              <button
+                onClick={handleSignup}
+                className="w-full bg-green-600 text-white p-4 rounded-xl font-bold hover:bg-green-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                Create Account
+              </button>
+
+              <button
+                onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }}
+                className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                Back to Login
+              </button>
+
+              <button
+                onClick={() => setShowSignupModal(false)}
+                className="w-full bg-gray-400 text-white p-4 rounded-xl font-bold hover:bg-gray-500 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className={`mt-6 p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <p className="text-xs font-medium mb-2">🎉 Welcome Bonus:</p>
+              <p className="text-xs opacity-75">• Starting balance: <strong>$50,000</strong></p>
+              <p className="text-xs opacity-75">• Free trading for first 30 days</p>
+              <p className="text-xs opacity-75">• Access to all market features</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Admin Panel */}
+      {
+        isAdmin && (
+          <div className={`${darkMode ? 'bg-gradient-to-r from-red-900 to-pink-900' : 'bg-gradient-to-r from-red-600 to-pink-600'} text-white p-4 shadow-lg`}>
+            <div className="max-w-7xl mx-auto">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-6 h-6" />
+                  <h2 className="text-xl font-bold">Admin Control Panel</h2>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="bg-white bg-opacity-20 px-2 py-1 rounded">
+                    Controller: {isMarketController ? '✅' : '❌'}
+                  </span>
+                  <span className="bg-white bg-opacity-20 px-2 py-1 rounded">
+                    Market: {marketRunning ? '🟢 Running' : '🔴 Stopped'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                {[
+                  { id: 'create', label: 'Create Stock', icon: '📈' },
+                  { id: 'adjust', label: 'Adjust Price', icon: '💰' },
+                  { id: 'money', label: 'User Money', icon: '💵' },
+                  { id: 'shares', label: 'Manage Shares', icon: '📊' },
+                  { id: 'splits', label: 'Stock Splits', icon: '✂️' },
+                  { id: 'market', label: 'Market Control', icon: '🎮' },
+                  { id: 'users', label: 'Users', icon: '👥' },
+                  { id: 'analytics', label: 'Analytics', icon: '📈' },
+                  { id: 'system', label: 'System', icon: '⚙️' },
+                  { id: 'bulk', label: 'Bulk Ops', icon: '🔄' },
+                  { id: 'trading', label: 'Trading', icon: '⚡' },
+                  { id: 'portfolio', label: 'Portfolios', icon: '💼' },
+                  { id: 'alerts', label: 'Alerts', icon: '🔔' },
+                  { id: 'speed', label: 'Speed', icon: '🚀' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAdminTab(tab.id)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all transform hover:scale-105 ${adminTab === tab.id
+                      ? 'bg-white text-red-600 shadow-lg'
+                      : 'bg-white bg-opacity-20 hover:bg-opacity-30'
                       }`}
                   >
-                    {notification}
-                  </div>
-                );
-              })}
+                    <div className="text-center">
+                      <div className="text-lg mb-1">{tab.icon}</div>
+                      <div className="text-xs">{tab.label}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'create' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Create New Stock</h2>
+              <input type="text" placeholder="Stock Name" value={newStockName} onChange={(e) => setNewStockName(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="text" placeholder="Ticker" value={newStockTicker} onChange={(e) => setNewStockTicker(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Price" value={newStockPrice} onChange={(e) => setNewStockPrice(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Market Cap (optional, e.g. 500000000000)" value={newStockMarketCap} onChange={(e) => setNewStockMarketCap(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="P/E Ratio (optional)" value={newStockPE} onChange={(e) => setNewStockPE(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="Dividend % (optional)" value={newStockDividend} onChange={(e) => setNewStockDividend(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="52-week High (optional)" value={newStockHigh52w} onChange={(e) => setNewStockHigh52w(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <input type="number" placeholder="52-week Low (optional)" value={newStockLow52w} onChange={(e) => setNewStockLow52w(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+              <button onClick={createStock} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Create Stock</button>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'adjust' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Adjust Stock Price</h2>
+              <select value={selectedStockForAdmin} onChange={(e) => setSelectedStockForAdmin(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                <option value="">Select Stock</option>
+                {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+              </select>
+              <input type="number" placeholder="Price Change (+/-)" value={priceAdjustment} onChange={(e) => setPriceAdjustment(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <button onClick={adjustPriceByAmount} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-4">Adjust by Amount</button>
+
+              <input type="number" placeholder="Percentage Change (%)" value={pricePercentage} onChange={(e) => setPricePercentage(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`} />
+              <button onClick={adjustPriceByPercentage} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust by Percentage</button>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'money' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Adjust User Balance</h2>
+              <select value={targetUser} onChange={(e) => setTargetUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                <option value="">Select User</option>
+                {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <input type="number" placeholder="Amount to Add/Remove" value={adjustMoney} onChange={(e) => setAdjustMoney(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+              <button onClick={adjustMoneySetter} className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Adjust Money</button>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'shares' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Buy/Sell Shares for User</h2>
+              <select value={adminSharesUser} onChange={(e) => setAdminSharesUser(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                <option value="">Select User</option>
+                {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <select value={adminSharesStock} onChange={(e) => setAdminSharesStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                <option value="">Select Stock</option>
+                {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+              </select>
+              <input type="number" placeholder="Quantity" value={adminSharesQuantity} onChange={(e) => setAdminSharesQuantity(e.target.value)} className={`w-full p-2 mb-4 border rounded ${inputClass}`} />
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={adminGiveShares} className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">Give Shares</button>
+                <button onClick={adminRemoveShares} className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">Remove Shares</button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'splits' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Stock Splits</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold mb-2">Select Stock</label>
+                  <select value={splitStock} onChange={(e) => setSplitStock(e.target.value)} className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                    <option value="">Select Stock</option>
+                    {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker}) - ${s.price.toFixed(2)}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold mb-2">Split Ratio</label>
+                  <input
+                    type="number"
+                    placeholder="e.g., 2 for 2-for-1 split"
+                    value={splitRatio}
+                    onChange={(e) => setSplitRatio(e.target.value)}
+                    className={`w-full p-2 mb-4 border rounded ${inputClass}`}
+                    min="0.1"
+                    step="0.1"
+                  />
+                  <p className="text-sm text-gray-600 mb-4">
+                    Enter the split ratio (e.g., 2 for 2-for-1 split, 0.5 for reverse split)
+                  </p>
+                </div>
+
+                {splitStock && splitRatio && (
+                  <div className="bg-blue-50 p-4 rounded mb-4">
+                    <h3 className="font-bold mb-2">Split Preview:</h3>
+                    <p className="text-sm">
+                      <strong>{stocks.find(s => s.ticker === splitStock)?.name}</strong> will split {splitRatio}x-for-1
+                    </p>
+                    <p className="text-sm">
+                      Current price: <strong>${stocks.find(s => s.ticker === splitStock)?.price.toFixed(2)}</strong> →
+                      New price: <strong>${(stocks.find(s => s.ticker === splitStock)?.price / parseFloat(splitRatio)).toFixed(2)}</strong>
+                    </p>
+                    <p className="text-sm">
+                      All shareholders will receive {splitRatio}x more shares at the adjusted price
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={executeStockSplit}
+                  disabled={!splitStock || !splitRatio}
+                  className={`w-full p-2 rounded font-bold ${!splitStock || !splitRatio ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                >
+                  Execute Stock Split
+                </button>
+
+                <div className="bg-yellow-50 p-4 rounded">
+                  <h3 className="font-bold mb-2">⚠️ Important:</h3>
+                  <ul className="text-sm space-y-1">
+                    <li>• Stock splits are irreversible</li>
+                    <li>• All prices will be adjusted proportionally</li>
+                    <li>• All user portfolios will be updated automatically</li>
+                    <li>• This action affects all users immediately</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'speed' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Speed Settings</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold mb-2">Price Update Speed (milliseconds)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={updateSpeed}
+                      onChange={(e) => setUpdateSpeed(parseInt(e.target.value) || 1000)}
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
+                      min="500"
+                      max="10000"
+                      step="500"
+                    />
+                    <button
+                      onClick={() => setUpdateSpeed(1000)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Reset (1s)
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Current: {updateSpeed}ms ({1000 / updateSpeed}x speed)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold mb-2">Chart Update Speed (milliseconds)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={chartUpdateSpeed}
+                      onChange={(e) => setChartUpdateSpeed(parseInt(e.target.value) || 5000)}
+                      className={`flex-1 p-2 border rounded ${inputClass}`}
+                      min="1000"
+                      max="30000"
+                      step="1000"
+                    />
+                    <button
+                      onClick={() => setChartUpdateSpeed(5000)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Reset (5s)
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Current: {chartUpdateSpeed}ms - Updates last chart point every {chartUpdateSpeed / 1000}s
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded">
+                  <h3 className="font-bold mb-2">How it works:</h3>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Price Update Speed:</strong> How often stock prices change (affects all price calculations)</li>
+                    <li>• <strong>Chart Update Speed:</strong> How often the last chart point updates (shows real-time movement)</li>
+                    <li>• <strong>New chart points:</strong> Added every 2 minutes regardless of speed settings</li>
+                    <li>• <strong>Rolling updates:</strong> Last point updates continuously, keeping charts responsive</li>
+                    <li>• <strong>Market Controller:</strong> Only one admin tab controls price updates to ensure synchronization</li>
+                    <li>• <strong>Real-time Sync:</strong> All users see the same prices and updates across all tabs/devices</li>
+                  </ul>
+                </div>
+
+                {isAdmin && (
+                  <div className={`p-4 rounded ${isMarketController ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                    <h3 className="font-bold mb-2">
+                      Market Controller Status: {isMarketController ? '✅ ACTIVE' : '⏳ WAITING'}
+                    </h3>
+                    <p className="text-sm">
+                      {isMarketController
+                        ? 'This tab is controlling market updates. All other tabs will sync to your changes.'
+                        : 'Another admin tab is controlling market updates. This tab will sync to those changes.'
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'market' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Market Control</h2>
+              <div className="space-y-4">
+                <div className={`p-4 rounded ${marketRunning ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                  <h3 className="font-bold mb-2">
+                    Market Status: {marketRunning ? '🟢 RUNNING' : '🔴 STOPPED'}
+                  </h3>
+                  <p className="text-sm mb-4">
+                    {marketRunning
+                      ? 'The market is currently active and prices are updating automatically.'
+                      : 'The market is stopped. Prices will not update until you start it.'
+                    }
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={startMarket}
+                      disabled={marketRunning}
+                      className={`px-4 py-2 rounded font-bold ${marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white`}
+                    >
+                      Start Market
+                    </button>
+                    <button
+                      onClick={stopMarket}
+                      disabled={!marketRunning}
+                      className={`px-4 py-2 rounded font-bold ${!marketRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white`}
+                    >
+                      Stop Market
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded">
+                  <h3 className="font-bold mb-2">How it works:</h3>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Automatic Operation:</strong> Market runs automatically without requiring admin presence</li>
+                    <li>• <strong>Start/Stop Control:</strong> Only admins can start or stop the market</li>
+                    <li>• <strong>Persistent State:</strong> Market state is saved and persists across all tabs/devices</li>
+                    <li>• <strong>Real-time Sync:</strong> All users see the same market state immediately</li>
+                    <li>• <strong>Independent Operation:</strong> Market continues running even if no admin is logged in</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'users' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">User Management</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-200'}>
+                    <tr>
+                      <th className="p-2 text-left">Username</th>
+                      <th className="p-2 text-right">Balance</th>
+                      <th className="p-2 text-right">Holdings Value</th>
+                      <th className="p-2 text-right">Total Value</th>
+                      <th className="p-2 text-right">Trades</th>
+                      <th className="p-2 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(users).map(([username, userData]) => {
+                      const holdingsValue = Object.entries(userData.portfolio || {}).reduce((sum, [ticker, qty]) => {
+                        const stock = stocks.find(s => s.ticker === ticker);
+                        return sum + (qty * (stock?.price || 0));
+                      }, 0);
+                      const totalValue = userData.balance + holdingsValue;
+                      const userTrades = tradingHistory.filter(t => t.user === username).length;
+
+                      return (
+                        <tr key={username} className={`border-t ${darkMode ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-100'}`}>
+                          <td className="p-2 font-bold">{username}</td>
+                          <td className="p-2 text-right">${userData.balance.toFixed(2)}</td>
+                          <td className="p-2 text-right">${holdingsValue.toFixed(2)}</td>
+                          <td className="p-2 text-right font-bold">${totalValue.toFixed(2)}</td>
+                          <td className="p-2 text-right">{userTrades}</td>
+                          <td className="p-2 text-center">
+                            <button
+                              onClick={() => {
+                                setTargetUser(username);
+                                setAdjustMoney('');
+                              }}
+                              className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 mr-1"
+                            >
+                              Adjust
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Reset ${username}'s account? This will set balance to $50,000 and clear portfolio.`)) {
+                                  const userRef = ref(database, `users/${username}`);
+                                  update(userRef, { balance: 50000, portfolio: {} });
+                                }
+                              }}
+                              className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                            >
+                              Reset
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'analytics' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">System Analytics</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Market Overview</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total Stocks:</span>
+                      <span className="font-bold">{stocks.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Users:</span>
+                      <span className="font-bold">{Object.keys(users).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Market Cap:</span>
+                      <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Avg Stock Price:</span>
+                      <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Trading Activity</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Total Trades:</span>
+                      <span className="font-bold">{tradingHistory.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Buy Orders:</span>
+                      <span className="font-bold text-green-600">{tradingHistory.filter(t => t.type === 'buy').length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Sell Orders:</span>
+                      <span className="font-bold text-red-600">{tradingHistory.filter(t => t.type === 'sell').length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Volume:</span>
+                      <span className="font-bold">${tradingHistory.reduce((sum, t) => sum + t.total, 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">System Health</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Market Status:</span>
+                      <span className={`font-bold ${marketRunning ? 'text-green-600' : 'text-red-600'}`}>
+                        {marketRunning ? 'RUNNING' : 'STOPPED'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Update Speed:</span>
+                      <span className="font-bold">{updateSpeed}ms</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Chart Updates:</span>
+                      <span className="font-bold">{chartUpdateSpeed}ms</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Controller:</span>
+                      <span className={`font-bold ${isMarketController ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {isMarketController ? 'ACTIVE' : 'STANDBY'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'system' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">System Settings</h2>
+              <div className="space-y-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h3 className="font-bold mb-2">Database Management</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Reset all stocks to initial values? This will restore default stocks.')) {
+                          const initialStocks = [
+                            { ticker: 'GCO', name: 'Georgia Commerce', price: 342.18, open: 342.18, high: 345.60, low: 340.00, marketCap: 520000000000, pe: 31.45, high52w: 365.00, low52w: 280.00, dividend: 1.20, qtrlyDiv: 0.30, volumeMultiplier: 0.3, history: generatePriceHistory(342.18, 342.18, 'GCO'), extendedHistory: generateExtendedHistory(342.18, 'GCO'), yearHistory: generateYearHistory(342.18, 'GCO') },
+                            { ticker: 'GFI', name: 'Georgia Financial Inc', price: 248.02, open: 248.02, high: 253.38, low: 247.27, marketCap: 374000000000, pe: 38.35, high52w: 260.09, low52w: 169.21, dividend: 0.41, qtrlyDiv: 0.26, volumeMultiplier: 1.8, history: generatePriceHistory(248.02, 248.02, 'GFI'), extendedHistory: generateExtendedHistory(248.02, 'GFI'), yearHistory: generateYearHistory(248.02, 'GFI') },
+                            { ticker: 'SAV', name: 'Savannah Shipping', price: 203.89, open: 203.89, high: 206.50, low: 202.00, marketCap: 312000000000, pe: 35.20, high52w: 225.00, low52w: 175.00, dividend: 0.85, qtrlyDiv: 0.21, volumeMultiplier: 0.7, history: generatePriceHistory(203.89, 203.89, 'SAV'), extendedHistory: generateExtendedHistory(203.89, 'SAV'), yearHistory: generateYearHistory(203.89, 'SAV') },
+                            { ticker: 'ATL', name: 'Atlanta Tech Corp', price: 156.75, open: 156.75, high: 159.20, low: 155.30, marketCap: 250000000000, pe: 42.15, high52w: 180.50, low52w: 120.00, dividend: 0.15, qtrlyDiv: 0.10, volumeMultiplier: 2.5, history: generatePriceHistory(156.75, 156.75, 'ATL'), extendedHistory: generateExtendedHistory(156.75, 'ATL'), yearHistory: generateYearHistory(156.75, 'ATL') },
+                            { ticker: 'RED', name: 'Red Clay Industries', price: 127.54, open: 127.54, high: 130.20, low: 126.00, marketCap: 198000000000, pe: 25.67, high52w: 145.30, low52w: 95.00, dividend: 0.50, qtrlyDiv: 0.13, volumeMultiplier: 1.2, history: generatePriceHistory(127.54, 127.54, 'RED'), extendedHistory: generateExtendedHistory(127.54, 'RED'), yearHistory: generateYearHistory(127.54, 'RED') },
+                            { ticker: 'PEA', name: 'Peach Energy Group', price: 89.43, open: 89.43, high: 91.80, low: 88.50, marketCap: 145000000000, pe: 28.90, high52w: 98.20, low52w: 65.30, dividend: 0.75, qtrlyDiv: 0.19, volumeMultiplier: 3.1, history: generatePriceHistory(89.43, 89.43, 'PEA'), extendedHistory: generateExtendedHistory(89.43, 'PEA'), yearHistory: generateYearHistory(89.43, 'PEA') },
+                            { ticker: 'COL', name: 'Columbus Manufacturing', price: 112.34, open: 112.34, high: 115.60, low: 111.00, marketCap: 175000000000, pe: 22.15, high52w: 130.00, low52w: 85.00, dividend: 1.50, qtrlyDiv: 0.38, volumeMultiplier: 0.9, history: generatePriceHistory(112.34, 112.34, 'COL'), extendedHistory: generateExtendedHistory(112.34, 'COL'), yearHistory: generateYearHistory(112.34, 'COL') },
+                            { ticker: 'AUG', name: 'Augusta Pharmaceuticals', price: 78.92, open: 78.92, high: 81.20, low: 77.50, marketCap: 125000000000, pe: 52.30, high52w: 92.50, low52w: 58.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 4.2, history: generatePriceHistory(78.92, 78.92, 'AUG'), extendedHistory: generateExtendedHistory(78.92, 'AUG'), yearHistory: generateYearHistory(78.92, 'AUG') },
+                          ];
+                          const stocksRef = ref(database, 'stocks');
+                          set(stocksRef, initialStocks);
+                        }
+                      }}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
+                    >
+                      Reset Stocks
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Clear all trading history? This action cannot be undone.')) {
+                          const historyRef = ref(database, 'tradingHistory');
+                          set(historyRef, {});
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
+                    >
+                      Clear History
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h3 className="font-bold mb-2">Market Configuration</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-bold">Market Hours:</label>
+                      <select className={`p-1 border rounded ${inputClass}`}>
+                        <option>24/7 (Current)</option>
+                        <option>9 AM - 5 PM EST</option>
+                        <option>9 AM - 4 PM EST</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-bold">Price Volatility:</label>
+                      <select className={`p-1 border rounded ${inputClass}`}>
+                        <option>Normal (Current)</option>
+                        <option>Low</option>
+                        <option>High</option>
+                        <option>Extreme</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'bulk' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Bulk Operations</h2>
+              <div className="space-y-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h3 className="font-bold mb-2">Bulk Price Adjustments</h3>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        placeholder="Percentage change (%)"
+                        className={`flex-1 p-2 border rounded ${inputClass}`}
+                      />
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
+                        Apply to All Stocks
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        placeholder="Fixed amount change"
+                        className={`flex-1 p-2 border rounded ${inputClass}`}
+                      />
+                      <button className="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700">
+                        Apply to All Stocks
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h3 className="font-bold mb-2">Bulk User Operations</h3>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        placeholder="Amount to add to all users"
+                        className={`flex-1 p-2 border rounded ${inputClass}`}
+                      />
+                      <button className="px-4 py-2 bg-purple-600 text-white rounded font-bold hover:bg-purple-700">
+                        Add to All Users
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        placeholder="Multiplier (e.g., 1.1 for 10% increase)"
+                        className={`flex-1 p-2 border rounded ${inputClass}`}
+                      />
+                      <button className="px-4 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700">
+                        Multiply All Balances
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h3 className="font-bold mb-2">Market Reset</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Reset all stock prices to opening prices? This will reset highs, lows, and current prices.')) {
+                          const updatedStocks = stocks.map(s => ({
+                            ...s,
+                            price: s.open,
+                            high: s.open,
+                            low: s.open
+                          }));
+                          const stocksRef = ref(database, 'stocks');
+                          set(stocksRef, updatedStocks);
+                        }
+                      }}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded font-bold hover:bg-yellow-700 mr-2"
+                    >
+                      Reset All Prices to Open
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Reset all user balances to $50,000 and clear portfolios? This will affect ALL users.')) {
+                          const updatedUsers = {};
+                          Object.keys(users).forEach(username => {
+                            updatedUsers[username] = { ...users[username], balance: 50000, portfolio: {} };
+                          });
+                          const usersRef = ref(database, 'users');
+                          set(usersRef, updatedUsers);
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
+                    >
+                      Reset All Users
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'trading' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Live Trading Monitor</h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Recent Trades</h4>
+                  <div className="space-y-2 text-sm max-h-64 overflow-y-auto">
+                    {Object.entries(users).flatMap(([username, userData]) =>
+                      Object.entries(userData.portfolio || {}).map(([ticker, qty]) => ({
+                        user: username,
+                        ticker,
+                        qty,
+                        value: qty * (stocks.find(s => s.ticker === ticker)?.price || 0)
+                      }))
+                    ).sort((a, b) => b.value - a.value).slice(0, 10).map((trade, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded">
+                        <span className="font-bold">{trade.user}</span>
+                        <span>{trade.ticker}</span>
+                        <span>{trade.qty} shares</span>
+                        <span className="text-green-600">${trade.value.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Top Movers</h4>
+                  <div className="space-y-2 text-sm">
+                    {stocks.sort((a, b) => Math.abs((b.price - b.open) / b.open) - Math.abs((a.price - a.open) / a.open)).slice(0, 5).map(stock => {
+                      const change = ((stock.price - stock.open) / stock.open * 100);
+                      return (
+                        <div key={stock.ticker} className="flex justify-between items-center">
+                          <span className="font-bold">{stock.ticker}</span>
+                          <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Market Stats</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Active Users:</span>
+                      <span className="font-bold">{Object.keys(users).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Trades Today:</span>
+                      <span className="font-bold">{Object.values(users).reduce((sum, u) => sum + Object.keys(u.portfolio || {}).length, 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Market Cap:</span>
+                      <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.marketCap, 0) / 1000000000000).toFixed(2)}T</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Avg Price:</span>
+                      <span className="font-bold">${(stocks.reduce((sum, s) => sum + s.price, 0) / stocks.length).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'portfolio' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Portfolio Manager</h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Force Portfolio Rebalance</h4>
+                  <select className={`w-full p-2 mb-2 border rounded ${inputClass}`}>
+                    <option value="">Select User</option>
+                    {Object.keys(users).map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <button className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700 mb-2">
+                    Auto-Rebalance Portfolio
+                  </button>
+                  <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700 mb-2">
+                    Optimize Holdings
+                  </button>
+                  <button className="w-full bg-purple-600 text-white p-2 rounded font-bold hover:bg-purple-700">
+                    Generate Report
+                  </button>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Portfolio Analytics</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Most Diversified:</span>
+                      <span className="font-bold">
+                        {Object.entries(users).sort((a, b) => Object.keys(b[1].portfolio || {}).length - Object.keys(a[1].portfolio || {}).length)[0]?.[0] || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Highest Value:</span>
+                      <span className="font-bold">
+                        {Object.entries(users).sort((a, b) => {
+                          const aValue = a[1].balance + Object.entries(a[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
+                            const stock = stocks.find(s => s.ticker === ticker);
+                            return sum + (qty * (stock?.price || 0));
+                          }, 0);
+                          const bValue = b[1].balance + Object.entries(b[1].portfolio || {}).reduce((sum, [ticker, qty]) => {
+                            const stock = stocks.find(s => s.ticker === ticker);
+                            return sum + (qty * (stock?.price || 0));
+                          }, 0);
+                          return bValue - aValue;
+                        })[0]?.[0] || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Most Active:</span>
+                      <span className="font-bold">
+                        {Object.entries(users).sort((a, b) => Object.values(b[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0) - Object.values(a[1].portfolio || {}).reduce((sum, qty) => sum + qty, 0))[0]?.[0] || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAdmin && adminTab === 'alerts' && (
+          <div className="max-w-7xl mx-auto p-4">
+            <div className={`p-6 rounded-lg border-2 ${cardClass}`}>
+              <h2 className="text-xl font-bold mb-4">Price Alerts & Notifications</h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Create Price Alert</h4>
+                  <select
+                    value={alertStock}
+                    onChange={(e) => setAlertStock(e.target.value)}
+                    className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                  >
+                    <option value="">Select Stock</option>
+                    {stocks.map(s => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Alert Price"
+                    value={alertPrice}
+                    onChange={(e) => setAlertPrice(e.target.value)}
+                    className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                  />
+                  <select
+                    value={alertType}
+                    onChange={(e) => setAlertType(e.target.value)}
+                    className={`w-full p-2 mb-2 border rounded ${inputClass}`}
+                  >
+                    <option value="above">Alert when price goes above</option>
+                    <option value="below">Alert when price goes below</option>
+                  </select>
+                  <button
+                    onClick={createPriceAlert}
+                    className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700"
+                  >
+                    Create Alert
+                  </button>
+                </div>
+
+                <div className={`p-4 rounded border-2 ${cardClass}`}>
+                  <h4 className="font-bold mb-2">Market Alerts</h4>
+                  <div className="space-y-2">
+                    <button className="w-full bg-yellow-600 text-white p-2 rounded font-bold hover:bg-yellow-700">
+                      Alert: High Volatility Detected
+                    </button>
+                    <button className="w-full bg-red-600 text-white p-2 rounded font-bold hover:bg-red-700">
+                      Alert: Large Price Movement
+                    </button>
+                    <button className="w-full bg-green-600 text-white p-2 rounded font-bold hover:bg-green-700">
+                      Alert: Trading Volume Spike
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`p-4 rounded border-2 ${cardClass}`}>
+                <h4 className="font-bold mb-2">Active Alerts</h4>
+                <div className="text-sm text-gray-500 text-center py-4">
+                  No active alerts. Create some alerts above to monitor price movements.
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        notifications.length > 0 && (
+          <div className="fixed top-20 right-4 z-50 max-w-sm">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Live Updates
+                </h4>
+                <button
+                  onClick={() => setNotifications([])}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {notifications.slice(-5).reverse().map((notification, idx) => {
+                  const isSuccess = notification.includes('✅');
+                  const isWarning = notification.includes('⚠️');
+                  const isError = notification.includes('❌');
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`text-sm p-2 rounded ${isSuccess ? 'bg-green-50 text-green-800 border border-green-200' :
+                        isWarning ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' :
+                          isError ? 'bg-red-50 text-red-800 border border-red-200' :
+                            'bg-blue-50 text-blue-800 border border-blue-200'
+                        }`}
+                    >
+                      {notification}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
       <div className="max-w-7xl mx-auto p-4">
-
-
         {user && (
           <div className="mb-6 flex gap-2">
             <button onClick={() => setAdminTab('portfolio')} className={`px-4 py-2 rounded font-bold ${adminTab === 'portfolio' ? 'bg-blue-600 text-white' : darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'}`}>My Portfolio</button>
@@ -3375,8 +4064,6 @@ const ATLStockExchange = () => {
 
         </div>
 
-
-
         <h2 className="text-2xl font-bold mb-4">Browse Stocks</h2>
         <div className="mb-6 space-y-4">
 
@@ -3427,76 +4114,206 @@ const ATLStockExchange = () => {
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold mb-4">Top Stocks {searchQuery && `- Search: ${searchQuery}`}</h2>
+        {/* Enhanced Header with Stats */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
+          <div>
+            <h2 className="text-3xl font-bold mb-2 flex items-center gap-3">
+              <Globe className="w-8 h-8 text-blue-600" />
+              Market Overview
+              {searchQuery && <span className="text-lg text-gray-500">- "{searchQuery}"</span>}
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              Showing {filteredStocks.length} of {stocks.length} stocks • Live updates every {MARKET_SIMULATION.priceUpdateInterval / 1000}s
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4 mt-4 lg:mt-0">
+            <div className={`p-3 rounded-lg ${theme.success} text-center`}>
+              <div className="text-2xl font-bold">{marketStats.gainers}</div>
+              <div className="text-xs">Gainers</div>
+            </div>
+            <div className={`p-3 rounded-lg ${theme.danger} text-center`}>
+              <div className="text-2xl font-bold">{marketStats.losers}</div>
+              <div className="text-xs">Losers</div>
+            </div>
+            <div className={`p-3 rounded-lg ${theme.warning} text-center`}>
+              <div className="text-lg font-bold">{formatNumber(marketStats.totalMarketCap)}</div>
+              <div className="text-xs">Total Cap</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Stock Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredStocks.map(stock => {
             // Calculate percentage from first price of the day (12:00 AM)
             const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
             const priceChange = stock.price - dayStartPrice;
             const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
+            const userHolding = user && users[user] ? (users[user].portfolio?.[stock.ticker] || 0) : 0;
+            const volume = Math.floor((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7));
 
             return (
-              <div key={`${stock.ticker}-${stock.price}`} className={`p-6 rounded-xl border-2 ${cardClass} cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-200 ${percentChange >= 0 ? 'hover:border-green-300' : 'hover:border-red-300'}`} onClick={() => setSelectedStock(stock)}>
+              <div
+                key={`${stock.ticker}-${stock.price}`}
+                className={`group relative p-6 rounded-2xl border-2 ${cardClass} cursor-pointer hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 ${percentChange >= 0 ? 'hover:border-green-400 hover:shadow-green-100' : 'hover:border-red-400 hover:shadow-red-100'
+                  } ${userHolding > 0 ? 'ring-2 ring-blue-400 ring-opacity-50' : ''}`}
+                onClick={() => setSelectedStock(stock)}
+              >
+                {/* Stock Header */}
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-xl font-bold">{stock.name}</h3>
-                      {isMarketOpen() && (
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Market Open"></div>
-                      )}
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-bold group-hover:text-blue-600 transition-colors">{stock.name}</h3>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Live Trading"></div>
+                        {userHolding > 0 && (
+                          <div className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-bold">
+                            {userHolding} shares
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-blue-600 font-bold text-sm">{stock.ticker}</p>
-                      <span className="text-xs bg-gray-700 dark:bg-gray-600 text-white px-2 py-1 rounded">
-                        Vol: {formatNumber((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7))}
+                    <div className="flex items-center gap-3">
+                      <span className="text-blue-600 font-bold text-lg">{stock.ticker}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
+                        Vol: {formatNumber(volume)}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
+                        P/E: {stock.pe?.toFixed(1) || 'N/A'}
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(stock.price)}</p>
-                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ${percentChange >= 0 ? 'bg-green-600 text-white dark:bg-green-700' : 'bg-red-600 text-white dark:bg-red-700'}`}>
-                      {percentChange >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                    <p className="text-3xl font-bold text-blue-600 mb-1">{formatCurrency(stock.price)}</p>
+                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold shadow-lg ${percentChange >= 0
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                      : 'bg-gradient-to-r from-red-500 to-rose-500 text-white'
+                      }`}>
+                      {percentChange >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
                       {percentChange >= 0 ? '+' : ''}{percentChange}%
                     </div>
                   </div>
                 </div>
 
-                <ResponsiveContainer width="100%" height={200} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
-                  <LineChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
-                    <CartesianGrid stroke={darkMode ? '#444' : '#ccc'} />
-                    <XAxis dataKey="time" stroke={darkMode ? '#999' : '#666'} fontSize={12} interval={Math.max(0, Math.floor((stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)).length / 10))} />
-                    <YAxis stroke={darkMode ? '#999' : '#666'} fontSize={12} domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))} type="number" ticks={getYAxisTicks(getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)))} />
-                    <Line type="monotone" dataKey="price" stroke="#2563eb" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {/* Enhanced Mini Chart */}
+                <div className="mb-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-3">
+                  <ResponsiveContainer width="100%" height={180} key={`${stock.ticker}-${stock.price}-${(stock.history || []).length}`}>
+                    <AreaChart data={stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker)}>
+                      <defs>
+                        <linearGradient id={`gradient-${stock.ticker}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#374151' : '#E5E7EB'} />
+                      <XAxis
+                        dataKey="time"
+                        stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                        fontSize={10}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        stroke={darkMode ? '#9CA3AF' : '#6B7280'}
+                        fontSize={10}
+                        domain={getChartDomain(stock.history && stock.history.length > 0 ? stock.history : generatePriceHistory(stock.open ?? stock.price, stock.price, stock.ticker))}
+                        type="number"
+                        tickFormatter={(value) => `$${value.toFixed(0)}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: darkMode ? '#1F2937' : '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '8px',
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                        }}
+                        formatter={(value) => [`$${value.toFixed(2)}`, 'Price']}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="price"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        fill={`url(#gradient-${stock.ticker})`}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">High:</span>
-                    <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                {/* Enhanced Stock Metrics */}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        High:
+                      </span>
+                      <span className="font-bold text-green-600">{formatCurrency(stock.high)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <TrendingDown className="w-3 h-3" />
+                        Low:
+                      </span>
+                      <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <DollarSign className="w-3 h-3" />
+                        Dividend:
+                      </span>
+                      <span className="font-bold">{stock.dividend?.toFixed(2) || '0.00'}%</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Low:</span>
-                    <span className="font-bold text-red-600">{formatCurrency(stock.low)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Market Cap:</span>
-                    <span className="font-bold">{formatNumber(stock.marketCap)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">P/E:</span>
-                    <span className="font-bold">{stock.pe.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Dividend:</span>
-                    <span className="font-bold">{stock.dividend.toFixed(2)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">52W Range:</span>
-                    <span className="font-bold text-xs">{formatCurrency(stock.low52w)} - {formatCurrency(stock.high52w)}</span>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <BarChart3 className="w-3 h-3" />
+                        Cap:
+                      </span>
+                      <span className="font-bold">{formatNumber(stock.marketCap)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">52W:</span>
+                      <span className="font-bold text-xs">
+                        {formatCurrency(stock.low52w || stock.price * 0.8)} - {formatCurrency(stock.high52w || stock.price * 1.2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Open:</span>
+                      <span className="font-bold">{formatCurrency(stock.open)}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Quick Action Buttons */}
+                <div className="mt-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedStock(stock);
+                    }}
+                    className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    View Details
+                  </button>
+                  {user && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedStock(stock);
+                        setBuyQuantity('1');
+                      }}
+                      className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                    >
+                      Quick Buy
+                    </button>
+                  )}
+                </div>
+
+                {/* Hover Effect Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
               </div>
             );
           })}
