@@ -89,90 +89,80 @@ const getMarketStatus = () => {
 
 
 
-// Enhanced price history generation with better performance and caching
-function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
+// CLEAN DAILY CHART GENERATION - 5-minute intervals
+function generateDailyChart(currentPrice, ticker, existingHistory = []) {
   const now = getEasternTime();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  // Normalize parameters
-  let currentPrice = openPrice;
-  let seedKey = '';
-
-  if (typeof currentOrSeed === 'number') {
-    currentPrice = currentOrSeed;
-    seedKey = typeof maybeSeedKey === 'string' ? maybeSeedKey : '';
-  } else if (typeof currentOrSeed === 'string') {
-    seedKey = currentOrSeed;
-  }
-
-  // Validate inputs
-  if (!openPrice || openPrice <= 0) return [];
-  if (!currentPrice || currentPrice <= 0) currentPrice = openPrice;
-
-  // Generate data points from 12:00 AM to current time only
-  const data = [];
-
-  // Start at midnight (0 minutes) and go to current time
-  const intervalMinutes = 10; // Data point every 10 minutes
-  const totalPoints = Math.floor(currentMinutes / intervalMinutes) + 1;
-
-  // Seeded random for consistent data
-  const hashString = (str) => {
-    if (!str) return Math.floor(openPrice * 1000);
-    let h = 0;
-    for (let i = 0; i < str.length; i++) {
-      h = (h * 31 + str.charCodeAt(i)) >>> 0;
-    }
-    return h;
-  };
-
-  let seed = hashString(seedKey + now.toDateString());
+  // Create seed for consistent data
+  const seed = ticker.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  let rng = seed + now.getDate();
   const seededRandom = () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
+    rng = (rng * 1664525 + 1013904223) % 4294967296;
+    return rng / 4294967296;
   };
 
-  // Generate price progression from open to current
-  for (let i = 0; i < totalPoints; i++) {
-    const minutes = i * intervalMinutes;
-    const progress = i / (totalPoints - 1);
+  // Generate data from 12:00 AM to current time in 5-minute intervals (288 points/day)
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const targetPoints = Math.floor(currentMinutes / 5) + 1; // Every 5 minutes
 
-    // Format time as 12-hour format
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    let displayHour = hours;
-    let ampm = 'AM';
+  // Use existing history if available, otherwise start fresh
+  let data = [...existingHistory];
 
-    if (hours === 0) {
-      displayHour = 12;
-    } else if (hours < 12) {
-      displayHour = hours;
-    } else if (hours === 12) {
-      displayHour = 12;
-      ampm = 'PM';
+  // Fill in missing points up to current time
+  while (data.length < targetPoints) {
+    const pointIndex = data.length;
+    const totalMinutes = pointIndex * 5; // Every 5 minutes
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    // Format time
+    let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    let ampm = hours < 12 ? 'AM' : 'PM';
+    const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
+    // Realistic price progression
+    let price;
+    if (pointIndex === 0) {
+      // Start of day - slight variation from current price
+      price = currentPrice * (0.998 + seededRandom() * 0.004); // ±0.2% from current
     } else {
-      displayHour = hours - 12;
-      ampm = 'PM';
+      // Build on previous price with realistic movement
+      const prevPrice = data[pointIndex - 1].price;
+
+      // Market activity varies by time of day
+      const hourOfDay = hours;
+      const isMarketHours = hourOfDay >= 9 && hourOfDay <= 16;
+      const activityMultiplier = isMarketHours ? 1.5 : 0.3;
+
+      // Realistic movements for 5-minute intervals
+      const baseVolatility = 0.0002 * activityMultiplier; // Appropriate for 5-minute intervals
+      const randomWalk = (seededRandom() - 0.5) * baseVolatility;
+
+      // Mean reversion for smooth progression
+      const meanReversion = (currentPrice - prevPrice) * 0.0005;
+
+      // Add momentum for smoother trends
+      const momentum = (data.length > 1 && pointIndex > 1) ? (prevPrice - data[pointIndex - 2].price) * 0.2 : 0;
+
+      price = prevPrice * (1 + randomWalk + meanReversion + momentum);
     }
-
-    const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
-
-    // Calculate price with some random variation but trending toward current price
-    const basePrice = openPrice + (currentPrice - openPrice) * progress;
-    const variation = (seededRandom() - 0.5) * 0.02 * basePrice; // 2% max variation
-    const price = Math.max(0.01, basePrice + variation);
 
     data.push({
       time: timeLabel,
       price: parseFloat(price.toFixed(2)),
-      volume: Math.floor((0.5 + seededRandom()) * 1000000), // Add volume data
-      bid: parseFloat((price - 0.01).toFixed(2)), // Bid price
-      ask: parseFloat((price + 0.01).toFixed(2))  // Ask price
+      volume: Math.floor(seededRandom() * 1000000 + 500000),
+      isLive: pointIndex === targetPoints - 1
     });
   }
 
   return data;
+}
 
+// OLD FUNCTION - KEEPING FOR COMPATIBILITY
+function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
+  const ticker = typeof maybeSeedKey === 'string' ? maybeSeedKey : (typeof currentOrSeed === 'string' ? currentOrSeed : 'STOCK');
+  const currentPrice = typeof currentOrSeed === 'number' ? currentOrSeed : openPrice;
+  return generateDailyChart(currentPrice, ticker);
 }
 
 const ATLStockExchange = () => {
