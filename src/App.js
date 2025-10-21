@@ -157,9 +157,9 @@ function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
 
     const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
 
-    // Calculate price with some random variation but trending toward current price
+    // Much more realistic price movements
     const basePrice = openPrice + (currentPrice - openPrice) * progress;
-    const variation = (seededRandom() - 0.5) * 0.02 * basePrice; // 2% max variation
+    const variation = (seededRandom() - 0.5) * 0.002 * basePrice; // 0.2% max variation - much more realistic
     const price = Math.max(0.01, basePrice + variation);
 
     data.push({
@@ -227,7 +227,7 @@ const ATLStockExchange = () => {
   const [initialized, setInitialized] = useState(false);
   const [stockFilter, setStockFilter] = useState('');
   const [chartKey, setChartKey] = useState(0); // Force chart re-renders
-  const [updateSpeed, setUpdateSpeed] = useState(5000); // Price update interval in ms - very realistic
+  const [updateSpeed, setUpdateSpeed] = useState(8000); // Price update interval in ms - ultra realistic
   const [chartUpdateSpeed, setChartUpdateSpeed] = useState(5000); // Chart update interval in ms
   const [isMarketController, setIsMarketController] = useState(false); // Controls if this tab runs price updates
   const [marketRunning, setMarketRunning] = useState(true); // Market state
@@ -609,27 +609,27 @@ const ATLStockExchange = () => {
           return seed / 4294967296;
         };
 
-        // Very subtle, realistic price movements
+        // Ultra-realistic price movements like real stocks
         const timeOfDay = now.getHours() + now.getMinutes() / 60;
 
-        // Market activity varies by time of day (much more subtle)
-        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.2 : 0.5;
+        // Market activity varies by time of day (very subtle)
+        const marketActivityMultiplier = (timeOfDay >= 9 && timeOfDay <= 16) ? 1.1 : 0.3;
 
-        // Extremely small volatility for realistic movements
-        const baseVolatility = 0.00005 * marketActivityMultiplier; // 0.005% max change per update
+        // Extremely tiny volatility for realistic movements
+        const baseVolatility = 0.00002 * marketActivityMultiplier; // 0.002% max change per update
 
         // Very subtle random walk
         const randomComponent = (simpleRandom() - 0.5) * baseVolatility;
 
-        // Occasional tiny movements (most updates result in no change)
-        const shouldMove = simpleRandom() > 0.7; // Only move 30% of the time
+        // Most updates result in no change (like real stocks)
+        const shouldMove = simpleRandom() > 0.85; // Only move 15% of the time
         const totalChange = shouldMove ? randomComponent : 0;
 
         const newPrice = stock.price * (1 + totalChange);
 
-        // Very tight price bounds for realistic movements
-        const minPrice = stock.price * 0.99995; // 0.005% down limit per update
-        const maxPrice = stock.price * 1.00005; // 0.005% up limit per update
+        // Ultra-tight price bounds for realistic movements
+        const minPrice = stock.price * 0.99998; // 0.002% down limit per update
+        const maxPrice = stock.price * 1.00002; // 0.002% up limit per update
         const boundedPrice = Math.max(minPrice, Math.min(maxPrice, newPrice));
         const newPrice2 = Math.max(0.01, parseFloat(boundedPrice.toFixed(2)));
 
@@ -748,7 +748,7 @@ const ATLStockExchange = () => {
     const baseSeed = seedKey ? seedKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) : Math.floor(basePrice * 100);
     const random = createSeededRandom(baseSeed);
 
-    let price = basePrice * (0.92 + random() * 0.16); // More variation in starting price
+    let price = basePrice * (0.98 + random() * 0.04); // Much smaller starting variation
     let momentum = 0;
 
     // Generate 7 days of data with hourly intervals for better resolution
@@ -758,23 +758,23 @@ const ATLStockExchange = () => {
         const timeOfDay = hour / 24;
         const marketActivity = Math.sin(timeOfDay * Math.PI) * 0.5 + 0.5; // Higher activity during market hours
 
-        // Simple realistic randomization
+        // Much more realistic randomization
         const r1 = random();
 
-        // Random walk with momentum
-        const randomChange = (r1 - 0.5) * 2; // -1 to 1
-        momentum = momentum * 0.8 + randomChange * 0.2;
+        // Very subtle random walk with momentum
+        const randomChange = (r1 - 0.5) * 0.2; // Much smaller changes
+        momentum = momentum * 0.9 + randomChange * 0.1;
 
-        // Market activity affects volatility
-        const volatility = 0.01 + marketActivity * 0.005;
+        // Much smaller volatility for realistic movements
+        const volatility = 0.001 + marketActivity * 0.0005; // 0.1% to 0.15% max
 
         // Calculate price change
         const change = momentum * volatility;
 
         price = price * (1 + change);
 
-        // Keep within reasonable bounds but allow more movement
-        price = Math.max(basePrice * 0.75, Math.min(basePrice * 1.35, price));
+        // Much tighter bounds for realistic stock movements
+        price = Math.max(basePrice * 0.95, Math.min(basePrice * 1.05, price));
 
         const date = getEasternTime();
         date.setDate(date.getDate() - (7 - day));
@@ -816,53 +816,53 @@ const ATLStockExchange = () => {
       return x - Math.floor(x);
     };
 
-    let price = basePrice * (0.80 + seededRandom() * 0.40); // More variation in starting price
-    let longTermTrend = (seededRandom() - 0.5) * 0.03; // Overall yearly trend
+    let price = basePrice * (0.95 + seededRandom() * 0.10); // Much smaller starting variation
+    let longTermTrend = (seededRandom() - 0.5) * 0.008; // Much smaller yearly trend
     let momentum = 0;
 
     // Generate 12 months of data with more frequent intervals
     for (let month = 0; month < 12; month++) {
       for (let week = 0; week < 4; week++) {
-        // Seasonal effects (stronger in certain months)
-        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.015;
+        // Very subtle seasonal effects
+        const seasonalFactor = Math.sin((month / 12) * Math.PI * 2) * 0.002;
 
-        // Market cycles and events
-        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.008;
+        // Subtle market cycles
+        const cycleFactor = Math.sin((month * 4 + week) / 48 * Math.PI * 2) * 0.001;
 
-        // Enhanced randomization
+        // Much more realistic randomization
         const random1 = seededRandom();
         const random2 = seededRandom();
         const random3 = seededRandom();
 
-        // Momentum over longer periods
-        momentum = momentum * 0.85 + (random1 - 0.5) * 0.8;
+        // Subtle momentum over longer periods
+        momentum = momentum * 0.95 + (random1 - 0.5) * 0.1;
 
-        // Volatility varies by month (higher in certain periods)
-        const baseVolatility = 0.015 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.01;
-        const volatilityCluster = Math.abs(random2 - 0.5) * 0.012;
+        // Much smaller volatility for realistic movements
+        const baseVolatility = 0.003 + Math.abs(Math.sin(month * Math.PI / 6)) * 0.002;
+        const volatilityCluster = Math.abs(random2 - 0.5) * 0.002;
         const totalVolatility = baseVolatility + volatilityCluster;
 
-        // Trend can shift quarterly
-        if (week === 0 && month % 3 === 0 && random3 > 0.7) {
-          longTermTrend = (seededRandom() - 0.5) * 0.03;
+        // Trend can shift quarterly but much smaller
+        if (week === 0 && month % 3 === 0 && random3 > 0.8) {
+          longTermTrend = (seededRandom() - 0.5) * 0.008;
         }
 
-        // Major market events (rare but impactful)
+        // Rare market events with smaller impact
         let eventImpact = 0;
-        if (random3 > 0.98) {
-          eventImpact = (seededRandom() - 0.5) * 0.15; // Major event
-        } else if (random3 > 0.95) {
-          eventImpact = (seededRandom() - 0.5) * 0.08; // Minor event
+        if (random3 > 0.99) {
+          eventImpact = (seededRandom() - 0.5) * 0.03; // Much smaller major event
+        } else if (random3 > 0.97) {
+          eventImpact = (seededRandom() - 0.5) * 0.015; // Smaller minor event
         }
 
-        // Combine all factors
-        const noise = (seededRandom() - 0.5) * 2;
-        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.3 + totalVolatility * noise + eventImpact;
+        // Combine all factors with much smaller impact
+        const noise = (seededRandom() - 0.5) * 0.5;
+        const change = longTermTrend + seasonalFactor + cycleFactor + momentum * 0.1 + totalVolatility * noise + eventImpact;
 
         price = price * (1 + change);
 
-        // Keep within reasonable bounds but allow significant movement over a year
-        price = Math.max(basePrice * 0.40, Math.min(basePrice * 2.50, price));
+        // Much more realistic bounds for yearly stock movement
+        price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.30, price));
 
         const date = getEasternTime();
         date.setMonth(date.getMonth() - (12 - month));
@@ -898,33 +898,33 @@ const ATLStockExchange = () => {
     };
 
     let momentum = 0;
-    let microTrend = (seededRandom() - 0.5) * 0.002;
+    let microTrend = (seededRandom() - 0.5) * 0.0002; // Much smaller micro trend
 
     for (let i = 0; i <= minutes; i += 1) {
-      // Enhanced short-term movement
+      // Very subtle short-term movement
       const random1 = seededRandom();
       const random2 = seededRandom();
 
-      // Momentum for smoother movement
-      momentum = momentum * 0.6 + (random1 - 0.5) * 0.8;
+      // Very subtle momentum for smoother movement
+      momentum = momentum * 0.8 + (random1 - 0.5) * 0.1;
 
-      // Micro volatility with clustering
-      const baseVolatility = 0.003;
-      const volatilityCluster = Math.abs(random2 - 0.5) * 0.002;
+      // Much smaller micro volatility
+      const baseVolatility = 0.0003;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.0002;
       const totalVolatility = baseVolatility + volatilityCluster;
 
-      // Occasional micro trend shifts
-      if (seededRandom() > 0.97) {
-        microTrend = (seededRandom() - 0.5) * 0.002;
+      // Very rare micro trend shifts
+      if (seededRandom() > 0.99) {
+        microTrend = (seededRandom() - 0.5) * 0.0002;
       }
 
-      const noise = (seededRandom() - 0.5) * 2;
-      const change = microTrend + momentum * 0.4 + totalVolatility * noise;
+      const noise = (seededRandom() - 0.5) * 0.3;
+      const change = microTrend + momentum * 0.1 + totalVolatility * noise;
 
       price = price * (1 + change);
 
-      // Tighter bounds for short timeframes
-      price = Math.max(basePrice * 0.985, Math.min(basePrice * 1.015, price));
+      // Very tight bounds for realistic short timeframes
+      price = Math.max(basePrice * 0.998, Math.min(basePrice * 1.002, price));
 
       const pointTime = new Date(startTime.getTime() + i * 60 * 1000);
       const hour = pointTime.getHours();
@@ -964,41 +964,41 @@ const ATLStockExchange = () => {
       return x - Math.floor(x);
     };
 
-    let price = basePrice * (0.90 + seededRandom() * 0.20);
-    let trend = (seededRandom() - 0.5) * 0.025; // Monthly trend
+    let price = basePrice * (0.98 + seededRandom() * 0.04); // Much smaller starting variation
+    let trend = (seededRandom() - 0.5) * 0.005; // Much smaller monthly trend
     let momentum = 0;
 
     // Generate 30 days of data with daily intervals
     for (let day = 0; day < 30; day++) {
-      // Enhanced randomization
+      // Much more realistic randomization
       const random1 = seededRandom();
       const random2 = seededRandom();
       const random3 = seededRandom();
 
-      // Weekly cycles
-      const weeklyEffect = Math.sin((day / 7) * Math.PI * 2) * 0.005;
+      // Very subtle weekly cycles
+      const weeklyEffect = Math.sin((day / 7) * Math.PI * 2) * 0.001;
 
-      // Momentum carries forward
-      momentum = momentum * 0.75 + (random1 - 0.5) * 0.7;
+      // Subtle momentum carries forward
+      momentum = momentum * 0.9 + (random1 - 0.5) * 0.1;
 
-      // Volatility with clustering
-      const baseVolatility = 0.012;
-      const volatilityCluster = Math.abs(random2 - 0.5) * 0.008;
+      // Much smaller volatility for realistic daily movements
+      const baseVolatility = 0.002;
+      const volatilityCluster = Math.abs(random2 - 0.5) * 0.001;
       const totalVolatility = baseVolatility + volatilityCluster;
 
-      // Trend can shift weekly
-      if (day % 7 === 0 && random3 > 0.8) {
-        trend = (seededRandom() - 0.5) * 0.025;
+      // Trend can shift weekly but much smaller
+      if (day % 7 === 0 && random3 > 0.9) {
+        trend = (seededRandom() - 0.5) * 0.005;
       }
 
-      // Combine factors
-      const noise = (seededRandom() - 0.5) * 2;
-      const change = trend + weeklyEffect + momentum * 0.35 + totalVolatility * noise;
+      // Combine factors with much smaller impact
+      const noise = (seededRandom() - 0.5) * 0.5;
+      const change = trend + weeklyEffect + momentum * 0.1 + totalVolatility * noise;
 
       price = price * (1 + change);
 
-      // Keep within reasonable bounds
-      price = Math.max(basePrice * 0.70, Math.min(basePrice * 1.45, price));
+      // Much more realistic bounds for monthly stock movement
+      price = Math.max(basePrice * 0.90, Math.min(basePrice * 1.10, price));
 
       const date = getEasternTime();
       date.setDate(date.getDate() - (30 - day));
