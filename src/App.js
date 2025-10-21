@@ -631,86 +631,52 @@ const ATLStockExchange = () => {
         const newHigh = Math.max(stock.high, newPrice2);
         const newLow = Math.min(stock.low, newPrice2);
 
-        // Reset history at start of new trading day (if it's early morning and history exists from previous day)
+        // FIXED CHART SYSTEM: 5-minute intervals (288 points/day), update last point every 5 seconds
+        const isNewDay = now.getHours() === 0 && now.getMinutes() < 5;
         let newHistory = [...(stock.history || [])];
-        const elapsedMs = now - dayStartTime;
+        let newOpen = stock.open;
 
-        // If it's early in the day (before 6 AM) and we have history, it might be from yesterday - reset it
-        if (now.getHours() < 6 && newHistory.length > 0) {
-          // Check if the last entry is from a different day by looking at elapsed time
-          const lastEntryTime = elapsedMs / 120000; // Convert to 2-minute intervals
-          if (lastEntryTime < 0 || newHistory.length > 200) { // Reset if negative time or too many entries
-            newHistory = [];
-            // Also reset daily high/low at start of new day
-            stock.high = stock.price;
-            stock.low = stock.price;
-          }
+        // Clear bad data if history has too many points (old system)
+        if (newHistory.length > 300) {
+          newHistory = [];
         }
 
-        // PROFESSIONAL CONTINUOUS CHART SYSTEM - NO MORE GAPS!
-        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+        if (isNewDay || newHistory.length === 0) {
+          // Generate fresh chart for new day AND reset open price
+          newHistory = generateDailyChart(newPrice2, stock.ticker);
+          newOpen = stock.price; // Set today's opening price to current price
+        } else {
+          // Only add new point if we're exactly at a 5-minute boundary
+          const currentMinutes = now.getMinutes();
+          const isExactly5MinBoundary = currentMinutes % 5 === 0 && now.getSeconds() < 10; // Within first 10 seconds of 5-minute mark
 
-        // Ensure we have data points for EVERY minute from midnight to now
-        while (newHistory.length <= currentTotalMinutes) {
-          const minutesSinceMidnight = newHistory.length;
-          const hours = Math.floor(minutesSinceMidnight / 60);
-          const mins = minutesSinceMidnight % 60;
+          const totalMinutesToday = now.getHours() * 60 + now.getMinutes();
+          const expectedPoints = Math.floor(totalMinutesToday / 5) + 1;
 
-          let displayHour = hours;
-          let ampm = 'AM';
+          if (isExactly5MinBoundary && newHistory.length < expectedPoints) {
+            // Add new 5-minute point ONLY at exact 5-minute boundaries
+            const totalMinutes = (newHistory.length) * 5;
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+            let ampm = hours < 12 ? 'AM' : 'PM';
+            const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
-          if (hours === 0) {
-            displayHour = 12;
-          } else if (hours < 12) {
-            displayHour = hours;
-          } else if (hours === 12) {
-            displayHour = 12;
-            ampm = 'PM';
-          } else {
-            displayHour = hours - 12;
-            ampm = 'PM';
+            newHistory.push({
+              time: timeLabel,
+              price: newPrice2,
+              volume: Math.floor(Math.random() * 1000000 + 500000),
+              isLive: true
+            });
+          } else if (newHistory.length > 0) {
+            // ALWAYS update the last point with current live price (every 5 seconds)
+            const lastIndex = newHistory.length - 1;
+            newHistory[lastIndex] = {
+              ...newHistory[lastIndex],
+              price: newPrice2,
+              isLive: true
+            };
           }
-
-          const timeLabel = `${displayHour}:${mins.toString().padStart(2, '0')} ${ampm}`;
-
-          // Use previous price if this is a backfill, otherwise use current price
-          const priceForThisMinute = minutesSinceMidnight === currentTotalMinutes ? newPrice2 :
-            (newHistory.length > 0 ? newHistory[newHistory.length - 1].price : stock.price);
-
-          newHistory.push({
-            time: timeLabel,
-            price: priceForThisMinute,
-            volume: Math.floor(Math.random() * 1000000 + 500000),
-            isLive: minutesSinceMidnight === currentTotalMinutes
-          });
-        }
-
-        // Always update the current minute with live price
-        if (newHistory.length > 0) {
-          const currentIndex = newHistory.length - 1;
-          const hour = now.getHours();
-          const min = now.getMinutes();
-          let displayHour = hour;
-          let ampm = 'AM';
-
-          if (hour === 0) {
-            displayHour = 12;
-          } else if (hour < 12) {
-            displayHour = hour;
-          } else if (hour === 12) {
-            displayHour = 12;
-            ampm = 'PM';
-          } else {
-            displayHour = hour - 12;
-            ampm = 'PM';
-          }
-
-          newHistory[currentIndex] = {
-            time: `${displayHour}:${min.toString().padStart(2, '0')} ${ampm}`,
-            price: newPrice2,
-            volume: Math.floor(Math.random() * 1000000 + 500000),
-            isLive: true
-          };
         }
 
         const sharesOutstanding = stock.marketCap / stock.price;
