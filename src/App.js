@@ -144,11 +144,8 @@ const calculatePercentageChange = (currentPrice, startPrice) => {
 
 // Helper function to get the correct reference price for percentage calculations
 const getPeriodStartPrice = (stock) => {
-  // For daily calculations, use the first price from history (market open)
-  // If no history, fall back to the 'open' price
-  if (stock.history && stock.history.length > 0) {
-    return stock.history[0].price;
-  }
+  // Always use the 'open' price for consistent percentage calculations
+  // This ensures percentages match what users expect (current vs opening price)
   return stock.open;
 };
 
@@ -176,7 +173,7 @@ const getMarketStatus = () => {
 
 // CLEAN DAILY CHART GENERATION - 5-minute intervals
 // ULTRA-REALISTIC INTRADAY CHART GENERATION - Professional Market Simulation
-function generateDailyChart(currentPrice, ticker, existingHistory = []) {
+function generateDailyChart(currentPrice, ticker, existingHistory = [], openingPrice = null) {
   const now = getEasternTime();
 
   // Safety check for input parameters
@@ -227,9 +224,14 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
 
     let price;
     if (pointIndex === 0) {
-      // Opening price with realistic gap from previous close
-      const gapFactor = 0.995 + seededRandom1() * 0.01; // ±0.5% overnight gap
-      price = currentPrice * gapFactor;
+      // Use provided opening price or calculate one
+      if (openingPrice !== null) {
+        price = openingPrice;
+      } else {
+        // Opening price with realistic gap from previous close
+        const gapFactor = 0.995 + seededRandom1() * 0.01; // ±0.5% overnight gap
+        price = currentPrice * gapFactor;
+      }
 
       // Set default volume multiplier for opening
       volumeMultiplier = isMarketHours ? 1.0 : 0.2;
@@ -340,7 +342,7 @@ function generateDailyChart(currentPrice, ticker, existingHistory = []) {
 function generatePriceHistory(openPrice, currentOrSeed, maybeSeedKey) {
   const ticker = typeof maybeSeedKey === 'string' ? maybeSeedKey : (typeof currentOrSeed === 'string' ? currentOrSeed : 'STOCK');
   const currentPrice = typeof currentOrSeed === 'number' ? currentOrSeed : openPrice;
-  return generateDailyChart(currentPrice, ticker);
+  return generateDailyChart(currentPrice, ticker, [], openPrice);
 }
 
 const ATLStockExchange = () => {
@@ -719,7 +721,9 @@ const ATLStockExchange = () => {
             ...stock,
             price: parseFloat(newPrice.toFixed(2)),
             high: Math.max(stock.high, newPrice),
-            low: Math.min(stock.low, newPrice)
+            low: Math.min(stock.low, newPrice),
+            // Regenerate history to show movement from opening to current price
+            history: generateDailyChart(newPrice, stock.ticker, [], stock.open)
           };
         });
 
@@ -892,7 +896,7 @@ const ATLStockExchange = () => {
 
           if (newHistory.length === 0) {
             // Create initial history if missing
-            newHistory = generateDailyChart(finalPrice, stock.ticker);
+            newHistory = generateDailyChart(finalPrice, stock.ticker, [], stock.open);
           } else {
             // Check if we need to add a new time point
             const now = getEasternTime();
