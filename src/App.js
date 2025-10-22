@@ -136,6 +136,22 @@ const formatNumber = (num) => {
   return num.toFixed(2);
 };
 
+// Helper function to calculate accurate percentage change from period start
+const calculatePercentageChange = (currentPrice, startPrice) => {
+  if (!startPrice || startPrice === 0) return 0;
+  return ((currentPrice - startPrice) / startPrice) * 100;
+};
+
+// Helper function to get the correct reference price for percentage calculations
+const getPeriodStartPrice = (stock) => {
+  // For daily calculations, use the first price from history (market open)
+  // If no history, fall back to the 'open' price
+  if (stock.history && stock.history.length > 0) {
+    return stock.history[0].price;
+  }
+  return stock.open;
+};
+
 
 
 // Removed unused isMarketOpen function
@@ -420,8 +436,17 @@ const ATLStockExchange = () => {
       gainers: 0, losers: 0, totalMarketCap: 0
     };
 
-    const gainers = stocks.filter(stock => stock.price > stock.open).length;
-    const losers = stocks.filter(stock => stock.price < stock.open).length;
+    // Use proper period start price for accurate gainer/loser calculation
+    const gainers = stocks.filter(stock => {
+      const startPrice = getPeriodStartPrice(stock);
+      return stock.price > startPrice;
+    }).length;
+
+    const losers = stocks.filter(stock => {
+      const startPrice = getPeriodStartPrice(stock);
+      return stock.price < startPrice;
+    }).length;
+
     const totalMarketCap = stocks.reduce((sum, stock) => sum + stock.marketCap, 0);
 
     return {
@@ -540,10 +565,15 @@ const ATLStockExchange = () => {
 
 
   const topMovers = useMemo(() => {
-    const movers = stocks.map(stock => ({
-      ...stock,
-      change: ((stock.price - stock.open) / stock.open) * 100
-    }));
+    const movers = stocks.map(stock => {
+      const startPrice = getPeriodStartPrice(stock);
+      const change = calculatePercentageChange(stock.price, startPrice);
+
+      return {
+        ...stock,
+        change: change
+      };
+    });
 
     const gainers = movers.filter(s => s.change > 0).sort((a, b) => b.change - a.change).slice(0, 5);
     const losers = movers.filter(s => s.change < 0).sort((a, b) => a.change - b.change).slice(0, 5);
@@ -1446,14 +1476,19 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  // Secure admin credentials (use environment variables in production)
+  // Secure admin credentials (loaded from environment variables)
   const ADMIN_CREDENTIALS = {
-    username: process.env.REACT_APP_ADMIN_USERNAME || 'admin',
-    password: process.env.REACT_APP_ADMIN_PASSWORD || 'SecureAdmin2024!'
+    username: process.env.REACT_APP_ADMIN_USERNAME,
+    password: process.env.REACT_APP_ADMIN_PASSWORD
   };
 
   const handleLogin = () => {
     // Check for admin login with secure credentials
+    if (!ADMIN_CREDENTIALS.username || !ADMIN_CREDENTIALS.password) {
+      setLoginError('Admin credentials not configured. Check environment variables.');
+      return;
+    }
+
     if (loginUsername === ADMIN_CREDENTIALS.username && loginPassword === ADMIN_CREDENTIALS.password) {
       // Ensure admin has proper data structure
       if (!users.admin || !users.admin.balance || !users.admin.portfolio) {
@@ -1934,8 +1969,8 @@ const ATLStockExchange = () => {
       const stock = stocks.find(s => s.ticker === ticker);
       if (stock && quantity > 0) {
         const currentValue = stock.price * quantity;
-        const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
-        const positionDayChange = (stock.price - dayStartPrice) * quantity;
+        const startPrice = getPeriodStartPrice(stock);
+        const positionDayChange = (stock.price - startPrice) * quantity;
 
         totalValue += currentValue;
         dayChange += positionDayChange;
@@ -2159,8 +2194,9 @@ const ATLStockExchange = () => {
 
     const userHolding = user && users && users[user] ? (users[user].portfolio?.[selectedStock.ticker] || 0) : 0;
     const portfolioValue = userHolding * stockData.price;
-    const priceChange = stockData.price - stockData.open;
-    const percentChange = ((priceChange / stockData.open) * 100).toFixed(2);
+    const startPrice = getPeriodStartPrice(stockData);
+    const priceChange = stockData.price - startPrice;
+    const percentChange = calculatePercentageChange(stockData.price, startPrice).toFixed(2);
     const percentChangeColor = percentChange >= 0 ? 'text-green-600' : 'text-red-600';
 
     // Use the new filtered chart data function with live price
@@ -4403,10 +4439,10 @@ const ATLStockExchange = () => {
         {/* Enhanced Stock Grid */}
         <div className={`grid gap-4 ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'} ${isMobileDevice ? 'gap-3' : 'gap-6'}`}>
           {filteredStocks.map(stock => {
-            // Calculate percentage from first price of the day (12:00 AM)
-            const dayStartPrice = (stock.history && stock.history.length > 0) ? stock.history[0].price : stock.open;
-            const priceChange = stock.price - dayStartPrice;
-            const percentChange = ((priceChange / dayStartPrice) * 100).toFixed(2);
+            // Calculate accurate percentage change from period start
+            const startPrice = getPeriodStartPrice(stock);
+            const priceChange = stock.price - startPrice;
+            const percentChange = calculatePercentageChange(stock.price, startPrice).toFixed(2);
             const userHolding = user && users[user] ? (users[user].portfolio?.[stock.ticker] || 0) : 0;
             const volume = Math.floor((stock.marketCap / stock.price) * (0.5 + Math.sin(Date.now() / 86400000 + stock.ticker.charCodeAt(0)) * 0.3 + 0.7));
 
