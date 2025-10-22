@@ -708,8 +708,23 @@ const ATLStockExchange = () => {
           { ticker: 'GPN', name: 'Global Payments Inc.', price: 124.85, open: 124.85, high: 127.30, low: 123.40, marketCap: 19000000000, pe: 18.9, high52w: 155.00, low52w: 95.00, dividend: 0.3, qtrlyDiv: 0.25, volumeMultiplier: 1.1, history: generatePriceHistory(124.85, 124.85, 'GPN'), extendedHistory: generateExtendedHistory(124.85, 'GPN'), yearHistory: generateYearHistory(124.85, 'GPN') },
           { ticker: 'CPAY', name: 'Corpay Inc.', price: 298.40, open: 298.40, high: 302.15, low: 295.80, marketCap: 16000000000, pe: 25.3, high52w: 325.00, low52w: 225.00, dividend: 0.0, qtrlyDiv: 0.0, volumeMultiplier: 0.8, history: generatePriceHistory(298.40, 298.40, 'CPAY'), extendedHistory: generateExtendedHistory(298.40, 'CPAY'), yearHistory: generateYearHistory(298.40, 'CPAY') }
         ];
-        set(stocksRef, forceUpdateStocks);
-        setStocks(forceUpdateStocks);
+        // Add initial price variations to create realistic gainers/losers
+        const stocksWithVariation = forceUpdateStocks.map((stock, index) => {
+          // Create deterministic but varied price changes based on ticker
+          const seed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const variation = ((seed % 100) - 50) / 1000; // -5% to +5% variation
+          const newPrice = stock.open * (1 + variation);
+
+          return {
+            ...stock,
+            price: parseFloat(newPrice.toFixed(2)),
+            high: Math.max(stock.high, newPrice),
+            low: Math.min(stock.low, newPrice)
+          };
+        });
+
+        set(stocksRef, stocksWithVariation);
+        setStocks(stocksWithVariation);
       } catch (error) {
         console.error('Firebase connection error:', error);
         setError(`Connection Error: ${error.message || 'Failed to load stock data'}`);
@@ -847,9 +862,10 @@ const ATLStockExchange = () => {
             return seed / 233280;
           };
 
-          // Simple, consistent price change for ALL stocks
-          const baseVolatility = 0.003; // 0.3% base volatility
-          const randomWalk = (random() - 0.5) * baseVolatility;
+          // Enhanced volatility for more realistic movements
+          const baseVolatility = 0.008; // 0.8% base volatility (increased)
+          const volatilityMultiplier = 0.5 + (random() * 1.5); // 0.5x to 2x multiplier per stock
+          const randomWalk = (random() - 0.5) * baseVolatility * volatilityMultiplier;
 
           // Simple momentum that works the same for all stocks
           const currentMomentum = stock.lastMomentum || 0;
@@ -899,16 +915,16 @@ const ATLStockExchange = () => {
                 let ampm = hours < 12 ? 'AM' : 'PM';
                 const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
-                // Realistic price movement - limit large jumps
+                // Realistic price movement - allow reasonable changes
                 if (i === pointsToAdd - 1) {
-                  // For the final point, limit the change to prevent vertical lines
-                  const maxChange = currentPrice * 0.005; // Max 0.5% change per 5-minute interval
+                  // For the final point, allow larger changes but prevent extreme jumps
+                  const maxChange = currentPrice * 0.02; // Max 2% change per 5-minute interval
                   const priceDiff = finalPrice - currentPrice;
                   const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
                   currentPrice = currentPrice + limitedDiff;
                 } else {
-                  // For intermediate points, small random movements
-                  const randomChange = (Math.random() - 0.5) * 0.003; // ±0.15% random walk
+                  // For intermediate points, moderate random movements
+                  const randomChange = (Math.random() - 0.5) * 0.01; // ±0.5% random walk
                   currentPrice = currentPrice * (1 + randomChange);
                 }
                 const targetPrice = currentPrice;
@@ -921,10 +937,10 @@ const ATLStockExchange = () => {
                 });
               }
             } else {
-              // Update the current time point with latest price (limit sudden changes)
+              // Update the current time point with latest price (allow reasonable changes)
               const lastIndex = newHistory.length - 1;
               const currentHistoryPrice = newHistory[lastIndex].price;
-              const maxChange = currentHistoryPrice * 0.005; // Max 0.5% change per update
+              const maxChange = currentHistoryPrice * 0.015; // Max 1.5% change per update
               const priceDiff = finalPrice - currentHistoryPrice;
               const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
               const smoothedPrice = currentHistoryPrice + limitedDiff;
