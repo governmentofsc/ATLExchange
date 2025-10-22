@@ -1476,10 +1476,10 @@ const ATLStockExchange = () => {
     return data;
   }
 
-  // Secure admin credentials (loaded from environment variables)
+  // Admin credentials for demo purposes (not secure for production)
   const ADMIN_CREDENTIALS = {
-    username: process.env.REACT_APP_ADMIN_USERNAME,
-    password: process.env.REACT_APP_ADMIN_PASSWORD
+    username: 'admin',
+    password: 'demo123'
   };
 
   const handleLogin = () => {
