@@ -1981,7 +1981,7 @@ const ATLStockExchange = () => {
           currentPrice: stock.price,
           currentValue,
           dayChange: positionDayChange,
-          dayChangePercent: ((stock.price - dayStartPrice) / dayStartPrice) * 100,
+          dayChangePercent: ((stock.price - startPrice) / startPrice) * 100,
           weight: (currentValue / totalValue) * 100
         });
       }
