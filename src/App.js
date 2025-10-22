@@ -871,20 +871,30 @@ const ATLStockExchange = () => {
           const newHigh = Math.max(stock.high, finalPrice);
           const newLow = Math.min(stock.low, finalPrice);
 
-          // Simple history update - SAME FOR ALL STOCKS
+          // Smart history update with time progression
           let newHistory = [...(stock.history || [])];
 
           if (newHistory.length === 0) {
             // Create initial history if missing
             newHistory = generateDailyChart(finalPrice, stock.ticker);
-          } else if (newHistory.length > 0) {
-            // Always update the last point with current price
-            const lastIndex = newHistory.length - 1;
-            newHistory[lastIndex] = {
-              ...newHistory[lastIndex],
-              price: finalPrice,
-              isLive: true
-            };
+          } else {
+            // Check if we need to add a new time point
+            const now = getEasternTime();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const expectedPoints = Math.floor(currentMinutes / 5) + 1;
+
+            if (newHistory.length < expectedPoints) {
+              // Time has progressed - generate new chart with current time
+              newHistory = generateDailyChart(finalPrice, stock.ticker, []);
+            } else {
+              // Update the current time point with latest price
+              const lastIndex = newHistory.length - 1;
+              newHistory[lastIndex] = {
+                ...newHistory[lastIndex],
+                price: finalPrice,
+                isLive: true
+              };
+            }
           }
 
           // Update market cap
