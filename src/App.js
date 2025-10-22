@@ -859,34 +859,59 @@ const ATLStockExchange = () => {
         dayStartTime.setHours(0, 0, 0, 0);
 
         const updatedStocks = stocks.map((stock, index) => {
-          // SIMPLE, BULLETPROOF PRICE UPDATE - IDENTICAL FOR ALL STOCKS
+          // REALISTIC PRICE UPDATE WITH STABLE GENERATION
 
-          // Create unique, stable seed for each stock
-          const stockSeed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const timeSeed = Math.floor(Date.now() / 1000) + stockSeed + (index * 1000); // Use seconds, not milliseconds
-          let seed = (timeSeed * 9301 + 49297) % 233280; // Different algorithm to ensure uniqueness
-
-          const random = () => {
-            seed = (seed * 9301 + 49297) % 233280;
-            return seed / 233280;
-          };
-
-          // Enhanced volatility for more realistic movements
-          const baseVolatility = 0.008; // 0.8% base volatility (increased)
-          const volatilityMultiplier = 0.5 + (random() * 1.5); // 0.5x to 2x multiplier per stock
-          const randomWalk = (random() - 0.5) * baseVolatility * volatilityMultiplier;
-
-          // Simple momentum that works the same for all stocks
+          // Use stored momentum and trend data for continuity
           const currentMomentum = stock.lastMomentum || 0;
-          const newMomentum = currentMomentum * 0.8 + randomWalk * 0.2;
+          const currentTrend = stock.lastTrend || 0;
+          const lastUpdate = stock.lastUpdate || Date.now();
 
-          // Calculate new price - SAME FORMULA FOR ALL STOCKS
-          const priceChange = randomWalk + (newMomentum * 0.3);
-          let newPrice = stock.price * (1 + priceChange);
+          // Time-based factors for realistic movement
+          const timeDelta = Math.min((Date.now() - lastUpdate) / 1000, 60); // Max 60 seconds
 
-          // Ensure price is always valid
+          // Detect if app was recently reloaded (large time gap or missing lastUpdate)
+          const wasReloaded = !lastUpdate || timeDelta > 30;
+          const stabilityFactor = wasReloaded ? 0.1 : 1.0; // Much more conservative after reload
+          const timeOfDay = new Date().getHours() + new Date().getMinutes() / 60;
+
+          // Market session effects (more volatile during market hours)
+          const isMarketHours = timeOfDay >= 9.5 && timeOfDay <= 16;
+          const sessionMultiplier = isMarketHours ? 1.2 : 0.6;
+
+          // Stock-specific characteristics (based on ticker for consistency)
+          const stockSeed = stock.ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const stockVolatility = 0.001 + (stockSeed % 50) / 20000; // 0.1% to 0.35% base volatility (more realistic)
+          const stockBeta = 0.8 + (stockSeed % 40) / 100; // Beta between 0.8 and 1.2
+
+          // Market microstructure effects
+          const spreadEffect = stockVolatility * 0.1; // Bid-ask spread simulation
+          const liquidityFactor = Math.max(0.5, stock.marketCap / 100000000000); // Higher cap = more liquid
+
+          // Realistic random walk with mean reversion
+          const randomComponent = (Math.random() - 0.5) * stockVolatility * sessionMultiplier * stabilityFactor;
+          const meanReversion = (stock.open - stock.price) / stock.open * 0.0001; // Gentle pull toward opening
+
+          // Momentum decay and trend continuation
+          const newMomentum = currentMomentum * 0.95 + randomComponent * 0.3;
+          const newTrend = currentTrend * 0.98 + randomComponent * 0.1;
+
+          // Calculate realistic price change with market microstructure
+          const totalChange = (randomComponent + (newMomentum * 0.3) + (newTrend * 0.15) + meanReversion) * liquidityFactor;
+
+          // Apply time scaling for smooth updates
+          const scaledChange = totalChange * Math.sqrt(timeDelta / 5); // Scale by square root of time
+
+          let newPrice = stock.price * (1 + scaledChange);
+
+          // Ensure price is always valid with gentle bounds
           if (!isFinite(newPrice) || newPrice <= 0 || isNaN(newPrice)) {
-            newPrice = stock.price * (1 + (random() - 0.5) * 0.001); // Tiny fallback
+            newPrice = stock.price * (1 + (Math.random() - 0.5) * 0.0005); // Tiny fallback
+          }
+
+          // Prevent extreme daily moves (circuit breaker)
+          const dailyChange = (newPrice - stock.open) / stock.open;
+          if (Math.abs(dailyChange) > 0.1) { // Max 10% daily move
+            newPrice = stock.open * (1 + Math.sign(dailyChange) * 0.1);
           }
 
           // Final price with safety bounds
@@ -928,16 +953,16 @@ const ATLStockExchange = () => {
                 let ampm = hours < 12 ? 'AM' : 'PM';
                 const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
-                // Realistic price movement - allow reasonable changes
+                // Conservative price movement to prevent erratic jumps
                 if (i === pointsToAdd - 1) {
-                  // For the final point, allow larger changes but prevent extreme jumps
-                  const maxChange = currentPrice * 0.02; // Max 2% change per 5-minute interval
+                  // For the final point, use very conservative changes
+                  const maxChange = currentPrice * 0.005; // Max 0.5% change per 5-minute interval
                   const priceDiff = finalPrice - currentPrice;
                   const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
                   currentPrice = currentPrice + limitedDiff;
                 } else {
-                  // For intermediate points, moderate random movements
-                  const randomChange = (Math.random() - 0.5) * 0.01; // ±0.5% random walk
+                  // For intermediate points, very small movements
+                  const randomChange = (Math.random() - 0.5) * 0.002; // ±0.1% random walk
                   currentPrice = currentPrice * (1 + randomChange);
                 }
                 const targetPrice = currentPrice;
@@ -950,10 +975,10 @@ const ATLStockExchange = () => {
                 });
               }
             } else {
-              // Update the current time point with latest price (allow reasonable changes)
+              // Update the current time point with latest price (very conservative changes)
               const lastIndex = newHistory.length - 1;
               const currentHistoryPrice = newHistory[lastIndex].price;
-              const maxChange = currentHistoryPrice * 0.015; // Max 1.5% change per update
+              const maxChange = currentHistoryPrice * 0.003; // Max 0.3% change per update
               const priceDiff = finalPrice - currentHistoryPrice;
               const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
               const smoothedPrice = currentHistoryPrice + limitedDiff;
@@ -986,6 +1011,7 @@ const ATLStockExchange = () => {
             history: newHistory,
             marketCap: newMarketCap,
             lastMomentum: newMomentum,
+            lastTrend: newTrend,
             lastUpdate: Date.now()
           };
         });
