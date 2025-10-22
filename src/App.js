@@ -887,8 +887,9 @@ const ATLStockExchange = () => {
           const spreadEffect = stockVolatility * 0.1; // Bid-ask spread simulation
           const liquidityFactor = Math.max(0.5, stock.marketCap / 100000000000); // Higher cap = more liquid
 
-          // Realistic random walk with mean reversion
-          const randomComponent = (Math.random() - 0.5) * stockVolatility * sessionMultiplier * stabilityFactor;
+          // Realistic random walk with mean reversion and market effects
+          const baseRandomComponent = (Math.random() - 0.5) * stockVolatility * sessionMultiplier * stabilityFactor;
+          const randomComponent = baseRandomComponent * stockBeta; // Apply beta to market movements
           const meanReversion = (stock.open - stock.price) / stock.open * 0.0001; // Gentle pull toward opening
 
           // Momentum decay and trend continuation
@@ -896,7 +897,8 @@ const ATLStockExchange = () => {
           const newTrend = currentTrend * 0.98 + randomComponent * 0.1;
 
           // Calculate realistic price change with market microstructure
-          const totalChange = (randomComponent + (newMomentum * 0.3) + (newTrend * 0.15) + meanReversion) * liquidityFactor;
+          const microstructureNoise = (Math.random() - 0.5) * spreadEffect; // Add bid-ask spread noise
+          const totalChange = (randomComponent + (newMomentum * 0.3) + (newTrend * 0.15) + meanReversion + microstructureNoise) * liquidityFactor;
 
           // Apply time scaling for smooth updates
           const scaledChange = totalChange * Math.sqrt(timeDelta / 5); // Scale by square root of time
