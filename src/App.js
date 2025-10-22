@@ -886,7 +886,7 @@ const ATLStockExchange = () => {
             if (newHistory.length < expectedPoints) {
               // Time has progressed - add new points to existing history
               const pointsToAdd = expectedPoints - newHistory.length;
-              const lastPrice = newHistory[newHistory.length - 1].price;
+              let currentPrice = newHistory[newHistory.length - 1].price;
 
               for (let i = 0; i < pointsToAdd; i++) {
                 const pointIndex = newHistory.length + i;
@@ -899,9 +899,19 @@ const ATLStockExchange = () => {
                 let ampm = hours < 12 ? 'AM' : 'PM';
                 const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 
-                // Small price movement from last price to current price
-                const progress = (i + 1) / pointsToAdd;
-                const targetPrice = i === pointsToAdd - 1 ? finalPrice : lastPrice + (finalPrice - lastPrice) * progress;
+                // Realistic price movement - limit large jumps
+                if (i === pointsToAdd - 1) {
+                  // For the final point, limit the change to prevent vertical lines
+                  const maxChange = currentPrice * 0.005; // Max 0.5% change per 5-minute interval
+                  const priceDiff = finalPrice - currentPrice;
+                  const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
+                  currentPrice = currentPrice + limitedDiff;
+                } else {
+                  // For intermediate points, small random movements
+                  const randomChange = (Math.random() - 0.5) * 0.003; // ±0.15% random walk
+                  currentPrice = currentPrice * (1 + randomChange);
+                }
+                const targetPrice = currentPrice;
 
                 newHistory.push({
                   time: timeLabel,
@@ -911,11 +921,17 @@ const ATLStockExchange = () => {
                 });
               }
             } else {
-              // Update the current time point with latest price
+              // Update the current time point with latest price (limit sudden changes)
               const lastIndex = newHistory.length - 1;
+              const currentHistoryPrice = newHistory[lastIndex].price;
+              const maxChange = currentHistoryPrice * 0.005; // Max 0.5% change per update
+              const priceDiff = finalPrice - currentHistoryPrice;
+              const limitedDiff = Math.max(-maxChange, Math.min(maxChange, priceDiff));
+              const smoothedPrice = currentHistoryPrice + limitedDiff;
+
               newHistory[lastIndex] = {
                 ...newHistory[lastIndex],
-                price: finalPrice,
+                price: parseFloat(smoothedPrice.toFixed(2)),
                 isLive: true
               };
             }
