@@ -197,7 +197,12 @@ function generateDailyChart(currentPrice, ticker, existingHistory = [], openingP
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const targetPoints = Math.floor(currentMinutes / 5) + 1;
 
+  // Check if it's a new day - if so, start fresh
   let data = [...existingHistory];
+  if (existingHistory.length > 0 && targetPoints < existingHistory.length) {
+    // New day detected - start with fresh chart
+    data = [];
+  }
   let orderBookImbalance = 0; // Simulates buy/sell pressure
   let institutionalFlow = 0; // Large player movements
   let volatilityCluster = 1; // GARCH-like volatility clustering
@@ -903,7 +908,11 @@ const ATLStockExchange = () => {
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
             const expectedPoints = Math.floor(currentMinutes / 5) + 1;
 
-            if (newHistory.length < expectedPoints) {
+            // Check for new day - if expectedPoints < existing length, it's a new day
+            if (expectedPoints < newHistory.length) {
+              // New day detected - start fresh chart
+              newHistory = generateDailyChart(finalPrice, stock.ticker, [], stock.open);
+            } else if (newHistory.length < expectedPoints) {
               // Time has progressed - add new points to existing history
               const pointsToAdd = expectedPoints - newHistory.length;
               let currentPrice = newHistory[newHistory.length - 1].price;
@@ -961,12 +970,19 @@ const ATLStockExchange = () => {
           const sharesOutstanding = stock.marketCap / stock.price;
           const newMarketCap = sharesOutstanding * finalPrice;
 
+          // Check if it's a new day and update opening price
+          const now = getEasternTime();
+          const currentMinutes = now.getHours() * 60 + now.getMinutes();
+          const expectedPoints = Math.floor(currentMinutes / 5) + 1;
+          const isNewDay = expectedPoints < (stock.history?.length || 0);
+
           // Return updated stock - SAME STRUCTURE FOR ALL
           return {
             ...stock,
             price: finalPrice,
-            high: newHigh,
-            low: newLow,
+            open: isNewDay ? stock.price : stock.open, // Update opening price for new day
+            high: isNewDay ? finalPrice : newHigh, // Reset high for new day
+            low: isNewDay ? finalPrice : newLow, // Reset low for new day
             history: newHistory,
             marketCap: newMarketCap,
             lastMomentum: newMomentum,
