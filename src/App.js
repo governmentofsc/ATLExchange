@@ -884,8 +884,32 @@ const ATLStockExchange = () => {
             const expectedPoints = Math.floor(currentMinutes / 5) + 1;
 
             if (newHistory.length < expectedPoints) {
-              // Time has progressed - generate new chart with current time
-              newHistory = generateDailyChart(finalPrice, stock.ticker, []);
+              // Time has progressed - add new points to existing history
+              const pointsToAdd = expectedPoints - newHistory.length;
+              const lastPrice = newHistory[newHistory.length - 1].price;
+
+              for (let i = 0; i < pointsToAdd; i++) {
+                const pointIndex = newHistory.length + i;
+                const totalMinutes = pointIndex * 5;
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+
+                // Format time
+                let displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+                let ampm = hours < 12 ? 'AM' : 'PM';
+                const timeLabel = `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
+                // Small price movement from last price to current price
+                const progress = (i + 1) / pointsToAdd;
+                const targetPrice = i === pointsToAdd - 1 ? finalPrice : lastPrice + (finalPrice - lastPrice) * progress;
+
+                newHistory.push({
+                  time: timeLabel,
+                  price: parseFloat(targetPrice.toFixed(2)),
+                  volume: Math.floor(50000 + Math.random() * 100000),
+                  isLive: i === pointsToAdd - 1
+                });
+              }
             } else {
               // Update the current time point with latest price
               const lastIndex = newHistory.length - 1;
